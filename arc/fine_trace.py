@@ -56,9 +56,10 @@ def _wstr(t):
 
 
 class _Tracer:
-    def __init__(self, task, tid="0a"):
-        from arc.expr_solver import setup_arc_agent
-        self.ag = setup_arc_agent(task, tid)   # io + inject_task input function
+    def __init__(self, task, tid="0a", setup=None):
+        if setup is None:
+            from arc.expr_solver import setup_arc_agent as setup
+        self.ag = setup(task, tid)             # io + the solver's input function
         self.events = []
         self.cycle = 0
         self._cands: set = set()               # materialised ^operator + WMEs
@@ -139,13 +140,21 @@ class _Tracer:
         gone_keys = [k for k in el.active if k not in desired]
         return new_keys, gone_keys, desired
 
-    def elaborate(self, phase):
+    def elaborate(self, phase, body=None, op_name=None):
+        # body/op_name: in APPLY, the operator's body is the RHS-FUNCTION of its
+        # apply*<name> production -- it runs WHEN that rule fires, so the structure it
+        # loads and the rule's o-support flag appear together in ONE wm-update (one
+        # application). SOAR: the operator's effect is produced BY the apply rule firing.
+        apply_rule = f"apply*{op_name}" if op_name else None
+        body_ran = False
         wave = 0
         while True:
             wave += 1
             # (1) MATCH -- recompute the match set; wm not yet touched.
             new_keys, gone_keys, desired = self._match_preview()
             before = set(self.ag.wm)
+            run_body = (body is not None and not body_ran and apply_rule is not None
+                        and any(k[0] == apply_rule for k in new_keys))
             if new_keys or gone_keys:
                 matched = sorted({k[0] for k in new_keys})
                 unmatched = sorted({k[0] for k in gone_keys})
@@ -162,11 +171,19 @@ class _Tracer:
                 #     gone instantiations retract. wm STILL unchanged here.
                 for k in new_keys:
                     prefs = [self._pref_str(r) for r in desired[k].results]
-                    self.emit(phase, "rule-fire", f"{k[0]} → {', '.join(prefs)}",
-                              highlight=prefs, rule=k[0], wave=wave)
+                    if run_body and k[0] == apply_rule:
+                        lbl = f"{k[0]} → RHS-function({op_name} body) + {', '.join(prefs)}"
+                    else:
+                        lbl = f"{k[0]} → {', '.join(prefs)}"
+                    self.emit(phase, "rule-fire", lbl, highlight=prefs, rule=k[0], wave=wave)
                 for k in gone_keys:
                     self.emit(phase, "rule-retract", f"{k[0]} (LHS 미충족)",
                               rule=k[0], wave=wave)
+            # RHS-function: run the operator body NOW (as apply*<name> fires), so its
+            # structure joins THIS wave's wm-update -- not a separate pre-apply step.
+            if run_body:
+                body(self.ag)
+                body_ran = True
             # (3) WM-UPDATE -- run the real wave: preferences -> WMEs in wm.
             er = self.ag.elaborator.settle(self.ag.wm, max_rounds=1)
             self._sync_candidates()
@@ -179,9 +196,10 @@ class _Tracer:
                     parts.append(f"+{len(added)}")
                 if removed:
                     parts.append(f"−{len(removed)}")
+                det = _kg_detail(self.ag.kg, op_name) if run_body else None
                 self.emit(phase, "wm-update", f"{' '.join(parts)} WME",
                           highlight=[_wstr(t) for t in added] + [_wstr(t) for t in removed],
-                          wave=wave)
+                          detail=det, wave=wave)
             if er.quiescent:
                 break
         self.emit(phase, "quiescence", "no more rules match")
@@ -265,41 +283,72 @@ class _Tracer:
                 self.emit("decide", "op-select",
                           f"({goal.id} ^operator {op}) [name={name}]",
                           highlight=[str(op)])
-                # APPLY -- body (RHS function: ARCKG/DSL compute) THEN the apply-<name>
-                # production fires during the apply elaboration and writes the flag.
+                # APPLY -- the operator's body is the RHS-FUNCTION of its apply*<name>
+                # production: it runs WHEN that rule fires (inside elaborate), so its
+                # structure + the rule's flag are ONE application. (SOAR: the effect is
+                # produced BY the apply rule firing, not in a separate pre-apply step.)
                 self.emit("apply", "phase", f"cycle {self.cycle} — APPLY ({name})")
-                before = set(self.ag.wm)
                 body = self.ag.body_for(op)
-                if body is not None:
+                has_apply = any(p.name == f"apply*{name}"
+                                for p in self.ag.elaborator.productions)
+                if body is not None and not has_apply:
+                    # no apply*<name> production -> the body IS the whole application
+                    # (e.g. descend moves the focus pointer). Run it as the apply.
+                    before = set(self.ag.wm)
                     body(self.ag)
-                new = sorted(set(self.ag.wm) - before)
-                if new:
-                    # the operator body (RHS function) writes ALL its WMEs as ONE
-                    # step, so the whole change shows green together -- not only the
-                    # first sub-step (item 12).
-                    label = (f"{name} body → {len(new)} WMEs added"
-                             if len(new) > 1 else _wstr(new[0]))
-                    # The operator body (RHS-function compute) is the APPLY phase's
-                    # DIRECT effect, not an elaboration wave -- so it carries NO wave
-                    # number and sits under the "APPLY (<name>)" phase box. The
-                    # elaboration waves (match -> fire -> wm-update of apply*<name>
-                    # and the cascade it triggers) start cleanly after, at wave 1.
-                    self.emit("apply", "wme-add", label,
-                              highlight=[_wstr(t) for t in new],
-                              detail=_kg_detail(self.ag.kg, name), rule=name, wave=None)
-                self.elaborate("apply")                  # apply*<name> production fires here
+                    after = set(self.ag.wm)
+                    added = sorted(after - before)
+                    removed = sorted(before - after)
+                    if added or removed:
+                        parts = ([f"+{len(added)}"] if added else []) + \
+                                ([f"−{len(removed)}"] if removed else [])
+                        self.emit("apply", "wme-add", f"{name} (apply) · {' '.join(parts)} WME",
+                                  highlight=[_wstr(t) for t in added] + [_wstr(t) for t in removed],
+                                  detail=_kg_detail(self.ag.kg, name), rule=name, wave=None)
+                    self.elaborate("apply")
+                else:
+                    # body tied to apply*<name> firing (structure + flag = one wm-update)
+                    self.elaborate("apply", body=body, op_name=name)
                 # OUTPUT (every cycle; emits output-link contents, empty or not)
                 self._emit_output()
                 if name == "submit" or self.ag.wm.contains("S1", "done", "yes"):
                     break
-            else:
-                # impasse -> substate (general SOAR path; rare for these solvers)
+            elif imp.name == "NONE" and len(cands) == 0:
+                # NO operator selectable at this goal's focus = this level's info is
+                # insufficient -> STATE NO-CHANGE IMPASSE. The architecture opens a
+                # substate (goal = resolve the impasse) and descends the focus ONE
+                # ARCKG level (ARBOR's substate = level-descent). No descend operator.
+                from pysoar.decide import ImpasseType
+                focus = self._goal_focus(goal.id)
+                idx = self.ag.kg.get("idx") if hasattr(self.ag, "kg") else None
+                kids = idx["children"].get(focus, []) if (idx and focus) else []
                 self.emit("decide", "substate",
-                          f"impasse {imp.name} → substate would be created")
+                          f"state no-change impasse @ {goal.id} (focus={focus}: 이 레벨 정보로 진전 불가)")
+                if not kids:
+                    self.emit("decide", "substate",
+                              f"자식 없음 (focus={focus}) — 더 하강 불가, 종료")
+                    self._emit_output()
+                    break
+                sub = self.ag.create_substate(goal, ImpasseType.SNC, "state", [])
+                child = kids[0]
+                self.ag.wm.add(sub.id, "focus", child)     # focus descends one level
+                self.emit("decide", "substate",
+                          f"substate {sub.id} 생성 (goal=상위 impasse 해소) · focus 하강 {focus} → {child}",
+                          highlight=[f"({sub.id} ^superstate {goal.id})",
+                                     f"({sub.id} ^impasse no-change)", f"({sub.id} ^focus {child})"])
+                self._emit_output()
+                # NO break: next cycle decides at the new bottom goal (the substate)
+            else:
+                # tie/conflict/etc -- not expected in this (single-candidate) solver
+                self.emit("decide", "substate",
+                          f"impasse {imp.name} (candidates={list(cands)}) — 미처리, 종료")
                 self._emit_output()
                 break
         return self.events
 
+    def _goal_focus(self, gid):
+        return next((v for (i, a, v) in self.ag.wm if i == gid and a == "focus"), None)
 
-def fine_trace(task, tid="0a"):
-    return _Tracer(task, tid).run()
+
+def fine_trace(task, tid="0a", setup=None, max_cycles=10):
+    return _Tracer(task, tid, setup=setup).run(max_cycles=max_cycles)

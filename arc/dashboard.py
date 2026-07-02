@@ -119,7 +119,9 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
 .card{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:12px;cursor:pointer}
 .card.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .card .tid{font-family:ui-monospace,monospace;font-size:13px;margin-bottom:6px} .card .meta{font-size:11px;color:var(--muted)}
-#stepper{display:none;grid-template-columns:300px 1fr 360px 300px;
+/* all four regions FIXED width -> a narrow window horizontal-scrolls the whole
+   layout instead of squishing the WM panel (regions stay usable & comparable) */
+#stepper{display:none;grid-template-columns:300px 600px 360px 300px;
  grid-template-rows:auto auto 1fr auto;gap:6px;height:100vh;padding:6px}
 /* panel = fixed header + scrolling body (header never overlaps content) */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 11px;
@@ -153,6 +155,8 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
 .maprow.st-match{border-left-color:#ff9d2e;color:#ff9d2e;background:rgba(255,157,46,.07)}
 .maprow.st-fire{border-left-color:#b98aff;color:#b98aff;background:rgba(185,138,255,.07)}
 .maprow.st-wm{border-left-color:var(--accent);color:var(--accent);background:rgba(95,217,127,.06)}
+/* impasse / substate opened -> distinct red band so a subgoal being pushed stands out */
+.maprow.st-impasse{border-left-color:var(--rmt);color:var(--rmt);background:rgba(255,138,138,.10);font-weight:600}
 .maprow:hover{filter:brightness(1.25)}
 .maprow.on{background:#2d4a86;color:#fff;border-color:#2d4a86}   /* current step wins over the phase box */
 /* elaboration wave = SUB-cycle -> plain muted text, no box, NO per-wave indent
@@ -187,7 +191,10 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
 .kind-rule-fire{color:var(--addt)} .kind-rule-retract{color:var(--rmt)} .kind-wme-add{color:var(--addt)}
 .kind-wme-remove{color:var(--rmt)} .kind-op-select,.kind-op-propose{color:var(--gold)} .kind-decide{color:var(--blue)}
 .kind-output{color:var(--accent)} .kind-input-noop{color:var(--muted)}
-.kind-match{color:#ff9d2e} .kind-wm-update{color:var(--addt)}
+.kind-match{color:#ff9d2e} .kind-wm-update{color:var(--addt)} .kind-substate{color:var(--rmt)}
+/* goal-stack roots in the WM panel: each substate slightly indented with a header */
+.gstate{margin-top:5px} .gstate+.gstate{border-top:1px dashed var(--line);padding-top:4px}
+.ghdr{color:var(--rmt);font-weight:600;font-size:11px;margin:1px 0 2px}
 .rule{border:1px solid var(--line);border-radius:7px;margin:4px 0;background:var(--p2);font-family:ui-monospace,monospace;font-size:11.5px;overflow:hidden}
 .rule.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .rule.off{border-color:var(--rmt);box-shadow:0 0 0 1px var(--rmt)}   /* retracted this step */
@@ -278,15 +285,21 @@ function renderBrowser(){
 }
 function openTask(){view='stepper';step=0;$('browser').style.display='none';$('stepper').style.display='grid';renderStep();}
 
-function condMatched(c,wmSet){
- if(isVar(c.val)){const pre=`(${c.id} ^${c.attr} `;
-   const pres=[...wmSet].some(w=>w.startsWith(pre)); return c.neg?!pres:pres;}
- const w=`(${c.id} ^${c.attr} ${c.val})`; const pres=wmSet.has(w); return c.neg?!pres:pres;
+function condMatched(c,wm){
+ // a variable ID or VALUE is a WILDCARD; attr is always literal. Satisfied iff some
+ // WME matches the pattern. (Matches against raw triples, so a variable id like <o>
+ // is handled -- the old string-compare only handled a variable value and wrongly
+ // left variable-id conditions grey.)
+ const idVar=isVar(c.id), valVar=isVar(c.val);
+ const pres=wm.some(t=>(idVar||String(t[0])===String(c.id))
+   && String(t[1])===String(c.attr) && (valVar||String(t[2])===String(c.val)));
+ return c.neg?!pres:pres;
 }
-function condHTML(c,wmSet){
- // condMatched returns SATISFIED: positive present, OR negation holds (absent).
- // kind -> background tint (pos/neg); satisfied -> saturated kind-colour text.
- const sat=condMatched(c,wmSet); const cls=(c.neg?'neg':'pos')+(sat?' sat':'');
+function condHTML(c,wm,forceSat){
+ // background tint = condition KIND (pos/neg), ALWAYS (satisfaction-independent).
+ // saturated text colour = SATISFIED only. forceSat: a fired/matched rule has its
+ // WHOLE LHS satisfied, so every condition is coloured (positive blue / negative red).
+ const sat=forceSat||condMatched(c,wm); const cls=(c.neg?'neg':'pos')+(sat?' sat':'');
  const v=isVar(c.val)?'<i>'+esc(c.val)+'</i>':esc(c.val);
  // SOAR-standard negation: a '-' PREFIX on the pattern (inherits the cond colour)
  const nm=c.neg?'<span class=nmark>-</span>':'';
@@ -296,8 +309,12 @@ function condHTML(c,wmSet){
 // FIRE and RETRACT are distinct -- on a retract step the rule's LHS no longer holds
 // (that is WHY it retracted), so its conditions read grey/unsatisfied; pairing that
 // with a red "● retracted" (not a green "● fired") is what makes the panel honest.
-function ruleCard(r,wmSet,status){
- const ifs=r.if.map(c=>`<div class=condline>${condHTML(c,wmSet)}</div>`).join('');
+function ruleCard(r,wm,status){
+ // FIRED or MATCHED(pending fire) => the entire LHS holds => colour EVERY condition
+ // (a fired rule cannot have an unsatisfied condition). retracted/idle => per-condition
+ // matching (on a retract the LHS is broken, so grey conditions are correct).
+ const lhsHolds=(status==='fire'||status==='pend-fire');
+ const ifs=r.if.map(c=>`<div class=condline>${condHTML(c,wm,lhsHolds)}</div>`).join('');
  // THEN: keywords grey, the proposed operator (the key WME value) coloured.
  // The preference symbol is shown ONLY for the operator (context) slot or for a
  // non-default preference -- a plain make like (<o> ^name observe) carries NO '+'
@@ -323,7 +340,7 @@ function ruleCard(r,wmSet,status){
    </div></details>`;
 }
 function renderRules(e,wm){
- const wmSet=new Set(wm.map(fmtTriple)); const cur=e.rule;
+ const cur=e.rule;   // pass RAW wm triples to ruleCard/condMatched (wildcard-aware)
  // the responsible rule was FIRED or RETRACTED this step -- one or the other
  const status=e.kind==='rule-retract'?'retract':(e.kind==='rule-fire'?'fire':'');
  // MATCH step: rules ENTERING (pending fire) / LEAVING (pending retract) the match set
@@ -337,7 +354,7 @@ function renderRules(e,wm){
  // operator-apply steps are caused by an operator body, not a production rule
  if(cur && !D.rules.find(x=>x.name===cur))
    h+=`<div class=opcard><b>operator ${esc(cur)}</b> apply<div class=hint>${esc(D.op_docs[cur]||'WM을 직접 변경')}</div></div>`;
- D.rules.forEach(r=> h+=ruleCard(r,wmSet, statusOf(r.name)));
+ D.rules.forEach(r=> h+=ruleCard(r,wm, statusOf(r.name)));
  return h;
 }
 const STRUCT=new Set(['arckg','example','test','input','output','object']);
@@ -355,9 +372,13 @@ function renderWM(wm,added,removed){
  const nodeIds=new Set(wm.map(t=>String(t[0])));
  const nodes={}, parentOf={};
  const ensure=id=>{ if(!nodes[id]) nodes[id]={props:[],kids:[]}; return nodes[id]; };
+ // pointer attributes (attention cursor) mark a node but do NOT own it -> render as a
+ // leaf marker; the node itself expands under its structural edge (input-link / ARCKG).
+ const POINTER=new Set(['focus']);
  wm.forEach(t=>{
    const [id,attr,val]=t;
    if(Array.isArray(val)){ ensure(id).props.push([attr,val]); return; }
+   if(POINTER.has(attr)){ ensure(id).props.push([attr,val]); return; }   // pointer = leaf marker
    // an operator ACCEPTABLE preference is stored as value "<opid> +"; link it to
    // the operator OBJECT <opid> so its augmentations (e.g. ^name observe) show in
    // the tree during PROPOSE too -- the proposed operator is part of WM, not a leaf.
@@ -397,7 +418,13 @@ function renderWM(wm,added,removed){
    });
    return h;
  }
- return `<div class="tree">${body('S1')}</div>`;   // no S1 wrapper -- WMEs directly
+ // GOAL STACK: render each state (S1, S2, ...) as a root so substates opened by an
+ // impasse are visible. Single state -> just S1 (unchanged). Substates show their own
+ // ^superstate/^impasse/^focus + derived comm/diff; shared nodes stay leaves.
+ const states=[...new Set(wm.filter(t=>t[1]==='type'&&String(t[2])==='state').map(t=>String(t[0])))]
+   .sort((a,b)=>(parseInt(String(a).slice(1))||0)-(parseInt(String(b).slice(1))||0));
+ if(states.length<=1) return `<div class="tree">${body('S1')}</div>`;
+ return states.map((s,i)=>`<div class="tree gstate">${i>0?`<div class=ghdr>↳ ${esc(s)} <span class=hint>substate (impasse)</span></div>`:''}${body(s)}</div>`).join('');
 }
 // short stage name per event kind -> the aligned "stage" column in the cycle map
 const STAGE={match:'match','rule-fire':'fire','rule-retract':'retract','wm-update':'wm-update',
@@ -410,7 +437,7 @@ function renderStep(){
   <span style="margin-left:auto">${t.correct_attempt===null?'<span class=bad>unsolved</span>':'<span class=ok>solved (try '+(t.correct_attempt+1)+')</span>'}</span>`;
  $('phases').innerHTML=PHASES.map(p=>`<div class="ph${p==e.phase?' on':''}">${p}</div>`).join('<span class=hint>→</span>');
  // colour-band the 3 wave atoms: match / fire+retract (one colour) / wm-update
- const stageCls=k=>k=='match'?' st-match':((k=='rule-fire'||k=='rule-retract')?' st-fire':(k=='wm-update'?' st-wm':''));
+ const stageCls=k=>k=='match'?' st-match':((k=='rule-fire'||k=='rule-retract')?' st-fire':(k=='wm-update'?' st-wm':(k=='substate'?' st-impasse':'')));
  $('map').innerHTML=ev.map((x,i)=>{
    const cur=i==step;
    const mark=`<span class=mmark>${cur?'▶':''}</span>`;
