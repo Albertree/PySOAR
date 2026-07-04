@@ -480,7 +480,8 @@ function renderStep(){
    ()=>{ d.open?ruleOpen.add(d.dataset.rule):ruleOpen.delete(d.dataset.rule); }));
  $('prob').innerHTML=t.grids.train.map((p,i)=>`<div class=pair><span class=cap>train${i}</span>${grid(p.input)}<span class=arrow>→</span>${grid(p.output)}</div>`).join('')
   +t.grids.test.map((p,i)=>`<div class=pair><span class=cap>test${i}</span>${grid(p.input)}<span class=arrow>→ ?</span></div>`).join('');
- const ready=wm.some(x=>x[0]==='S1'&&x[1]==='answer-ready');
+ // answer-ready 는 expr 는 S1, focus 는 풀이 substate 에 쓴다 → 어느 state 든 있으면 렌더
+ const ready=wm.some(x=>x[1]==='answer-ready');
  if(!ready){
    $('cand').innerHTML='';
  } else {
