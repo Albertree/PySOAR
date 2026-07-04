@@ -111,6 +111,23 @@ def test_rule_driven_not_scenario_fixed():
     assert "aggregate" in m_ops and "aggregate" not in e_ops
 
 
+def test_structure_mapping_relation_generalize():
+    # 입력→출력 관계를 GRID 3속성(size/color/contents)으로 pair 간 일반화.
+    from arc import relation_solve as R
+    # easy000a: 출력이 pair 간 불변 → contents=const(완결) → 관계 경로로 풀림
+    _tid, epath = list_tasks("easy_a")[0]
+    e = R.generalize(load_task(epath)["train"])
+    assert e["size"] == ("identity",) and e["contents"][0] == "const"
+    assert R.is_complete(e)
+    # made000b: size·color 는 입력 보존(identity), contents 만 합성 필요(구조적 초점)
+    b = R.generalize(load_task("arc/data/made/made000b.json")["train"])
+    assert b["size"] == ("identity",) and b["color"] == ("identity",)
+    assert b["contents"] is None and not R.is_complete(b)
+    # made000a: size 는 상수(1x1)로 해소, 나머지는 합성 필요
+    a = R.generalize(load_task("arc/data/made/made000a.json")["train"])
+    assert a["size"] == ("const", (1, 1)) and a["contents"] is None
+
+
 def test_submission_captured_and_scored():
     # 제출된 답 격자가 대시보드 후보로 잡히고, 3회 환경이 채점해 정답 표시.
     from arc.focus_solver import _dash_data

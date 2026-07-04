@@ -19,6 +19,7 @@ from arc.select_solver import fg_objects                      # 전경 object �
 from arc.dsl import (context, grid_bg, ranked_hypotheses,      # predefined DSL 기계
                      build_from_hypothesis)
 from arc.expr_solver import _lone, _target_and_others, _pick_target
+from arc import relation_solve                                 # structure-mapping 관계 일반화
 
 
 def _sid(ag):
@@ -99,18 +100,25 @@ def _op_find(ag):
 # 후보가 없으면(단일 target 계열 아님) hyps-exhausted → solve fallback 로 하강.
 # ---------------------------------------------------------------------------
 def _op_hypothesize(ag):
+    """가설 = input→output 관계. 두 경로:
+    (1) structure-mapping: G0 를 seed 로 GRID 3속성(size/color/contents) 관계를 pair 간
+        일반화 (relation_solve). contents 가 잡히면 완결.
+    (2) fallback: 단일 object dsl arg 합성(program synthesis)."""
     s = _sid(ag)
+    prog = relation_solve.generalize(ag.task["train"])         # per-property 관계 일반화
+    ag.kg["last_prog"] = relation_solve.describe(prog)         # 대시보드 3속성 슬롯
+    if relation_solve.is_complete(prog):                       # contents 해소 → 완결 프로그램
+        ag.kg["solve"] = {"mode": "relational", "prog": prog, "verified": None}
+        desc = relation_solve.describe(prog)
+        ag.wm.add(s, "hyp", "relational: " + ", ".join(f"{k}={v}" for k, v in desc.items()))
+        return
+    # (2) fallback: dsl 단일 object 가설
     samples, testinfo = _samples_and_test(ag.task)
-    if not samples:
-        ag.wm.add(s, "hyps-exhausted", "yes")                 # 이 계열로는 가설 못 세움
-        ag.kg["solve"] = {"hyps": [], "idx": 0}
+    if not samples or not (hyps := ranked_hypotheses(samples)):
+        ag.wm.add(s, "hyps-exhausted", "yes")                 # 관계 미완 ∧ dsl 도 불가 → 하강
+        ag.kg["solve"] = {"mode": "none", "hyps": [], "idx": 0}
         return
-    hyps = ranked_hypotheses(samples)
-    if not hyps:
-        ag.wm.add(s, "hyps-exhausted", "yes")
-        ag.kg["solve"] = {"hyps": [], "idx": 0}
-        return
-    ag.kg["solve"] = {"samples": samples, "test": testinfo,
+    ag.kg["solve"] = {"mode": "dsl", "samples": samples, "test": testinfo,
                       "hyps": hyps, "idx": 0, "verified": None}
     for h in hyps[:6]:                                        # 후보를 WM 에 나열(대시보드)
         ag.wm.add(s, "hyp", _name(h))
@@ -123,6 +131,11 @@ def _op_hypothesize(ag):
 def _op_predict(ag):
     s = _sid(ag)
     S = ag.kg["solve"]
+    if S["mode"] == "relational":                             # 관계를 각 train 입력에 적용
+        S["predicted"] = [relation_solve.apply(S["prog"], p["input"]) for p in ag.task["train"]]
+        ag.wm.add(s, "predict-hyp", "relational program")
+        ag.kg["last_predict"] = {"hyp": "relational", "idx": 0}
+        return
     h = S["hyps"][S["idx"]]
     S["predicted"] = [build_from_hypothesis(h, sm["ctx"]) for sm in S["samples"]]
     ag.wm.add(s, "predict-hyp", _name(h))
@@ -136,10 +149,18 @@ def _op_predict(ag):
 def _op_evaluate(ag):
     s = _sid(ag)
     S = ag.kg["solve"]
-    h = S["hyps"][S["idx"]]
     outs = [tp["output"] for tp in ag.task["train"]]
     ok = (S.get("predicted") is not None
           and all(S["predicted"][i] == outs[i] for i in range(len(outs))))
+    if S["mode"] == "relational":                             # 관계 프로그램 하나뿐
+        ag.kg["last_eval"] = {"hyp": "relational", "ok": ok, "idx": 0}
+        if ok:
+            S["verified"] = S["prog"]
+            ag.wm.add(s, "consistent", "relational program")
+        else:
+            ag.wm.add(s, "hyps-exhausted", "yes")             # 관계 실패 → 하강
+        return
+    h = S["hyps"][S["idx"]]
     ag.kg["last_eval"] = {"hyp": _name(h), "ok": ok, "idx": S["idx"]}
     if ok:
         S["verified"] = h
@@ -156,8 +177,15 @@ def _op_evaluate(ag):
 def _op_verify(ag):
     s = _sid(ag)
     S = ag.kg["solve"]
-    h = S["verified"]
     outs = [tp["output"] for tp in ag.task["train"]]
+    if S["mode"] == "relational":
+        ok = all(relation_solve.apply(S["verified"], p["input"]) == outs[i]
+                 for i, p in enumerate(ag.task["train"]))
+        ag.kg["last_verify"] = {"hyp": "relational", "ok": ok}
+        if ok:
+            ag.wm.add(s, "verified", "relational program")
+        return
+    h = S["verified"]
     ok = all(build_from_hypothesis(h, sm["ctx"]) == outs[i]
              for i, sm in enumerate(S["samples"]))
     ag.kg["last_verify"] = {"hyp": _name(h), "ok": ok}
@@ -171,8 +199,11 @@ def _op_verify(ag):
 def _op_compose(ag):
     s = _sid(ag)
     S = ag.kg["solve"]
-    ctx = (S.get("test") or {}).get("ctx")
-    ans = build_from_hypothesis(S["verified"], ctx) if ctx else None
+    if S["mode"] == "relational":                             # 관계를 test 입력에 적용
+        ans = relation_solve.apply(S["verified"], ag.task["test"][0]["input"])
+    else:
+        ctx = (S.get("test") or {}).get("ctx")
+        ans = build_from_hypothesis(S["verified"], ctx) if ctx else None
     if ans:
         ag.kg["answer"] = ans
         ag.add_output_wme("answer", tuple(tuple(r) for r in ans))   # → output-link
@@ -191,7 +222,8 @@ SOLVE_BODIES = {
 def solve_detail(kg, op):
     """대시보드 하단 패널(생각 operator)."""
     if op == "hypothesize":
-        return {"kind": "hypothesize", "hyps": kg.get("last_hyps", [])}
+        return {"kind": "hypothesize", "hyps": kg.get("last_hyps", []),
+                "program": kg.get("last_prog")}     # GRID 3속성(size/color/contents) 관계
     if op == "predict":
         return {"kind": "predict", "info": kg.get("last_predict")}
     if op == "evaluate":

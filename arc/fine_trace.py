@@ -400,8 +400,11 @@ class _Tracer:
         grid = [list(r) for r in ans] if ans else None
         _reward, _ctx, _done, info = self.env.step(grid)      # 환경이 채점 (env 살아있음)
         S = self.ag.kg.get("solve", {})
-        hyp = (S.get("verified") or {})
-        hypname = f"{hyp.get('position', '')} | {hyp.get('color', '')}" if hyp else "—"
+        if S.get("mode") == "relational":
+            hypname = "relational (size/color/contents)"
+        else:
+            hyp = (S.get("verified") or {})
+            hypname = f"{hyp.get('position', '')} | {hyp.get('color', '')}" if hyp else "—"
         n = len(self.attempts) + 1
         self.attempts.append({"answer": grid, "correct": info["correct"], "hyp": hypname})
         has_next = bool(S.get("hyps")) and (S.get("idx", 0) + 1) < len(S["hyps"])
