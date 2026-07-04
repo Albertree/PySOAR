@@ -124,10 +124,11 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
 .card{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:12px;cursor:pointer}
 .card.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .card .tid{font-family:ui-monospace,monospace;font-size:13px;margin-bottom:6px} .card .meta{font-size:11px;color:var(--muted)}
-/* all four regions FIXED width -> a narrow window horizontal-scrolls the whole
-   layout instead of squishing the WM panel (regions stay usable & comparable) */
-#stepper{display:none;grid-template-columns:300px 600px 360px 300px;
- grid-template-rows:auto auto 1fr auto;gap:6px;height:100vh;padding:6px}
+/* four regions size by RATIO(fr) so the layout always fits the viewport width (no
+   horizontal scroll). minmax(0,…) lets columns shrink below content; each panel
+   scrolls its own overflow internally. ratios ≈ old 300:600:360:300 = 1:2:1.2:1 */
+#stepper{display:none;grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1.2fr) minmax(0,1fr);
+ grid-template-rows:auto auto 1fr auto;gap:6px;height:100vh;width:100vw;padding:6px}
 /* panel = fixed header + scrolling body (header never overlaps content) */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 11px;
  min-height:0;display:flex;flex-direction:column;overflow:hidden}
@@ -481,12 +482,28 @@ function renderStep(){
  $('prob').innerHTML=t.grids.train.map((p,i)=>`<div class=pair><span class=cap>train${i}</span>${grid(p.input)}<span class=arrow>→</span>${grid(p.output)}</div>`).join('')
   +t.grids.test.map((p,i)=>`<div class=pair><span class=cap>test${i}</span>${grid(p.input)}<span class=arrow>→ ?</span></div>`).join('');
  // answer-ready 는 expr 는 S1, focus 는 풀이 substate 에 쓴다 → 어느 state 든 있으면 렌더
+ // 조립(target construction) 상태: 목표(무엇을 만드나) + GRID 3속성 관계가 채워지는 과정.
+ // task 처음엔 목표 미정 → compare 후 'produce X' → hypothesize 후 size/color/contents 관계.
+ const produce=wm.filter(x=>x[1]==='produce').map(x=>x[2]);
+ const slot=k=>{const w=wm.find(x=>x[1]==='target-'+k);return w?w[2]:null;};
+ const slots=['size','color','contents'].map(k=>[k,slot(k)]);
+ const anySlot=slots.some(([_k,v])=>v!==null);
+ let build='';
+ if(produce.length||anySlot){
+   build='<div class=cand style="border-color:var(--gold)"><span class=cap>목표 · 조립(construction)</span>'
+    +`<div class=exprrow><span class=a>목표</span> ${produce.length?'produce '+esc(produce.join(', ')):'<span class=hint>미정</span>'}</div>`;
+   if(anySlot){ build+='<div class=hint>GRID 3속성 관계 (입력 seed → 관계 적용):</div>'
+    +slots.map(([k,v])=>`<div class=exprrow><span class=a>${k}</span> ${v?esc(v):'<span class=hint>·</span>'}</div>`).join(''); }
+   else build+='<div class=hint>아직 grid 속성 미분해 (관측/비교 진행 중)</div>';
+   build+='</div>';
+ }
  const ready=wm.some(x=>x[1]==='answer-ready');
- if(!ready){
-   $('cand').innerHTML='';
+ // 조립 구역은 목표가 생긴 뒤부터 항상 보이고, 답(built/cand)은 answer-ready 후 추가.
+ if(!build && !ready){
+   $('cand').innerHTML='<span class=hint>목표 미정 (task 관측 전)</span>';
  } else {
-   $('cand').innerHTML=detail(e)
-    +t.candidates.map((c,i)=>`<div class=cand><span class=cap>cand${i+1} ${i===t.correct_attempt?'<span class=ok>✓</span>':''}</span>${c.answer.map(grid).join(' ')}<div class=hint>${esc(c.position)}<br>${esc(c.color)}</div></div>`).join('')||'<span class=hint>none</span>';
+   $('cand').innerHTML=build+(ready?(detail(e)
+    +t.candidates.map((c,i)=>`<div class=cand><span class=cap>cand${i+1} ${i===t.correct_attempt?'<span class=ok>✓</span>':''}</span>${c.answer.map(grid).join(' ')}<div class=hint>${esc(c.position)}<br>${esc(c.color)}</div></div>`).join(''))||'');
  }
  const chg = e.highlight.length ? (e.highlight.length>4
    ? e.highlight.slice(0,4).map(x=>esc(trunc(x,40))).join(', ')+` <span class=hint>(+${e.highlight.length-4} more)</span>`

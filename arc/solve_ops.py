@@ -106,10 +106,12 @@ def _op_hypothesize(ag):
     (2) fallback: 단일 object dsl arg 합성(program synthesis)."""
     s = _sid(ag)
     prog = relation_solve.generalize(ag.task["train"])         # per-property 관계 일반화
-    ag.kg["last_prog"] = relation_solve.describe(prog)         # 대시보드 3속성 슬롯
+    desc = relation_solve.describe(prog)
+    ag.kg["last_prog"] = desc                                  # 대시보드 3속성 슬롯
+    for k, v in desc.items():                                  # 조립 상태를 WM 에 남김(패널이 읽음)
+        ag.wm.add(s, f"target-{k}", v)
     if relation_solve.is_complete(prog):                       # contents 해소 → 완결 프로그램
         ag.kg["solve"] = {"mode": "relational", "prog": prog, "verified": None}
-        desc = relation_solve.describe(prog)
         ag.wm.add(s, "hyp", "relational: " + ", ".join(f"{k}={v}" for k, v in desc.items()))
         return
     # (2) fallback: dsl 단일 object 가설
