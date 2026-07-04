@@ -111,6 +111,37 @@ def test_rule_driven_not_scenario_fixed():
     assert "aggregate" in m_ops and "aggregate" not in e_ops
 
 
+def test_submission_captured_and_scored():
+    # 제출된 답 격자가 대시보드 후보로 잡히고, 3회 환경이 채점해 정답 표시.
+    from arc.focus_solver import _dash_data
+    tid, path = list_tasks("easy_a")[0]
+    t = load_task(path)
+    d = _dash_data(t, tid)
+    assert d["candidates"], "제출 답이 후보로 안 잡힘"
+    assert d["correct_attempt"] == 0, "첫 제출이 정답으로 채점 안 됨"
+    assert d["candidates"][0]["answer"] == t["test"][0]["output"], "제출 격자가 정답과 다름"
+    # feedback 이벤트(환경 채점)가 트레이스에 있음
+    assert any(e["kind"] == "feedback" for e in d["events"]), "환경 피드백 이벤트 없음"
+
+
+def test_retry_env_alive_and_bounded():
+    # 오답이면 다음 후보로 재시도하되 3회로 제한(무한루프 없음). 환경을 항상-오답으로.
+    import arc.environment as E
+    from arc.fine_trace import _Tracer
+    from arc.focus_solver import setup_focus_agent
+    orig = E.ARCEnvironment.step
+    # 항상-오답 ∧ can_retry True 로 강제 → 후보 소진으로만 멈춰야(무한루프 없음)
+    E.ARCEnvironment.step = lambda self, g: (
+        0.0, None, False, {"correct": False, "attempts_left": 2, "can_retry": True})
+    try:
+        tid, path = list_tasks("easy_a")[0]
+        tr = _Tracer(load_task(path), tid, setup=setup_focus_agent)
+        tr.run(max_cycles=120)
+        assert 1 <= len(tr.attempts) <= 3, f"재시도 경계 위반: {len(tr.attempts)}"
+    finally:
+        E.ARCEnvironment.step = orig
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

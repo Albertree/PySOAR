@@ -60,9 +60,15 @@ class _Tracer:
         if setup is None:
             from arc.expr_solver import setup_arc_agent as setup
         self.ag = setup(task, tid)             # io + the solver's input function
+        self.task = task
         self.events = []
         self.cycle = 0
         self._cands: set = set()               # materialised ^operator + WMEs
+        # ARC-AGI 3회 재시도 환경 (submit → 채점 → 오답이면 다음 후보로 retry)
+        from arc.environment import ARCEnvironment
+        self.env = ARCEnvironment([(tid, task)])
+        self.env.reset()
+        self.attempts: list = []               # [{answer, correct, hyp}] — 대시보드 후보
 
     def _wm(self):
         # structured triples (so the dashboard can build the ARCKG tree)
@@ -339,13 +345,19 @@ class _Tracer:
                                   detail=_kg_detail(self.ag.kg, name), rule=name, wave=None)
                     self.elaborate("apply")
                     self._emit_output()
-                    if name == "submit" or self.ag.wm.contains("S1", "done", "yes"):
+                    if name == "submit":
+                        if not self._submit_and_maybe_retry():
+                            break
+                    elif self.ag.wm.contains("S1", "done", "yes"):
                         break
                 else:
                     # body tied to apply*<name> firing (structure + flag = one wm-update)
                     self.elaborate("apply", body=body, op_name=name)
                     self._emit_output()
-                    if name == "submit" or self.ag.wm.contains("S1", "done", "yes"):
+                    if name == "submit":
+                        if not self._submit_and_maybe_retry():
+                            break
+                    elif self.ag.wm.contains("S1", "done", "yes"):
                         break
             elif imp.name == "NONE" and len(cands) == 0:
                 # NO operator selectable at this goal's focus = this level's info is
@@ -379,6 +391,46 @@ class _Tracer:
                 self._emit_output()
                 break
         return self.events
+
+    def _submit_and_maybe_retry(self):
+        """submit 후: ARC 환경(3회 프로토콜)으로 답을 채점하고 피드백을 emit.
+        오답 ∧ 재시도 가능 ∧ 다음 후보 있으면 → 현재 가설 reject 하고 다음 후보로
+        재시도(True 반환=계속). 정답/소진/후보없음이면 종료(False)."""
+        ans = self.ag.kg.get("answer")
+        grid = [list(r) for r in ans] if ans else None
+        _reward, _ctx, _done, info = self.env.step(grid)      # 환경이 채점 (env 살아있음)
+        S = self.ag.kg.get("solve", {})
+        hyp = (S.get("verified") or {})
+        hypname = f"{hyp.get('position', '')} | {hyp.get('color', '')}" if hyp else "—"
+        n = len(self.attempts) + 1
+        self.attempts.append({"answer": grid, "correct": info["correct"], "hyp": hypname})
+        has_next = bool(S.get("hyps")) and (S.get("idx", 0) + 1) < len(S["hyps"])
+        retry = (not info["correct"]) and info["can_retry"] and has_next
+        verdict = "정답 ✓" if info["correct"] else "오답 ✗"
+        tail = (f" → reject, 다음 후보로 재시도 (남은 {info['attempts_left']}회)"
+                if retry else (" → 재시도 소진" if not info["correct"] else ""))
+        self.emit("output", "feedback",
+                  f"제출 #{n}/{self.env._max}: {verdict}{tail}",
+                  highlight=[f"attempt {n}: {'correct' if info['correct'] else 'wrong'}"])
+        if not retry:
+            return False                                       # 종료
+        self._reject_and_retry(S)
+        return True                                            # 계속
+
+    def _reject_and_retry(self, S):
+        """현재 가설을 reject: 다음 후보(idx+1)로 넘기고, 풀이 substate 의 결과
+        플래그(consistent/verified/answer-ready/done/predicted/hyps-exhausted)와
+        output-link 답을 지워 predict→evaluate→...→submit 이 다음 후보로 재발화."""
+        S["idx"] = S.get("idx", 0) + 1
+        S["verified"] = None
+        for attr in ("consistent", "verified", "answer-ready", "done",
+                     "predicted", "hyps-exhausted"):
+            for (i, a, v) in list(self.ag.wm.matching(attr=attr)):
+                self.ag.wm.remove(i, a, v)
+        for (i, a, v) in list(self.ag.wm.matching(identifier="I3", attr="answer")):
+            self.ag.wm.remove(i, a, v)
+        self.ag.kg["answer"] = None
+        self.ag._clear_operator(self.ag.stack[-1])            # 현재 선택 해제 → 재결정
 
     def _goal_focus(self, gid):
         return next((v for (i, a, v) in self.ag.wm if i == gid and a == "focus"), None)

@@ -411,9 +411,10 @@ OP_DOCS = {
 # dashboard generation (reuses dashboard._HTML; separate file, zero impact on the
 # working expr_solver dashboard)
 # ---------------------------------------------------------------------------
-def _dash_data(task, tid="0a", max_cycles=40):   # observe+compare+aggregate+solve+descend × 5 levels
-    from arc.fine_trace import fine_trace
-    events = fine_trace(task, tid, setup=setup_focus_agent, max_cycles=max_cycles)
+def _dash_data(task, tid="0a", max_cycles=60):   # observe+compare+aggregate+find+solve+…×levels
+    from arc.fine_trace import _Tracer
+    tr = _Tracer(task, tid, setup=setup_focus_agent)
+    events = tr.run(max_cycles=max_cycles)
     wm_states, idx = [], {}
     for e in events:
         key = tuple(tuple(t) for t in e["wm"])
@@ -422,11 +423,16 @@ def _dash_data(task, tid="0a", max_cycles=40):   # observe+compare+aggregate+sol
             wm_states.append(e["wm"])
         e["wm_state"] = idx[key]
         del e["wm"]
+    # 제출 시도(3회 환경)를 대시보드 후보로: 각 시도의 답 격자 + 정답 여부.
+    candidates = [{"answer": a["answer"], "position": f"attempt {i + 1}: {a['hyp']}",
+                   "color": "✓" if a["correct"] else "✗"}
+                  for i, a in enumerate(tr.attempts)]
+    correct_i = next((i for i, a in enumerate(tr.attempts) if a["correct"]), None)
     return {
         "id": tid, "events": events, "wm_states": wm_states,
         "grids": {"train": task["train"],
                   "test": [{"input": tp["input"]} for tp in task["test"]]},
-        "candidates": [], "correct_attempt": None, "n_steps": len(events),
+        "candidates": candidates, "correct_attempt": correct_i, "n_steps": len(events),
     }
 
 
