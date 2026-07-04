@@ -27,6 +27,13 @@ def _run(tid, task, cyc=40):
     return fine_trace(task, tid, setup=setup_focus_agent, max_cycles=cyc)
 
 
+def _load_08ed6ac7():
+    import glob
+    import os
+    p = glob.glob(os.path.expanduser("~/Desktop/ARC-solver/data/**/08ed6ac7.json"), recursive=True)
+    return load_task(p[0])
+
+
 def _answer(ev):
     for e in ev[::-1]:
         for (i, a, v) in e["wm"]:
@@ -62,9 +69,9 @@ def test_full_operator_pipeline_fires():
 
 
 def test_descent_and_aggregate_on_unsolved():
-    # made000b(이동형)는 아직 이 레벨 풀이 실패 → 하강 → compare→aggregate 로 관계 도출
-    # (문제 못 풀어도 탐색이 진행됨). made000a 는 이제 선택형 합성으로 풀려 여기 안 씀.
-    ev = _run("made000b", load_task("arc/data/made/made000b.json"), cyc=80)
+    # 08ed6ac7(실제 ARC, 아직 미해결)은 이 레벨 풀이 실패 → 하강 → compare→aggregate 로
+    # 관계 도출 (문제 못 풀어도 탐색이 진행됨). made000a/b 는 이제 합성으로 풀려 여기 안 씀.
+    ev = _run("08ed6ac7", _load_08ed6ac7(), cyc=120)
     ops = [e["label"] for e in ev if e["kind"] == "op-select"]
     assert any("hypothesize" in o for o in ops), "풀이 시도(hypothesize) 있어야"
     assert any("aggregate" in o for o in ops), "실패 후 하강해 compare→aggregate 로 관계 도출"
@@ -90,8 +97,8 @@ def test_components_only_from_real_schema():
 
 
 def test_relations_land_in_wm():
-    # made000b 는 하강해 object 레벨에서 관계·역할을 WM 에 남긴다(대시보드 렌더 재료).
-    ev = _run("made000b", load_task("arc/data/made/made000b.json"), cyc=80)
+    # 08ed6ac7 은 하강해 object 레벨에서 관계·역할을 WM 에 남긴다(대시보드 렌더 재료).
+    ev = _run("08ed6ac7", _load_08ed6ac7(), cyc=120)
     wm = ev[-1]["wm"]
     greaters = [(i, a, v) for (i, a, v) in wm if a == "greater"]
     roles = [(i, a, v) for (i, a, v) in wm if a == "role"]
@@ -104,9 +111,9 @@ def test_rule_driven_not_scenario_fixed():
     # 풀이 완주(submit), made 는 실패→하강. 같은 규칙셋이 상황에 따라 다르게 발화.
     etid, epath = list_tasks("easy_a")[0]
     easy = _run(etid, load_task(epath), cyc=60)
-    made = _run("made000b", load_task("arc/data/made/made000b.json"), cyc=80)   # 아직 미해결
+    hard = _run("08ed6ac7", _load_08ed6ac7(), cyc=120)       # 아직 미해결
     e_ops = {e["label"].split("name=")[-1].rstrip("]") for e in easy if e["kind"] == "op-select"}
-    m_ops = {e["label"].split("name=")[-1].rstrip("]") for e in made if e["kind"] == "op-select"}
+    m_ops = {e["label"].split("name=")[-1].rstrip("]") for e in hard if e["kind"] == "op-select"}
     assert "submit" in e_ops and "submit" not in m_ops       # 같은 규칙, 다른 경로
     assert "aggregate" in m_ops and "aggregate" not in e_ops
 
@@ -119,10 +126,10 @@ def test_structure_mapping_relation_generalize():
     e = R.generalize(load_task(epath)["train"])
     assert e["size"] == ("identity",) and e["contents"][0] == "const"
     assert R.is_complete(e)
-    # made000b: size·color 는 입력 보존(identity), contents 만 합성 필요(구조적 초점)
+    # made000b: size·color 는 입력 보존(identity), contents 는 이동형 합성(우하단 정렬)
     b = R.generalize(load_task("arc/data/made/made000b.json")["train"])
     assert b["size"] == ("identity",) and b["color"] == ("identity",)
-    assert b["contents"] is None and not R.is_complete(b)
+    assert b["contents"] == ("move", {"anchor": "bottom-right"})
     # made000a: size=상수(1x1), contents=선택형 합성(전경 최대 색)으로 해소
     a = R.generalize(load_task("arc/data/made/made000a.json")["train"])
     assert a["size"] == ("const", (1, 1)) and a["contents"][0] == "select"
@@ -139,6 +146,18 @@ def test_made000a_solved_by_selection_synthesis():
     assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
     d = _dash_data(t, "made000a")                # 규칙주도 파이프라인으로도 정답 제출
     assert d["correct_attempt"] == 0
+
+
+def test_made000b_solved_by_move_synthesis():
+    # made000b(이동형): contents 를 "object → 코너 정렬"로 합성. 4 코너 전수 중 우하단이
+    # pair 간 일관(표면 좌표는 달라도 '우하단 정렬' 구조 공통) → 규칙.
+    from arc import relation_solve as R
+    from arc.focus_solver import _dash_data
+    t = load_task("arc/data/made/made000b.json")
+    prog = R.generalize(t["train"])
+    assert prog["contents"] == ("move", {"anchor": "bottom-right"})
+    assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
+    assert _dash_data(t, "made000b")["correct_attempt"] == 0
 
 
 def test_submission_captured_and_scored():

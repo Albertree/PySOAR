@@ -72,15 +72,70 @@ def _synth_contents_select(train, outs):
     return None
 
 
+# object 를 grid 코너에 정렬하는 목적지 top-left (grid H,W · object h,w). 전수 탐색으로
+# pair 간 일관된 코너를 찾는다(워크스루 Problem B 의 "우하단 정렬" = 코너 전수의 생존자).
+_CORNERS = {
+    "top-left":     lambda H, W, h, w: (0, 0),
+    "top-right":    lambda H, W, h, w: (0, W - w),
+    "bottom-left":  lambda H, W, h, w: (H - h, 0),
+    "bottom-right": lambda H, W, h, w: (H - h, W - w),
+}
+
+
+def _bg(grid):
+    from collections import Counter
+    return Counter(v for row in grid for v in row).most_common(1)[0][0]
+
+
+def _single_fg(grid):
+    objs = fg_objects(grid, "G")
+    return objs[0] if len(objs) == 1 else None
+
+
+def _bbox(o):
+    r0, c0 = min(o["rows"]), min(o["cols"])
+    return r0, c0, max(o["rows"]) - r0 + 1, max(o["cols"]) - c0 + 1
+
+
+def _rel_shape(o):
+    r0, c0 = min(o["rows"]), min(o["cols"])
+    return frozenset((r - r0, c - c0) for (r, c) in o["cells"])
+
+
+def _synth_contents_move(train, ins, outs):
+    """이동형: 각 pair 에 전경 object 1개, 입력→출력이 같은 shape·color 의 translation.
+    출력 object 의 위치를 grid 코너 정렬로 pair 간 일반화(우하단 등). 표면 좌표는 pair
+    마다 달라도 '어느 코너에 붙는다'는 구조가 공통이면 규칙(structure mapping)."""
+    if not all(grid_size(o) == grid_size(i) for i, o in zip(ins, outs)):
+        return None                                # size 보존형만
+    per = []
+    for p in train:
+        io, oo = _single_fg(p["input"]), _single_fg(p["output"])
+        if io is None or oo is None:
+            return None
+        if io["color"] != oo["color"] or _rel_shape(io) != _rel_shape(oo):
+            return None                            # 같은 모양·색(translation)만
+        H, W = grid_size(p["input"])
+        _r, _c, h, w = _bbox(io)
+        per.append((H, W, h, w, (min(oo["rows"]), min(oo["cols"]))))
+    for name, fn in _CORNERS.items():
+        if all(fn(H, W, h, w) == dest for (H, W, h, w, dest) in per):
+            return ("move", {"anchor": name})
+    return None
+
+
 def _rel_contents(train, ins, outs):
     if all(o == i for i, o in zip(ins, outs)):
         return ("identity",)                       # 출력 = 입력 (복사)
     if all(o == outs[0] for o in outs):
         return ("const", outs[0])                  # 출력이 pair 간 동일 (easy000a)
-    sel = _synth_contents_select(train, outs)       # 선택형 합성 (made000a: 가장 큰 색)
+    sel = _synth_contents_select(train, outs)       # 선택형 (made000a: 가장 큰 색)
     if sel:
         return sel
-    return None                                    # 여전히 미해소 (이동형 등 → 다음)
+    mv = _synth_contents_move(train, ins, outs)     # 이동형 (made000b: 우하단 정렬)
+    if mv:
+        return mv
+    return None                                    # 여전히 미해소 → 다음 (회전/반사 등)
 
 
 def generalize(train):
@@ -114,6 +169,17 @@ def apply(prog, test_input):
         key = _NUM_PROPS[c[1]["prop"]]
         chosen = (max if c[1]["dir"] == "max" else min)(objs, key=key)
         return [[chosen["color"]]]
+    if c[0] == "move":                             # object 를 코너로 이동(입력 seed → 재배치)
+        io = _single_fg(test_input)
+        if io is None:
+            return None
+        H, W = grid_size(test_input)
+        r0, c0, h, w = _bbox(io)
+        dr, dc = _CORNERS[c[1]["anchor"]](H, W, h, w)
+        out = [[_bg(test_input)] * W for _ in range(H)]
+        for (r, cc) in io["cells"]:
+            out[dr + (r - r0)][dc + (cc - c0)] = io["color"]
+        return out
     return None
 
 
@@ -129,5 +195,7 @@ def describe(prog):
             return f"const {v if not isinstance(v, list) or len(v) < 6 else '격자'}"
         if rel[0] == "select":
             return f"select {rel[1]['dir']}({rel[1]['prop']}) → color (1×1)"
+        if rel[0] == "move":
+            return f"move object → {rel[1]['anchor']} corner"
         return str(rel)
     return {k: d(prog.get(k)) for k in ("size", "color", "contents")}
