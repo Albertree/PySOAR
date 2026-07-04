@@ -61,10 +61,10 @@ def test_full_operator_pipeline_fires():
         assert want in ops, f"{want} operator 가 발화 안 함: {ops}"
 
 
-def test_descent_and_aggregate_on_made000a():
-    # made000a(선택형)는 이 레벨 풀이 실패 → 하강 → object 레벨 compare→aggregate 로
-    # 관계·역할 도출 (문제 못 풀어도 탐색이 진행됨).
-    ev = _run("made000a", load_task("arc/data/made/made000a.json"), cyc=60)
+def test_descent_and_aggregate_on_unsolved():
+    # made000b(이동형)는 아직 이 레벨 풀이 실패 → 하강 → compare→aggregate 로 관계 도출
+    # (문제 못 풀어도 탐색이 진행됨). made000a 는 이제 선택형 합성으로 풀려 여기 안 씀.
+    ev = _run("made000b", load_task("arc/data/made/made000b.json"), cyc=80)
     ops = [e["label"] for e in ev if e["kind"] == "op-select"]
     assert any("hypothesize" in o for o in ops), "풀이 시도(hypothesize) 있어야"
     assert any("aggregate" in o for o in ops), "실패 후 하강해 compare→aggregate 로 관계 도출"
@@ -90,8 +90,8 @@ def test_components_only_from_real_schema():
 
 
 def test_relations_land_in_wm():
-    # made000a 는 하강해 object 레벨에서 관계·역할을 WM 에 남긴다(대시보드 렌더 재료).
-    ev = _run("made000a", load_task("arc/data/made/made000a.json"), cyc=60)
+    # made000b 는 하강해 object 레벨에서 관계·역할을 WM 에 남긴다(대시보드 렌더 재료).
+    ev = _run("made000b", load_task("arc/data/made/made000b.json"), cyc=80)
     wm = ev[-1]["wm"]
     greaters = [(i, a, v) for (i, a, v) in wm if a == "greater"]
     roles = [(i, a, v) for (i, a, v) in wm if a == "role"]
@@ -104,7 +104,7 @@ def test_rule_driven_not_scenario_fixed():
     # 풀이 완주(submit), made 는 실패→하강. 같은 규칙셋이 상황에 따라 다르게 발화.
     etid, epath = list_tasks("easy_a")[0]
     easy = _run(etid, load_task(epath), cyc=60)
-    made = _run("made000a", load_task("arc/data/made/made000a.json"), cyc=60)
+    made = _run("made000b", load_task("arc/data/made/made000b.json"), cyc=80)   # 아직 미해결
     e_ops = {e["label"].split("name=")[-1].rstrip("]") for e in easy if e["kind"] == "op-select"}
     m_ops = {e["label"].split("name=")[-1].rstrip("]") for e in made if e["kind"] == "op-select"}
     assert "submit" in e_ops and "submit" not in m_ops       # 같은 규칙, 다른 경로
@@ -123,9 +123,9 @@ def test_structure_mapping_relation_generalize():
     b = R.generalize(load_task("arc/data/made/made000b.json")["train"])
     assert b["size"] == ("identity",) and b["color"] == ("identity",)
     assert b["contents"] is None and not R.is_complete(b)
-    # made000a: size 는 상수(1x1)로 해소, 나머지는 합성 필요
+    # made000a: size=상수(1x1), contents=선택형 합성(전경 최대 색)으로 해소
     a = R.generalize(load_task("arc/data/made/made000a.json")["train"])
-    assert a["size"] == ("const", (1, 1)) and a["contents"] is None
+    assert a["size"] == ("const", (1, 1)) and a["contents"][0] == "select"
 
 
 def test_made000a_solved_by_selection_synthesis():
