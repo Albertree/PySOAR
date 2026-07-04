@@ -179,6 +179,12 @@ def _op_compare(ag):
             ag.wm.add(gid, "node", imbal["minority"])           # e.g. Pa
             ag.wm.add(gid, "produce", imbal["missing"])         # e.g. output (reuses the domain role)
     ag.kg.setdefault("compares", []).append({"node": f, "comm": comm, "diff": diff, "goal": imbal})
+    # REFINE: DIFF 된 orderable property(area/size/position/coordinate)는 통째
+    # COMM/DIFF 로 끝내지 않고 pairwise greater/less 로 정제해 관계를 도출한다
+    # (thinking_ops). 관계가 생기면 (f ^gather-pending yes) → aggregate 가 role 로 집계.
+    from arc import thinking_ops
+    ag.kg["last_relations"] = []
+    thinking_ops.write_relations(ag, f, group, props)
 
 
 # solve has NO body: it is an UNDEFINED operator. There is no apply rule and no
@@ -188,7 +194,10 @@ def _op_compare(ag):
 # operator needs. When a future slice produces the result (the output grid), that
 # result resolves the impasse and CHUNKING compiles it into solve's apply rule --
 # thereafter solve produces the grid directly. observe/compare do the gathering.
-OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare}
+from arc.thinking_ops import _op_aggregate                     # noqa: E402
+from arc.solve_ops import SOLVE_BODIES                         # noqa: E402
+OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare,
+                   "aggregate": _op_aggregate, **SOLVE_BODIES}
 
 
 # ---------------------------------------------------------------------------
@@ -219,12 +228,29 @@ def _apply(name, attr):
         [Action("<f>", attr, "yes")])
 
 
+def _apply_state(name, *acts):
+    # solving-pipeline apply: writes result flag(s) ON THE STATE <s> (the goal-holder),
+    # not the focus node. ``acts`` = (attr, val[, pref]) tuples. Body (SOLVE_BODIES)
+    # runs as this rule fires; the flags here gate the NEXT operator (generate-and-test).
+    return Production(
+        f"apply*{name}",
+        [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", name)],
+        [Action("<s>", a[0], a[1], a[2] if len(a) > 2 else "+") for a in acts])
+
+
 PRODUCTIONS = [
     # observe: reflexive -- the current state's focus node is not yet seen
     _propose("observe", [Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "<x>", negated=True)]),
     # compare: focus seen AND it has same-level siblings, not yet compared
     _propose("compare", [Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
                          Cond("<f>", "has-siblings", "yes"), Cond("<f>", "compared", "<x>", negated=True)]),
+    # aggregate: compare left pairwise greater/less relations (gather-pending) not yet
+    # rolled into roles. REFLEXIVE information-gathering -- derives extremum roles from
+    # the relations compare produced (this is where "가장 큰" becomes a role). Gated so
+    # it runs BEFORE solve (perceive/gather before you attempt), same family as ^seen.
+    _propose("aggregate", [Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
+                           Cond("<f>", "gather-pending", "yes"),
+                           Cond("<f>", "aggregated", "<x>", negated=True)]),
     # solve: the state has a GOAL and its focus has been OBSERVED -> propose to solve.
     # solve is UNDEFINED -- NO apply rule, NO body (see OPERATOR_BODIES) -- so selecting it
     # changes nothing => operator no-change impasse => a substate to IMPLEMENT it
@@ -233,11 +259,67 @@ PRODUCTIONS = [
     # (contrast the deleted solve*post-compare, which wrongly said "solve VIA compare").
     # The order emerges: at S1 observe(task) fires first (task unseen), then solve; in a
     # substate observe->compare run first and compare DISCOVERS the ^goal, then solve.
-    Production("propose*solve",
-               [Cond("<s>", "goal", "<g>"), Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes")],
-               [Action("<s>", "operator", "<o>", "+"), Action("<o>", "name", "solve")]),
+    # find: object 레벨에서 aggregate 가 role 을 냈고 아직 대상 선택 안 함 → 선택.
+    _propose("find", [Cond("<s>", "focus", "<f>"), Cond("<f>", "aggregated", "yes"),
+                      Cond("<f>", "found", "<x>", negated=True)]),
+
+    # ── 풀이 파이프라인 (발견된 goal ^produce 가 있는 substate 에서만) ──
+    # "이 레벨에서 풀이 시도 → 실패(hyps-exhausted)하면 solve fallback 로 하강".
+    # hypothesize: goal(^produce) 있고 아직 가설 없음. (bootstrap goal 'solve' 는
+    # ^produce 가 없어 여기 안 걸림 → S1 에선 hypothesize 대신 solve*bootstrap 이 하강.)
+    _propose("hypothesize", [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
+                             Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
+                             Cond("<f>", "gather-pending", "<gp>", negated=True),
+                             Cond("<s>", "hypotheses-built", "<x>", negated=True)]),
+    # predict: 후보 하나를 train 입력에 적용(내부 시뮬레이션).
+    _propose("predict", [Cond("<s>", "hypotheses-built", "yes"),
+                         Cond("<s>", "predicted", "<x>", negated=True),
+                         Cond("<s>", "consistent", "<y>", negated=True),
+                         Cond("<s>", "hyps-exhausted", "<z>", negated=True)]),
+    # evaluate: 예측을 train 오라클과 대조 → consistent 이거나 다음 후보로.
+    _propose("evaluate", [Cond("<s>", "predicted", "yes"),
+                          Cond("<s>", "consistent", "<x>", negated=True),
+                          Cond("<s>", "verified", "<y>", negated=True)]),
+    # verify: consistent 후보를 최종 확인 → verified.
+    _propose("verify", [Cond("<s>", "consistent", "<c>"),
+                        Cond("<s>", "verified", "<x>", negated=True)]),
+    # compose: verified 가설을 test 에 적용해 답 조립.
+    _propose("compose", [Cond("<s>", "verified", "<v>"),
+                         Cond("<s>", "answer-ready", "<x>", negated=True),
+                         Cond("<s>", "declined", "<y>", negated=True)]),
+    # submit: 답 준비됨 → 제출.
+    _propose("submit", [Cond("<s>", "answer-ready", "yes"), Cond("<s>", "done", "<x>", negated=True)]),
+
+    # solve -- 두 변형(상호배타). bootstrap: 최상위 부트goal 'solve'(^produce 없음) →
+    # 하강해 pair 로. fallback: 발견된 goal 인데 hypothesize 가 다 틀림(hyps-exhausted)
+    # ∧ 아직 verified 없음 → 이 레벨 풀이 실패 → 하강(더 깊은 정보 수집).
+    _propose_named("propose*solve*bootstrap", "solve",
+                   [Cond("<s>", "goal", "solve"), Cond("<s>", "focus", "<f>"),
+                    Cond("<f>", "seen", "yes"), Cond("<f>", "gather-pending", "<gp>", negated=True)]),
+    _propose_named("propose*solve*fallback", "solve",
+                   [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
+                    Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
+                    Cond("<f>", "gather-pending", "<gp>", negated=True),
+                    Cond("<s>", "hyps-exhausted", "yes"), Cond("<s>", "verified", "<v>", negated=True)]),
+
     _apply("observe", "seen"),
     _apply("compare", "compared"),
+    _apply("find", "found"),                                   # 대상 선택은 body 가 ^selected 로
+    # aggregate apply: mark done (aggregated) AND consume the gather-pending gate so
+    # the next operator becomes eligible. Body (_op_aggregate) runs as this rule fires.
+    Production("apply*aggregate",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "aggregate"),
+                Cond("<o>", "node", "<f>")],
+               [Action("<f>", "aggregated", "yes"),
+                Action("<f>", "gather-pending", "yes", "-")]),
+    # 풀이 파이프라인 apply (플래그는 STATE <s> 에; body 가 실제 작업). predict↔evaluate
+    # 루프: evaluate 가 predicted 를 지워 다음 후보로 predict 재발화(generate-and-test).
+    _apply_state("hypothesize", ("hypotheses-built", "yes")),
+    _apply_state("predict", ("predicted", "yes")),
+    _apply_state("evaluate", ("predicted", "yes", "-")),      # 소비: 맞으면 body 가 consistent, 틀리면 다음 후보
+    _apply_state("verify"),                                   # body 가 verified 를 씀
+    _apply_state("compose"),                                  # body 가 answer-ready/declined 를 씀
+    _apply_state("submit", ("done", "yes")),
     # NO apply*solve: solve is deliberately un-implemented (that is what makes it impasse).
 ]
 
@@ -297,15 +379,23 @@ def setup_focus_agent(task, tid="0a", record=False):
     ag = Agent(PRODUCTIONS, operator_bodies=OPERATOR_BODIES, record=record, io=True)
     ag.task = task
     ag.task_id = tid
-    ag.kg = {}
+    ag.kg = {"_focus": True, "relations": [], "roles": []}     # _focus: dashboard detail 라우팅
     ag.input_functions.append(inject_focus)
     return ag
 
 
 OP_DOCS = {
     "observe": "focus 노드의 property + 자식 존재 확인 (자식 내용 X) → ^seen",
-    "compare": "focus의 형제들과 property 비교 → COMM/DIFF. 불균형(한 형제가 어떤 role 결여)이면 그 substate에 ^goal 발견(node/produce)",
-    "solve": "미구현 operator (apply 규칙·body 없음). ^goal이 있으면 제안되고, 적용 지식이 없어 변화 없음 → operator no-change impasse → 하강(구현 subgoal). 결과가 나오면 chunking으로 학습",
+    "compare": "focus의 형제들과 property 비교 → COMM/DIFF. orderable(area/size/position)은 pairwise greater/less로 refine → 관계 도출. 불균형이면 ^goal 발견(node/produce)",
+    "aggregate": "compare가 쌓은 greater/less 관계를 role로 집계 → extremum+/-(=가장 큼/작음). 관계가 없으면 발화 안 함",
+    "find": "aggregate가 낸 role(extremum+ on area)로 대상 object 선택 → ^selected",
+    "hypothesize": "train pair에서 변환 가설을 랭킹 생성(predefined DSL 조합). 후보 없으면 hyps-exhausted → 하강",
+    "predict": "현재 후보 가설을 train 입력마다 적용(내부 시뮬레이션) → 예측 격자",
+    "evaluate": "예측을 train 출력(오라클)과 대조. 다 맞으면 consistent, 틀리면 다음 후보(generate-and-test)",
+    "verify": "consistent 후보를 train 전체에서 최종 재확인 → verified",
+    "compose": "verified 가설을 test 입력에 적용해 답 조립(make_grid+coloring) → ^answer-ready",
+    "submit": "답을 output-link로 제출 → ^done",
+    "solve": "미구현 operator (apply 규칙·body 없음). goal이 있고 이 레벨 풀이가 실패(hyps-exhausted)면 제안. 변화 없음 → operator no-change impasse → 하강. 결과가 나오면 chunking으로 학습",
 }
 
 
@@ -313,7 +403,7 @@ OP_DOCS = {
 # dashboard generation (reuses dashboard._HTML; separate file, zero impact on the
 # working expr_solver dashboard)
 # ---------------------------------------------------------------------------
-def _dash_data(task, tid="0a", max_cycles=18):   # observe+compare+solve+descend × 4 levels
+def _dash_data(task, tid="0a", max_cycles=40):   # observe+compare+aggregate+solve+descend × 5 levels
     from arc.fine_trace import fine_trace
     events = fine_trace(task, tid, setup=setup_focus_agent, max_cycles=max_cycles)
     wm_states, idx = [], {}
@@ -339,9 +429,13 @@ def _rules_manifest():
             for p in PRODUCTIONS]
 
 
-def make_dashboard(task, tid="0a"):
+def make_dashboard(tasks, dataset="focus (slice 1)"):
+    """tasks: [(tid, task_dict), ...] — 대시보드 TASK BROWSER 에 카드로 나열."""
     from arc.dashboard import _HTML
-    data = {"dataset": "focus (slice 1)", "tasks": [_dash_data(task, tid)],
+    if isinstance(tasks, dict):                        # 단일 태스크 하위호환: make_dashboard(task_dict)
+        tasks = [("task", tasks)]
+    data = {"dataset": dataset,
+            "tasks": [_dash_data(t, tid) for tid, t in tasks],
             "rules": _rules_manifest(), "op_docs": OP_DOCS}
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_dashboard.html")
     with open(out, "w") as f:
@@ -349,8 +443,28 @@ def make_dashboard(task, tid="0a"):
     return out
 
 
-if __name__ == "__main__":
+def _load_made_and_real():
+    """대시보드에 띄울 태스크: 워크스루의 made000a/b + 실제 08ed6ac7 + easy000a."""
+    import glob
     from arc.dataset import list_tasks, load_task
-    tid, path = list_tasks("easy_a")[0]          # real task id (e.g. easy000a), not a made-up "0a"
-    out = make_dashboard(load_task(path), tid)
-    print(f"wrote {out}  (task {tid})\nopen it:  open {out}")
+    here = os.path.dirname(os.path.abspath(__file__))
+    tasks = []
+    for tid in ("made000a", "made000b"):
+        p = os.path.join(here, "data", "made", f"{tid}.json")
+        if os.path.exists(p):
+            tasks.append((tid, load_task(p)))
+    real = glob.glob(os.path.expanduser("~/Desktop/ARC-solver/data/**/08ed6ac7.json"), recursive=True)
+    if real:
+        tasks.append(("08ed6ac7", load_task(real[0])))
+    etid, epath = list_tasks("easy_a")[0]
+    tasks.append((etid, load_task(epath)))
+    return tasks
+
+
+if __name__ == "__main__":
+    # made000a/b 가 없으면 먼저 생성
+    from arc.make_made_tasks import write_all
+    write_all()
+    tasks = _load_made_and_real()
+    out = make_dashboard(tasks)
+    print(f"wrote {out}\n  tasks: {[tid for tid, _ in tasks]}\nopen it:  open {out}")

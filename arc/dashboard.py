@@ -30,6 +30,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _kg_detail(kg, op):
+    # focus_solver 의 kg 는 모양이 다르다(compares/relations/roles). _focus 마커가
+    # 있으면 thinking_ops.focus_detail 로 라우팅한다 (expr_solver 경로는 그대로).
+    if kg.get("_focus"):
+        from arc.thinking_ops import focus_detail
+        return focus_detail(kg, op)
     if op == "observe":
         objs = [{"pair": i, "color": pr["tin"]["color"], "cells": sorted(pr["tin"]["cells"])}
                 for i, pr in enumerate(kg.get("pairs", [])) if pr.get("tin")]
@@ -492,10 +497,37 @@ function renderStep(){
 }
 function detail(e){
  const d=e.detail; if(!d) return '';
- if(d.kind=='observe') return '<div class=hint>ARCKG objects:</div>'+d.objects.map(o=>`<div class=exprrow><span class=a>pair ${o.pair}</span> color=${o.color} cells=${esc(JSON.stringify(o.cells))}</div>`).join('')+'<hr style="border-color:var(--line)">';
- if(d.kind=='compare') return '<div class=hint>per-pair in→out:</div>'+d.rows.map(r=>`<div class=exprrow><span class=a>pair ${r.pair}</span> ${esc(JSON.stringify(r.in_coord))} c${r.in_color} → ${esc(JSON.stringify(r.out_coord))} c${r.out_color}</div>`).join('')+'<hr style="border-color:var(--line)">';
+ if(d.kind=='observe'){
+   if(d.objects) return '<div class=hint>ARCKG objects:</div>'+d.objects.map(o=>`<div class=exprrow><span class=a>pair ${o.pair}</span> color=${o.color} cells=${esc(JSON.stringify(o.cells))}</div>`).join('')+'<hr style="border-color:var(--line)">';
+   return '<div class=hint>observe</div><div class=exprrow>'+esc(d.note||'')+'</div><hr style="border-color:var(--line)">';
+ }
+ if(d.kind=='compare'){
+   if(d.relations!==undefined){ // focus_solver: COMM/DIFF + 도출된 greater 관계
+     let h='<div class=hint>property별 비교 → COMM/DIFF</div>';
+     h+=`<div class=exprrow><span class=a>COMM</span> ${esc((d.comm||[]).join(', ')||'—')}</div>`;
+     h+=`<div class=exprrow><span class=a>DIFF</span> ${esc((d.diff||[]).join(', ')||'—')}</div>`;
+     if(d.relations.length){ h+='<div class=hint>refine → 도출된 관계 (greater):</div>';
+       h+=d.relations.map(r=>`<div class=exprrow><span class=a>${esc(r.a)} ≻ ${esc(r.b)}</span> on ${esc(r.on)}</div>`).join(''); }
+     else h+='<div class=hint>orderable DIFF 없음 → 관계 도출 없음</div>';
+     return h+'<hr style="border-color:var(--line)">';
+   }
+   return '<div class=hint>per-pair in→out:</div>'+d.rows.map(r=>`<div class=exprrow><span class=a>pair ${r.pair}</span> ${esc(JSON.stringify(r.in_coord))} c${r.in_color} → ${esc(JSON.stringify(r.out_coord))} c${r.out_color}</div>`).join('')+'<hr style="border-color:var(--line)">';
+ }
+ if(d.kind=='aggregate'){ // focus_solver: greater 관계 → role(extremum) 집계
+   let h='<div class=hint>aggregate → 도출된 역할 (extremum = 가장 큼/작음):</div>';
+   if(!(d.roles||[]).length) h+='<div class=exprrow>—</div>';
+   else h+=d.roles.map(r=>`<div class=exprrow><span class=a>${esc(r.node)}</span> ${r.role=='extremum+'?'▲':'▼'} ${esc(r.role)} <span style=opacity:.7>on ${esc(r.on)}</span></div>`).join('');
+   return h+'<hr style="border-color:var(--line)">';
+ }
+ if(d.kind=='hypothesize'){ let h='<div class=hint>랭킹된 변환 가설(predefined DSL 조합):</div>';
+   h+=(d.hyps||[]).length?d.hyps.map((n,i)=>`<div class=exprrow><span class=a>#${i}</span> ${esc(n)}</div>`).join(''):'<div class=exprrow>후보 없음 → 하강</div>';
+   return h+'<hr style="border-color:var(--line)">'; }
+ if(d.kind=='predict'){ const o=d.info||{}; return `<div class=hint>내부 시뮬레이션(train 적용):</div><div class=exprrow>후보 #${o.idx} <span class=a>${esc(o.hyp||'')}</span></div><hr style="border-color:var(--line)">`; }
+ if(d.kind=='evaluate'){ return `<div class=hint>train 오라클 대조:</div><div class=exprrow>후보 #${d.idx} <span class=a>${esc(d.hyp||'')}</span> → ${d.ok?'✅ consistent':'❌ 불일치(다음 후보)'}</div><hr style="border-color:var(--line)">`; }
+ if(d.kind=='verify'){ const o=d.info||{}; return `<div class=hint>최종 재확인:</div><div class=exprrow><span class=a>${esc(o.hyp||'')}</span> → ${o.ok?'✅ verified':'❌'}</div><hr style="border-color:var(--line)">`; }
+ if(d.kind=='find'){ return `<div class=hint>role 로 대상 선택:</div><div class=exprrow>selected: <span class=a>${esc((d.selected||[]).join(', ')||'—')}</span></div><hr style="border-color:var(--line)">`; }
  if(d.kind=='generalize') return '<div class=hint>resolved expressions:</div>'+Object.entries(d.exprs).map(([k,v])=>`<div class=exprrow><span class=a>${esc(k)}</span>= ${esc(v)}</div>`).join('')+'<div class=hint>out=make_grid(size,fill)+coloring(pos,color)</div><hr style="border-color:var(--line)">';
- if(d.kind=='compose') return '<div class=hint>built:</div>'+grid(d.answer)+'<hr style="border-color:var(--line)">';
+ if(d.kind=='compose') return '<div class=hint>built:</div>'+(d.answer?grid(d.answer):'<div class=exprrow>declined</div>')+'<hr style="border-color:var(--line)">';
  return '';
 }
 document.addEventListener('keydown',ev=>{
