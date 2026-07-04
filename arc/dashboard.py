@@ -498,13 +498,12 @@ function renderStep(){
    build+='</div>';
  }
  const ready=wm.some(x=>x[1]==='answer-ready');
- // 조립 구역은 목표가 생긴 뒤부터 항상 보이고, 답(built/cand)은 answer-ready 후 추가.
- if(!build && !ready){
-   $('cand').innerHTML='<span class=hint>목표 미정 (task 관측 전)</span>';
- } else {
-   $('cand').innerHTML=build+(ready?(detail(e)
-    +t.candidates.map((c,i)=>`<div class=cand><span class=cap>cand${i+1} ${i===t.correct_attempt?'<span class=ok>✓</span>':''}</span>${c.answer.map(grid).join(' ')}<div class=hint>${esc(c.position)}<br>${esc(c.color)}</div></div>`).join(''))||'');
+ // 조립 구역은 목표가 생긴 뒤부터 보이고, 답(built/cand)은 answer-ready 후 추가.
+ let tail='';
+ if(ready){
+   tail=detail(e)+t.candidates.map((c,i)=>`<div class=cand><span class=cap>cand${i+1} ${i===t.correct_attempt?'<span class=ok>✓</span>':''}</span>${c.answer.map(grid).join(' ')}<div class=hint>${esc(c.position)}<br>${esc(c.color)}</div></div>`).join('');
  }
+ $('cand').innerHTML=(build+tail)||'<span class=hint>목표 미정 (task 관측 전)</span>';
  const chg = e.highlight.length ? (e.highlight.length>4
    ? e.highlight.slice(0,4).map(x=>esc(trunc(x,40))).join(', ')+` <span class=hint>(+${e.highlight.length-4} more)</span>`
    : e.highlight.map(x=>esc(trunc(x,40))).join(', ')) : '';
