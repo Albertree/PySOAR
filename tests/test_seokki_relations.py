@@ -119,7 +119,7 @@ def test_submission_captured_and_scored():
     d = _dash_data(t, tid)
     assert d["candidates"], "제출 답이 후보로 안 잡힘"
     assert d["correct_attempt"] == 0, "첫 제출이 정답으로 채점 안 됨"
-    assert d["candidates"][0]["answer"] == t["test"][0]["output"], "제출 격자가 정답과 다름"
+    assert d["candidates"][0]["answer"] == [t["test"][0]["output"]], "제출 격자가 정답과 다름"
     # feedback 이벤트(환경 채점)가 트레이스에 있음
     assert any(e["kind"] == "feedback" for e in d["events"]), "환경 피드백 이벤트 없음"
 

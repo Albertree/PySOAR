@@ -424,7 +424,10 @@ def _dash_data(task, tid="0a", max_cycles=60):   # observe+compare+aggregate+fin
         e["wm_state"] = idx[key]
         del e["wm"]
     # 제출 시도(3회 환경)를 대시보드 후보로: 각 시도의 답 격자 + 정답 여부.
-    candidates = [{"answer": a["answer"], "position": f"attempt {i + 1}: {a['hyp']}",
+    # HTML 은 c.answer 를 *테스트 pair 별 격자들의 리스트* 로 렌더(c.answer.map(grid)) →
+    # 단일 test 답을 리스트로 감싼다.
+    candidates = [{"answer": [a["answer"]] if a["answer"] else [],
+                   "position": f"attempt {i + 1}: {a['hyp']}",
                    "color": "✓" if a["correct"] else "✗"}
                   for i, a in enumerate(tr.attempts)]
     correct_i = next((i for i, a in enumerate(tr.attempts) if a["correct"]), None)
