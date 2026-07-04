@@ -34,6 +34,24 @@ def _load_08ed6ac7():
     return load_task(p[0])
 
 
+def _unsolved_task():
+    """현재 어떤 contents 합성(identity/const/select/move/recolor-rank)도 못 푸는 고정
+    fixture: 단일 object 인데 shape 가 바뀜(move 실패), 출력 다중색 아님(recolor 실패),
+    1×1 아님(select 실패), 출력≠입력·비상수. → 반드시 하강·aggregate(탐색 검증용)."""
+    def g(cells, H=5, W=5):
+        m = [[0] * W for _ in range(H)]
+        for (r, c) in cells:
+            m[r][c] = 3
+        return m
+    return {
+        "train": [
+            {"input": g([(1, 1), (1, 2), (2, 1)]), "output": g([(1, 1), (1, 2), (2, 2)])},
+            {"input": g([(0, 0), (0, 1), (1, 0)]), "output": g([(0, 0), (0, 1), (1, 1)])},
+        ],
+        "test": [{"input": g([(2, 2), (2, 3), (3, 2)]), "output": g([(2, 2), (2, 3), (3, 3)])}],
+    }
+
+
 def _answer(ev):
     for e in ev[::-1]:
         for (i, a, v) in e["wm"]:
@@ -71,7 +89,7 @@ def test_full_operator_pipeline_fires():
 def test_descent_and_aggregate_on_unsolved():
     # 08ed6ac7(실제 ARC, 아직 미해결)은 이 레벨 풀이 실패 → 하강 → compare→aggregate 로
     # 관계 도출 (문제 못 풀어도 탐색이 진행됨). made000a/b 는 이제 합성으로 풀려 여기 안 씀.
-    ev = _run("08ed6ac7", _load_08ed6ac7(), cyc=120)
+    ev = _run("rot-unsolved", _unsolved_task(), cyc=80)
     ops = [e["label"] for e in ev if e["kind"] == "op-select"]
     assert any("hypothesize" in o for o in ops), "풀이 시도(hypothesize) 있어야"
     assert any("aggregate" in o for o in ops), "실패 후 하강해 compare→aggregate 로 관계 도출"
@@ -98,7 +116,7 @@ def test_components_only_from_real_schema():
 
 def test_relations_land_in_wm():
     # 08ed6ac7 은 하강해 object 레벨에서 관계·역할을 WM 에 남긴다(대시보드 렌더 재료).
-    ev = _run("08ed6ac7", _load_08ed6ac7(), cyc=120)
+    ev = _run("rot-unsolved", _unsolved_task(), cyc=80)
     wm = ev[-1]["wm"]
     greaters = [(i, a, v) for (i, a, v) in wm if a == "greater"]
     roles = [(i, a, v) for (i, a, v) in wm if a == "role"]
@@ -111,7 +129,7 @@ def test_rule_driven_not_scenario_fixed():
     # 풀이 완주(submit), made 는 실패→하강. 같은 규칙셋이 상황에 따라 다르게 발화.
     etid, epath = list_tasks("easy_a")[0]
     easy = _run(etid, load_task(epath), cyc=60)
-    hard = _run("08ed6ac7", _load_08ed6ac7(), cyc=120)       # 아직 미해결
+    hard = _run("rot-unsolved", _unsolved_task(), cyc=80)   # 어떤 합성도 못 푸는 fixture
     e_ops = {e["label"].split("name=")[-1].rstrip("]") for e in easy if e["kind"] == "op-select"}
     m_ops = {e["label"].split("name=")[-1].rstrip("]") for e in hard if e["kind"] == "op-select"}
     assert "submit" in e_ops and "submit" not in m_ops       # 같은 규칙, 다른 경로
@@ -158,6 +176,18 @@ def test_made000b_solved_by_move_synthesis():
     assert prog["contents"] == ("move", {"anchor": "bottom-right"})
     assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
     assert _dash_data(t, "made000b")["correct_attempt"] == 0
+
+
+def test_08ed6ac7_solved_by_recolor_rank():
+    # 실제 ARC 08ed6ac7: object 를 rank(높이/넓이)로 재채색. "longest" DSL 없이 object 간
+    # 비교로 rank 를 도출하고 rank→color 구조를 pair 간 일반화(k번째로 긴 것=색k).
+    from arc import relation_solve as R
+    from arc.focus_solver import _dash_data
+    t = _load_08ed6ac7()
+    prog = R.generalize(t["train"])
+    assert prog["contents"][0] == "recolor-rank" and R.is_complete(prog)
+    assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
+    assert _dash_data(t, "08ed6ac7")["correct_attempt"] == 0
 
 
 def test_submission_captured_and_scored():

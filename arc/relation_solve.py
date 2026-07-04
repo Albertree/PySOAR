@@ -124,6 +124,46 @@ def _synth_contents_move(train, ins, outs):
     return None
 
 
+def _synth_contents_recolor_rank(train, ins, outs):
+    """순위 재채색: 각 object 를 그 자리에서 색만 바꾼다. 새 색 = object 의 *순위*
+    (property 로 정렬한 rank). "longest" DSL 없이 object 간 비교로 rank 를 도출하고,
+    rank→color 매핑을 pair 간 일반화(표면 막대·높이는 달라도 'k번째로 긴 것=색k' 구조
+    공통) = 08ed6ac7. size 보존형만."""
+    if not all(grid_size(o) == grid_size(i) for i, o in zip(ins, outs)):
+        return None
+    per = []
+    for p in train:
+        objs = fg_objects(p["input"], "G")
+        if len(objs) < 2:
+            return None
+        out = p["output"]
+        recolored = []
+        for o in objs:
+            cols = {out[r][c] for (r, c) in o["cells"]}
+            if len(cols) != 1:
+                return None                        # object 가 통째로 한 색으로 recolor 돼야
+            recolored.append((o, next(iter(cols))))
+        per.append(recolored)
+    for pname, key in _NUM_PROPS.items():
+        for direction in ("desc", "asc"):
+            mapping, ok = {}, True
+            for recolored in per:
+                order = sorted((o for o, _ in recolored), key=key,
+                               reverse=(direction == "desc"))
+                rank = {id(o): i + 1 for i, o in enumerate(order)}
+                for o, newcol in recolored:
+                    r = rank[id(o)]
+                    if mapping.get(r, newcol) != newcol:   # rank→color 매핑 pair 간 일관?
+                        ok = False
+                        break
+                    mapping[r] = newcol
+                if not ok:
+                    break
+            if ok and len(mapping) >= 2:
+                return ("recolor-rank", {"prop": pname, "dir": direction, "map": mapping})
+    return None
+
+
 def _rel_contents(train, ins, outs):
     if all(o == i for i, o in zip(ins, outs)):
         return ("identity",)                       # 출력 = 입력 (복사)
@@ -135,6 +175,9 @@ def _rel_contents(train, ins, outs):
     mv = _synth_contents_move(train, ins, outs)     # 이동형 (made000b: 우하단 정렬)
     if mv:
         return mv
+    rk = _synth_contents_recolor_rank(train, ins, outs)   # 순위 재채색 (08ed6ac7)
+    if rk:
+        return rk
     return None                                    # 여전히 미해소 → 다음 (회전/반사 등)
 
 
@@ -180,6 +223,20 @@ def apply(prog, test_input):
         for (r, cc) in io["cells"]:
             out[dr + (r - r0)][dc + (cc - c0)] = io["color"]
         return out
+    if c[0] == "recolor-rank":                     # object 를 순위대로 재채색(입력 seed)
+        objs = fg_objects(test_input, "G")
+        if not objs:
+            return None
+        order = sorted(objs, key=_NUM_PROPS[c[1]["prop"]],
+                       reverse=(c[1]["dir"] == "desc"))
+        out = [row[:] for row in test_input]
+        for i, o in enumerate(order):
+            newcol = c[1]["map"].get(i + 1)
+            if newcol is None:
+                return None
+            for (r, cc) in o["cells"]:
+                out[r][cc] = newcol
+        return out
     return None
 
 
@@ -197,5 +254,7 @@ def describe(prog):
             return f"select {rel[1]['dir']}({rel[1]['prop']}) → color (1×1)"
         if rel[0] == "move":
             return f"move object → {rel[1]['anchor']} corner"
+        if rel[0] == "recolor-rank":
+            return f"recolor by rank({rel[1]['dir']} {rel[1]['prop']}) → {rel[1]['map']}"
         return str(rel)
     return {k: d(prog.get(k)) for k in ("size", "color", "contents")}
