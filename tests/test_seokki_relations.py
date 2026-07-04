@@ -128,6 +128,19 @@ def test_structure_mapping_relation_generalize():
     assert a["size"] == ("const", (1, 1)) and a["contents"] is None
 
 
+def test_made000a_solved_by_selection_synthesis():
+    # made000a(선택형): contents 를 "전경 최대 area object 의 색(1×1)"으로 합성 →
+    # role(max area)을 pair 간 일반화(구조 불변)해 실제로 풀린다.
+    from arc import relation_solve as R
+    from arc.focus_solver import _dash_data
+    t = load_task("arc/data/made/made000a.json")
+    prog = R.generalize(t["train"])
+    assert prog["contents"][0] == "select" and R.is_complete(prog)
+    assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
+    d = _dash_data(t, "made000a")                # 규칙주도 파이프라인으로도 정답 제출
+    assert d["correct_attempt"] == 0
+
+
 def test_submission_captured_and_scored():
     # 제출된 답 격자가 대시보드 후보로 잡히고, 3회 환경이 채점해 정답 표시.
     from arc.focus_solver import _dash_data
