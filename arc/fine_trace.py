@@ -291,7 +291,39 @@ class _Tracer:
                 body = self.ag.body_for(op)
                 has_apply = any(p.name == f"apply*{name}"
                                 for p in self.ag.elaborator.productions)
-                if body is not None and not has_apply:
+                if body is None and not has_apply:
+                    # UNIMPLEMENTED operator: no apply rule, no RHS-function -> applying
+                    # it changes nothing => OPERATOR no-change impasse (SOAR attribute_of_
+                    # impasse: operator selected + no change -> ONC, attribute=operator).
+                    # The substate opens to IMPLEMENT the operator (SOAR operator-
+                    # implementation subgoaling); focus descends ONE ARCKG level so it can
+                    # gather what implementing it needs. When a future slice returns the
+                    # result, chunking compiles it into this operator's apply rule.
+                    from pysoar.decide import ImpasseType
+                    self.emit("apply", "op-apply",
+                              f"{name}: 적용 규칙 없음(미구현) → WM 변화 없음")
+                    src = self._descent_source(goal.id)
+                    idx = self.ag.kg.get("idx") if hasattr(self.ag, "kg") else None
+                    kids = idx["children"].get(src, []) if (idx and src) else []
+                    self.emit("decide", "substate",
+                              f"operator no-change impasse @ {goal.id} (op={name}: 어떻게 적용할지 모름)")
+                    if not kids:
+                        self.emit("decide", "substate",
+                                  f"자식 없음 (from {src}) — 더 하강 불가, 종료")
+                        self._emit_output()
+                        break
+                    sub = self.ag.create_substate(goal, ImpasseType.ONC, "operator", [])
+                    child = kids[0]
+                    self.ag.wm.add(sub.id, "focus", child)     # focus descends one level
+                    self.emit("decide", "substate",
+                              f"substate {sub.id} 생성 (goal={name} 구현) · focus 하강 {src} → {child}",
+                              highlight=[f"({sub.id} ^superstate {goal.id})",
+                                         f"({sub.id} ^impasse no-change)",
+                                         f"({sub.id} ^attribute operator)",
+                                         f"({sub.id} ^focus {child})"])
+                    self._emit_output()
+                    # NO break: next cycle decides at the new bottom goal (the substate)
+                elif body is not None and not has_apply:
                     # no apply*<name> production -> the body IS the whole application
                     # (e.g. descend moves the focus pointer). Run it as the apply.
                     before = set(self.ag.wm)
@@ -306,13 +338,15 @@ class _Tracer:
                                   highlight=[_wstr(t) for t in added] + [_wstr(t) for t in removed],
                                   detail=_kg_detail(self.ag.kg, name), rule=name, wave=None)
                     self.elaborate("apply")
+                    self._emit_output()
+                    if name == "submit" or self.ag.wm.contains("S1", "done", "yes"):
+                        break
                 else:
                     # body tied to apply*<name> firing (structure + flag = one wm-update)
                     self.elaborate("apply", body=body, op_name=name)
-                # OUTPUT (every cycle; emits output-link contents, empty or not)
-                self._emit_output()
-                if name == "submit" or self.ag.wm.contains("S1", "done", "yes"):
-                    break
+                    self._emit_output()
+                    if name == "submit" or self.ag.wm.contains("S1", "done", "yes"):
+                        break
             elif imp.name == "NONE" and len(cands) == 0:
                 # NO operator selectable at this goal's focus = this level's info is
                 # insufficient -> STATE NO-CHANGE IMPASSE. The architecture opens a
@@ -348,6 +382,15 @@ class _Tracer:
 
     def _goal_focus(self, gid):
         return next((v for (i, a, v) in self.ag.wm if i == gid and a == "focus"), None)
+
+    def _descent_source(self, gid):
+        """The node whose children the impasse substate descends into. A substate has
+        its own ^focus; the TOP goal has no ^focus (only ^goal), so it descends from the
+        ARCKG root on the state (S1 ^arckg <root>)."""
+        f = self._goal_focus(gid)
+        if f is not None:
+            return f
+        return next((v for (i, a, v) in self.ag.wm if i == gid and a == "arckg"), None)
 
 
 def fine_trace(task, tid="0a", setup=None, max_cycles=10):

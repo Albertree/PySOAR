@@ -364,18 +364,23 @@ function ancestors(id){ // Tx.P0.G0.O0 -> [Tx.P0.G0, Tx.P0, Tx]
  for(let k=parts.length-1;k>0;k--) out.push(parts.slice(0,k).join('.'));
  return out;
 }
-function renderWM(wm,added,removed){
+function renderWM(wm,added,removed,removedTriples){
  // ONE working memory rooted at S1. Every line is a full WME triplet. Toggles
  // are CLOSED by default. A line whose own WME changed -> full (text+bg). A
  // toggle whose only a DESCENDANT changed -> text colour only (add=green,
  // remove=red, mixed=orange).
- const nodeIds=new Set(wm.map(t=>String(t[0])));
+ // GHOST rows: removedTriples were in WM last step, gone now. They are NOT in the
+ // current tree, so we build the tree from (current ∪ removed) -- the removed lines
+ // then render in red with a − prefix (via lineMark/`removed`), exactly like adds.
+ const ghosts=removedTriples||[];
+ const all=ghosts.length?wm.concat(ghosts):wm;
+ const nodeIds=new Set(all.map(t=>String(t[0])));
  const nodes={}, parentOf={};
  const ensure=id=>{ if(!nodes[id]) nodes[id]={props:[],kids:[]}; return nodes[id]; };
  // pointer attributes (attention cursor) mark a node but do NOT own it -> render as a
  // leaf marker; the node itself expands under its structural edge (input-link / ARCKG).
  const POINTER=new Set(['focus']);
- wm.forEach(t=>{
+ all.forEach(t=>{
    const [id,attr,val]=t;
    if(Array.isArray(val)){ ensure(id).props.push([attr,val]); return; }
    if(POINTER.has(attr)){ ensure(id).props.push([attr,val]); return; }   // pointer = leaf marker
@@ -456,7 +461,11 @@ function renderStep(){
  const cur=new Set(wm.map(fmtTriple)), prev=new Set(prevWm.map(fmtTriple));
  const added=new Set([...cur].filter(x=>!prev.has(x)));
  const removed=new Set([...prev].filter(x=>!cur.has(x)));
- $('wm').innerHTML=renderWM(wm,added,removed);
+ // removed triples (present LAST step, gone NOW) as GHOST rows -- they are not in the
+ // current WM tree, so renderWM re-injects them (red, − prefix) so a removal is as
+ // visible as an addition when stepping.
+ const removedTriples=prevWm.filter(t=>!cur.has(fmtTriple(t)));
+ $('wm').innerHTML=renderWM(wm,added,removed,removedTriples);
  // remember toggle state so it carries to the next step (track user open/close)
  $('wm').querySelectorAll('details[data-nid]').forEach(d=>d.addEventListener('toggle',
    ()=>{ d.open?wmOpen.add(d.dataset.nid):wmOpen.delete(d.dataset.nid); }));

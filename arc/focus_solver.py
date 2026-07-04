@@ -5,24 +5,32 @@ focus_solver -- SLICE 1 of the goal-backward / focus-descent rebuild.
 Replaces the hard-coded pipeline (observe->compare->generalize->compose) with the
 agreed REFLEX LOOP, applied per node and driven by need/impasse:
 
-    visit(focus):
-        observe(focus)                 # this node's property + which children exist
-        if siblings exist: compare      # same-level property comparison -> COMM/DIFF
-        if stuck (can't progress here): DESCEND  # focus -> a child (deeper info)
+solve is an UNDEFINED operator: the agent is given "solve the task" as a GOAL but has
+NO knowledge of how. Proposing + selecting solve with no apply rule => OPERATOR
+no-change impasse (the canonical SOAR "operator-implementation" subgoal). The substate
+that opens exists to FIGURE OUT how to apply solve; focus descends one ARCKG level and
+observe/compare gather what implementing it needs:
 
-On easy000a this GENERATES the opening instead of scripting it:
-    focus=TASK  -> observe (no siblings) -> stuck -> DESCEND
-    focus=PAIR  -> observe + COMPARE roles across pairs:
-                       P0,P1 = {input:y, output:y} ; Pa = {input:y, output:n}
-                   -> IMBALANCE: Pa is missing 'output'
-                   -> DERIVE goal  (S1 ^goal G)(G ^complete ..Pa ^missing output)   <- NOT hard-coded
-                   -> DESCEND to GRID
-    focus=GRID  -> observe + compare grid properties (size COMM, color/contents DIFF) ...
+    S1  ^goal solve, ^focus TASK       -> OBSERVE task first (reveals its pairs P0,P1,Pa)
+                                         -> then solve (focus now ^seen) -> ONC -> S2
+    S2  ^focus P0                      -> observe P0 + COMPARE peers P0,P1,Pa:
+                                             P0,P1 = {input:y, output:y} ; Pa = {input:y, output:n}
+                                         -> IMBALANCE discovered HERE: Pa lacks 'output'
+                                         -> ^goal DISCOVERED (S2 ^goal G)(G ^node Pa)(G ^produce output)
+                                         -> solve (goal + focus seen) -> ONC -> S3
+    S3  ^focus P0.G0 ...               -> observe + compare grids -> ^goal -> solve -> ONC -> S4
+    ...
 
-Scope (honest): this slice shows the DESCENT + GOAL-DERIVATION in the dashboard.
-Arg resolution / compose / submit (the actual answer build) are the next slice.
-descend here is a focus-move operator (model A); upgrading it to a real no-change
-impasse -> substate (model B) is also next.
+Perception->Deliberation->Action: observe (focus-gated) ALWAYS runs before solve
+(solve is gated on the focus being ^seen). The GOAL (produce Pa.output) is NOT handed
+down -- it is DISCOVERED inside S2 after observing and comparing all peers. solve keys
+on ^goal (+ observed focus), so it never encodes "solve by comparing".
+
+Scope (honest): no chunking / result-return is wired yet, so solve never actually
+implements -- every level ONC-descends to the bottom, easy000a stays UNSOLVED. What is
+verified is the principled control structure (undefined solve -> operator no-change ->
+implement-subgoal -> descend, goal discovered in-substate). Wiring result + chunking so
+solve produces the grid and is LEARNED is the next slice.
 
     python3 arc/focus_solver.py        # -> arc/focus_dashboard.html
 """
@@ -139,14 +147,20 @@ def _imbalance_goal(group, props, key):
 
 def _op_compare(ag):
     """Compare the focus node with its same-level siblings, property by property:
-    all equal -> COMM, otherwise -> DIFF. A presence-dict DIFF with a single odd-one-out
-    is an IMBALANCE -> DERIVE the goal (complete the minority's missing role)."""
+    all equal -> COMM, otherwise -> DIFF. Whatever DIFFERS is un-resolved -> compare
+    DISCOVERS a GOAL on THIS substate. This discovered ^goal is the ONLY thing that makes
+    solve fire here (solve keys on ^goal, never on 'compared', so it carries NO bias
+    about HOW to solve). When one sibling lacks a role the others have -- an IMBALANCE
+    (e.g. P0,P1 have 'output', Pa lacks it) -- the goal NAMES the node + the role to
+    PRODUCE (Pa, output); otherwise the goal just points at the differing properties
+    (already on (sid ^diff ...)). This is the goal being *discovered in the substate*,
+    after observing + comparing all peers -- not handed down."""
     idx, f = ag.kg["idx"], _focus(ag)
     sid = ag.stack[-1].id                                  # results go on the CURRENT (sub)state
     group = [s for s in _siblings(idx, f)]
     props = {m: idx["nodes"][m].to_json() for m in group}
     keys = sorted(set.intersection(*[set(p.keys()) for p in props.values()]))
-    comm, diff, goal = [], [], None
+    comm, diff, imbal = [], [], None
     for k in keys:
         vals = [props[m][k] for m in group]
         if all(v == vals[0] for v in vals):
@@ -155,21 +169,25 @@ def _op_compare(ag):
         else:
             diff.append(k)
             ag.wm.add(sid, "diff", k)
-            if isinstance(vals[0], dict):                       # presence-dict -> imbalance?
-                g = _imbalance_goal(group, props, k)
-                gid = f"{sid}.goal"
-                if g and not ag.wm.contains(sid, "refine-goal", gid):
-                    goal = g
-                    ag.kg["goal"] = g
-                    ag.wm.add(sid, "refine-goal", gid)          # goal EVOLVES on this substate
-                    ag.wm.add(gid, "complete", g["minority"])
-                    ag.wm.add(gid, "missing", g["missing"])
-    ag.kg.setdefault("compares", []).append({"node": f, "comm": comm, "diff": diff, "goal": goal})
+            if imbal is None and isinstance(vals[0], dict):     # presence-dict -> imbalance?
+                imbal = _imbalance_goal(group, props, k)
+    if diff:                                                    # something un-resolved -> a goal
+        gid = f"{sid}.goal"
+        ag.wm.add(sid, "goal", gid)                             # DISCOVERED goal (fires solve)
+        if imbal:
+            ag.kg["goal"] = imbal
+            ag.wm.add(gid, "node", imbal["minority"])           # e.g. Pa
+            ag.wm.add(gid, "produce", imbal["missing"])         # e.g. output (reuses the domain role)
+    ag.kg.setdefault("compares", []).append({"node": f, "comm": comm, "diff": diff, "goal": imbal})
 
 
-# descend is NO LONGER an operator. Going deeper is the ARCHITECTURE's response to a
-# state no-change impasse (no operator applicable at this focus -> substate, focus
-# descends one ARCKG level). See fine_trace run(): the impasse branch opens the substate.
+# solve has NO body: it is an UNDEFINED operator. There is no apply rule and no
+# RHS-function, so selecting it changes nothing => OPERATOR no-change impasse. The
+# substate that opens exists to IMPLEMENT solve (SOAR operator-implementation
+# subgoaling); focus descends one ARCKG level so it can gather what implementing the
+# operator needs. When a future slice produces the result (the output grid), that
+# result resolves the impasse and CHUNKING compiles it into solve's apply rule --
+# thereafter solve produces the grid directly. observe/compare do the gathering.
 OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare}
 
 
@@ -181,10 +199,16 @@ OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare}
 # SAME rules fire in the top state and in every substate as attention descends -- a
 # substate's focus (one level deeper) gets observed/compared by these same productions.
 def _propose(name, conds):
+    return _propose_named(f"propose*{name}", name, conds)
+
+
+def _propose_named(prod_name, op_name, conds):
+    # same RHS as _propose, but an explicit production name -- lets one operator
+    # (solve) have TWO proposal variants (Soar's role*operator*variant convention).
     return Production(
-        f"propose*{name}", conds,
+        prod_name, conds,
         [Action("<s>", "operator", "<o>", "+"),
-         Action("<o>", "name", name), Action("<o>", "node", "<f>")])
+         Action("<o>", "name", op_name), Action("<o>", "node", "<f>")])
 
 
 def _apply(name, attr):
@@ -201,11 +225,20 @@ PRODUCTIONS = [
     # compare: focus seen AND it has same-level siblings, not yet compared
     _propose("compare", [Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
                          Cond("<f>", "has-siblings", "yes"), Cond("<f>", "compared", "<x>", negated=True)]),
+    # solve: the state has a GOAL and its focus has been OBSERVED -> propose to solve.
+    # solve is UNDEFINED -- NO apply rule, NO body (see OPERATOR_BODIES) -- so selecting it
+    # changes nothing => operator no-change impasse => a substate to IMPLEMENT it
+    # (fine_trace). The ^seen condition is Perception->Deliberation->Action ("observe the
+    # focus before you attempt to solve it"), a universal ordering -- NOT a domain method
+    # (contrast the deleted solve*post-compare, which wrongly said "solve VIA compare").
+    # The order emerges: at S1 observe(task) fires first (task unseen), then solve; in a
+    # substate observe->compare run first and compare DISCOVERS the ^goal, then solve.
+    Production("propose*solve",
+               [Cond("<s>", "goal", "<g>"), Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes")],
+               [Action("<s>", "operator", "<o>", "+"), Action("<o>", "name", "solve")]),
     _apply("observe", "seen"),
     _apply("compare", "compared"),
-    # NO descend rule: when neither observe nor compare can fire, NO operator is
-    # proposable -> state no-change impasse -> the architecture opens a substate and
-    # descends one level (fine_trace). "nothing applies" is the verified insufficiency.
+    # NO apply*solve: solve is deliberately un-implemented (that is what makes it impasse).
 ]
 
 
@@ -213,24 +246,51 @@ PRODUCTIONS = [
 # input + agent setup (mirrors expr_solver.setup_arc_agent shape so the tracer reuses it)
 # ---------------------------------------------------------------------------
 def inject_focus(ag):
-    """INPUT: IDENTICAL to expr_solver.inject_task -- the environment delivers the raw
-    task onto ^io.input-link (identity ^type/^name + the literal ^raw dict). The ONLY
-    thing added on top is the attention pointer (S1 ^focus <task>) so observe/descend
-    know where to look. The task node is anchored in the WM tree via the input-link
-    (S1 -> io -> input-link -> task), exactly as before -- no invented structural edge.
-    observe/descend then build the structured lens lazily from ^raw."""
+    """INPUT: separate PERCEPTION from the agent's parsed MODEL (option a).
+
+      input-link (percept):  I2 -^task-> <percept> -^raw-> {json}   [environment-owned, READ-ONLY]
+      state (ARCKG model):   S1 -^arckg-> <root> -^example-> P0 ..  [observe/compare fill this]
+      top goal:              S1 -^goal-> solve                      [drives solve; NO ^focus at top]
+      attention:             S2 -^focus-> P0 ...                    [^focus lives on substates, descends]
+
+    The environment delivers ONLY the raw, unparsed task onto ^io.input-link -- a
+    PERCEPT node (its own id) carrying identity (^type/^name) + the literal ^raw dict.
+    Perception is environment-owned and never mutated by the agent's operators.
+
+    The parsed ARCKG is the agent's OWN structure, anchored on the top STATE via
+    (S1 ^arckg <root>) -- NOT dangling off the input-link. observe/compare augment
+    <root> and its descendants (the model), so a substate whose ^focus points one
+    ARCKG level deeper is reading/extending the SUPERSTATE's shared, S1-anchored
+    model (the SOAR 'substate reads superstate' regime) -- never the raw percept.
+
+    <percept> and <root> are DISTINCT ids on purpose: if they were the same node,
+    observe augmenting the model would still be mutating the input-link's percept.
+    Justification for the two new symbols (per the no-free-symbols rule):
+      ^arckg  -- anchors the agent-built model on its state, so the parse is a
+                 deliberative structure, not part of environment perception.
+      percept -- keeps perception a separate, immutable node the operators only read."""
     if ag.kg.get("arckg_root") is not None:
         return
     root = build_arckg(ag.task_id, ag.task)
     ag.kg["arckg_root"] = root
     ag.kg["idx"] = index_arckg(root)
-    nid = root.node_id
-    ag.add_input_wme("I2", "task", nid)              # input-link -> Task node (as before)
-    ag.add_input_wme(nid, "type", "task")            # identity only
-    ag.add_input_wme(nid, "name", ag.task_id)
-    ag.add_input_wme(nid, "raw", json.dumps(ag.task))  # the literal task dict
-    ag.wm.add("S1", "goal", "solve")                  # TOP GOAL: solve the task (given on arrival)
-    ag.wm.add("S1", "focus", nid)                     # attention pointer (descends via substates)
+    rid = root.node_id
+    # (1) raw perception on the input-link -- a PERCEPT node distinct from the ARCKG
+    #     root, so augmenting the model never touches what the environment delivered.
+    pid = f"percept-{rid}"
+    ag.add_input_wme("I2", "task", pid)              # input-link -> percept node
+    ag.add_input_wme(pid, "type", "task")            # identity only
+    ag.add_input_wme(pid, "name", ag.task_id)
+    ag.add_input_wme(pid, "raw", json.dumps(ag.task))  # the literal task dict
+    # (2) the parsed ARCKG root on the STATE + the top GOAL + the attention ^focus on the
+    #     task. Perception-Deliberation-Action: observe (focus-gated) fires FIRST and
+    #     reveals the task's children (the pairs); ONLY THEN does solve fire (it is gated
+    #     on the focus being ^seen -- "look before you attempt", a universal ordering, NOT
+    #     a domain method). solve, being UNIMPLEMENTED, then yields an operator no-change
+    #     impasse and the substate descends one ARCKG level.
+    ag.wm.add("S1", "arckg", rid)                     # ARCKG root lives on the state
+    ag.wm.add("S1", "goal", "solve")                  # TOP GOAL: solve the task (bootstrap, under-specified)
+    ag.wm.add("S1", "focus", rid)                     # attention starts on the task (observe reveals its pairs)
 
 
 def setup_focus_agent(task, tid="0a", record=False):
@@ -244,7 +304,8 @@ def setup_focus_agent(task, tid="0a", record=False):
 
 OP_DOCS = {
     "observe": "focus 노드의 property + 자식 존재 확인 (자식 내용 X) → ^seen",
-    "compare": "focus의 형제들과 property 비교 → COMM/DIFF, 불균형이면 goal 도출",
+    "compare": "focus의 형제들과 property 비교 → COMM/DIFF. 불균형(한 형제가 어떤 role 결여)이면 그 substate에 ^goal 발견(node/produce)",
+    "solve": "미구현 operator (apply 규칙·body 없음). ^goal이 있으면 제안되고, 적용 지식이 없어 변화 없음 → operator no-change impasse → 하강(구현 subgoal). 결과가 나오면 chunking으로 학습",
 }
 
 
@@ -252,7 +313,7 @@ OP_DOCS = {
 # dashboard generation (reuses dashboard._HTML; separate file, zero impact on the
 # working expr_solver dashboard)
 # ---------------------------------------------------------------------------
-def _dash_data(task, tid="0a", max_cycles=12):   # enough to descend task->pair->grid->object
+def _dash_data(task, tid="0a", max_cycles=18):   # observe+compare+solve+descend × 4 levels
     from arc.fine_trace import fine_trace
     events = fine_trace(task, tid, setup=setup_focus_agent, max_cycles=max_cycles)
     wm_states, idx = [], {}
