@@ -259,9 +259,10 @@ PRODUCTIONS = [
     # (contrast the deleted solve*post-compare, which wrongly said "solve VIA compare").
     # The order emerges: at S1 observe(task) fires first (task unseen), then solve; in a
     # substate observe->compare run first and compare DISCOVERS the ^goal, then solve.
-    # find: object 레벨에서 aggregate 가 role 을 냈고 아직 대상 선택 안 함 → 선택.
+    # find: aggregate 가 role 을 냈다(select-pending) → 대상 선택. gathering 체인의
+    # 마지막 단계라 hypothesize/solve 보다 먼저 발화(tie 아님).
     _propose("find", [Cond("<s>", "focus", "<f>"), Cond("<f>", "aggregated", "yes"),
-                      Cond("<f>", "found", "<x>", negated=True)]),
+                      Cond("<f>", "select-pending", "yes"), Cond("<f>", "found", "<x>", negated=True)]),
 
     # ── 풀이 파이프라인 (발견된 goal ^produce 가 있는 substate 에서만) ──
     # "이 레벨에서 풀이 시도 → 실패(hyps-exhausted)하면 solve fallback 로 하강".
@@ -270,6 +271,7 @@ PRODUCTIONS = [
     _propose("hypothesize", [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
                              Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
                              Cond("<f>", "gather-pending", "<gp>", negated=True),
+                             Cond("<f>", "select-pending", "<sp>", negated=True),
                              Cond("<s>", "hypotheses-built", "<x>", negated=True)]),
     # predict: 후보 하나를 train 입력에 적용(내부 시뮬레이션).
     _propose("predict", [Cond("<s>", "hypotheses-built", "yes"),
@@ -295,16 +297,22 @@ PRODUCTIONS = [
     # ∧ 아직 verified 없음 → 이 레벨 풀이 실패 → 하강(더 깊은 정보 수집).
     _propose_named("propose*solve*bootstrap", "solve",
                    [Cond("<s>", "goal", "solve"), Cond("<s>", "focus", "<f>"),
-                    Cond("<f>", "seen", "yes"), Cond("<f>", "gather-pending", "<gp>", negated=True)]),
+                    Cond("<f>", "seen", "yes"), Cond("<f>", "gather-pending", "<gp>", negated=True),
+                    Cond("<f>", "select-pending", "<sp>", negated=True)]),
     _propose_named("propose*solve*fallback", "solve",
                    [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
                     Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
                     Cond("<f>", "gather-pending", "<gp>", negated=True),
+                    Cond("<f>", "select-pending", "<sp>", negated=True),
                     Cond("<s>", "hyps-exhausted", "yes"), Cond("<s>", "verified", "<v>", negated=True)]),
 
     _apply("observe", "seen"),
     _apply("compare", "compared"),
-    _apply("find", "found"),                                   # 대상 선택은 body 가 ^selected 로
+    # find apply: mark found + consume select-pending(gathering 체인 종료). body 가 ^selected.
+    Production("apply*find",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "find"),
+                Cond("<o>", "node", "<f>")],
+               [Action("<f>", "found", "yes"), Action("<f>", "select-pending", "yes", "-")]),
     # aggregate apply: mark done (aggregated) AND consume the gather-pending gate so
     # the next operator becomes eligible. Body (_op_aggregate) runs as this rule fires.
     Production("apply*aggregate",

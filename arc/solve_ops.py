@@ -68,15 +68,30 @@ def _samples_and_test(task):
 # ("가장 큰 것을 고른다"의 selection primitive. downstream role-가설은 향후 슬라이스.)
 # ---------------------------------------------------------------------------
 def _op_find(ag):
+    """aggregate 가 도출한 area 관계로 *전경(foreground)* 최대 object 를 고른다.
+    배경/전체격자 object 는 제외(색이 배경색뿐이면 전경 아님). '가장 큰 것을 고른다'
+    를 도출된 greater 관계 위에서 실현 — 새 property 없이."""
     from arc.focus_solver import _focus, _siblings
     idx, f = ag.kg["idx"], _focus(ag)
     s = _sid(ag)
     group = [o for o in _siblings(idx, f)]
-    pick = next((oid for oid in group
-                 if ag.wm.contains(oid, "role", "extremum+ # area")), None)
-    if pick is not None:
-        ag.wm.add(s, "selected", pick)
-        ag.kg.setdefault("selected", []).append(pick)
+
+    def is_fg(oid):                              # 전경 blob = univalued(단색) ∧ 비배경색
+        j = idx["nodes"][oid].to_json()          # (전체격자 O4=non-univalued, 배경 O3=색0 → 제외)
+        if not j.get("method", {}).get("univalued"):
+            return False
+        return any(v for k, v in j.get("color", {}).items() if k not in (0, "0"))
+
+    def area_wins(oid):                          # area 에서 다른 object 보다 큰 횟수(도출된 관계)
+        return sum(1 for (_i, _a, v) in ag.wm.matching(identifier=oid, attr="greater")
+                   if str(v).startswith("area"))
+
+    fg = [o for o in group if is_fg(o)]
+    if not fg:
+        return
+    pick = max(fg, key=area_wins)                # 전경 중 area 최대 = "가장 큰 object"
+    ag.wm.add(s, "selected", pick)
+    ag.kg.setdefault("selected", []).append(pick)
 
 
 # ---------------------------------------------------------------------------

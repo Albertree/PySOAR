@@ -149,6 +149,8 @@ def _op_aggregate(ag):
         ag.wm.add(ro["node"], "role", f"{ro['role']} # {ro['on']}")
     ag.kg.setdefault("roles", []).extend(roles)
     ag.kg["last_roles"] = roles
+    if roles:                                    # role 도출됨 → find 가 대상 선택할 차례
+        ag.wm.add(f, "select-pending", "yes")    # (gathering 체인: aggregate→find, tie 방지)
 
 
 # ---------------------------------------------------------------------------
