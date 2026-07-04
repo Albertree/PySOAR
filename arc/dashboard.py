@@ -237,6 +237,9 @@ table.g{border-collapse:collapse} table.g td{width:10px;height:10px;border:1px s
 .cand{display:inline-block;text-align:center;margin:0 8px 8px 0;vertical-align:top}
 .cand .cap{font-size:11px;color:var(--muted);display:block;margin-bottom:2px}
 .exprrow{font-family:ui-monospace,monospace;font-size:12px;margin:2px 0} .exprrow .a{color:var(--blue);min-width:64px;display:inline-block}
+/* 조립 패널: 라벨 고정폭 + 값 열 (긴 값은 값 열 안에서만 줄바꿈=hanging indent) */
+.srow{display:flex;gap:8px;font-family:ui-monospace,monospace;font-size:12px;margin:2px 0;text-align:left}
+.srow .slbl{flex:0 0 72px;color:var(--blue)} .srow .sval{flex:1 1 auto;min-width:0;word-break:break-word}
 kbd{background:var(--p2);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11px}
 </style></head><body>
 <div id="browser"></div>
@@ -488,12 +491,15 @@ function renderStep(){
  const slot=k=>{const w=wm.find(x=>x[1]==='target-'+k);return w?w[2]:null;};
  const slots=['size','color','contents'].map(k=>[k,slot(k)]);
  const anySlot=slots.some(([_k,v])=>v!==null);
+ // 라벨 고정폭 + 값 flex → 열이 가지런히 맞음(왼쪽 정렬; .cand 의 center 를 덮음)
+ const row=(lbl,val)=>`<div class=srow><span class=slbl>${esc(lbl)}</span><span class=sval>${val}</span></div>`;
  let build='';
  if(produce.length||anySlot){
-   build='<div class=cand style="border-color:var(--gold)"><span class=cap>목표 · 조립(construction)</span>'
-    +`<div class=exprrow><span class=a>목표</span> ${produce.length?'produce '+esc(produce.join(', ')):'<span class=hint>미정</span>'}</div>`;
+   build='<div class=cand style="text-align:left;border-color:var(--gold);display:block">'
+    +'<span class=cap>목표 · 조립(construction)</span>'
+    +row('목표', produce.length?'produce '+esc(produce.join(', ')):'<span class=hint>미정</span>');
    if(anySlot){ build+='<div class=hint>GRID 3속성 관계 (입력 seed → 관계 적용):</div>'
-    +slots.map(([k,v])=>`<div class=exprrow><span class=a>${k}</span> ${v?esc(v):'<span class=hint>·</span>'}</div>`).join(''); }
+    +slots.map(([k,v])=>row(k, v?esc(v):'<span class=hint>·</span>')).join(''); }
    else build+='<div class=hint>아직 grid 속성 미분해 (관측/비교 진행 중)</div>';
    build+='</div>';
  }
