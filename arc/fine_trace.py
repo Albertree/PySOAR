@@ -308,25 +308,11 @@ class _Tracer:
                     from pysoar.decide import ImpasseType
                     self.emit("apply", "op-apply",
                               f"{name}: 적용 규칙 없음(미구현) → WM 변화 없음")
-                    src = self._descent_source(goal.id)
-                    idx = self.ag.kg.get("idx") if hasattr(self.ag, "kg") else None
-                    kids = idx["children"].get(src, []) if (idx and src) else []
                     self.emit("decide", "substate",
                               f"operator no-change impasse @ {goal.id} (op={name}: 어떻게 적용할지 모름)")
-                    if not kids:
-                        self.emit("decide", "substate",
-                                  f"자식 없음 (from {src}) — 더 하강 불가, 종료")
+                    if not self._do_descend(goal, ImpasseType.ONC, "operator", name):
                         self._emit_output()
                         break
-                    sub = self.ag.create_substate(goal, ImpasseType.ONC, "operator", [])
-                    child = kids[0]
-                    self.ag.wm.add(sub.id, "focus", child)     # focus descends one level
-                    self.emit("decide", "substate",
-                              f"substate {sub.id} 생성 (goal={name} 구현) · focus 하강 {src} → {child}",
-                              highlight=[f"({sub.id} ^superstate {goal.id})",
-                                         f"({sub.id} ^impasse no-change)",
-                                         f"({sub.id} ^attribute operator)",
-                                         f"({sub.id} ^focus {child})"])
                     self._emit_output()
                     # NO break: next cycle decides at the new bottom goal (the substate)
                 elif body is not None and not has_apply:
@@ -352,36 +338,45 @@ class _Tracer:
                         break
                 else:
                     # body tied to apply*<name> firing (structure + flag = one wm-update)
+                    before = set(self.ag.wm)
                     self.elaborate("apply", body=body, op_name=name)
                     self._emit_output()
-                    if name == "submit":
+                    if before == set(self.ag.wm) and name in ("observe", "compare"):
+                        # arg(대상) 미정 → 적용 불가(WM 변화 없음) → ONC impasse → arg-선택 substate.
+                        # 그 안의 select 가 super 의 커서를 정하면 impasse 풀려 pop (SNC 분기).
+                        self._open_arg_substate(goal, name)
+                    elif name == "submit":
                         if not self._submit_and_maybe_retry():
                             break
                     elif self.ag.wm.contains("S1", "done", "yes"):
                         break
             elif imp.name == "NONE" and len(cands) == 0:
-                # NO operator selectable at this goal's focus = this level's info is
-                # insufficient -> STATE NO-CHANGE IMPASSE. The architecture opens a
-                # substate (goal = resolve the impasse) and descends the focus ONE
-                # ARCKG level (ARBOR's substate = level-descent). No descend operator.
+                # NO operator selectable at this goal.
                 from pysoar.decide import ImpasseType
-                focus = self._goal_focus(goal.id)
-                idx = self.ag.kg.get("idx") if hasattr(self.ag, "kg") else None
-                kids = idx["children"].get(focus, []) if (idx and focus) else []
-                self.emit("decide", "substate",
-                          f"state no-change impasse @ {goal.id} (focus={focus}: 이 레벨 정보로 진전 불가)")
-                if not kids:
+                # (1) arg-선택 substate 인데 더 고를 게 없다 = arg 를 super 에 세워줬거나 전부 완료
+                #     → impasse 해소 → **pop** (superstate 로 복귀; super 의 observe/compare 가 apply).
+                selfor = next((v for (i, a, v) in self.ag.wm if i == goal.id and a == "select-for"), None)
+                if selfor is not None:
                     self.emit("decide", "substate",
-                              f"자식 없음 (focus={focus}) — 더 하강 불가, 종료")
+                              f"arg 선택 끝 → substate {goal.id} pop · superstate 복귀")
+                    sup = self.ag.stack[-2] if len(self.ag.stack) >= 2 else None
+                    self.ag.remove_substates_below(max(len(self.ag.stack) - 2, 0))
+                    # super 의 operator 선택 해제 → 그 operator(observe/compare)가 arg 를 갖고 **새로**
+                    # 선택·apply 되어 body(관측/비교)가 실행된다. (안 지우면 apply 규칙만 propose
+                    # elaboration 에서 발화해 body 없이 flag 만 세워버림 — 방금의 버그.)
+                    if sup is not None:
+                        for (i, a, v) in list(self.ag.wm):
+                            if i == sup.id and a == "operator":
+                                self.ag.wm.remove(i, a, v)
+                        sup.selected = None
+                    self._emit_output()
+                    continue
+                # (2) 그 외 = 이 레벨 정보로 진전 불가 → STATE NO-CHANGE IMPASSE → 한 ARCKG 계층 하강.
+                self.emit("decide", "substate",
+                          f"state no-change impasse @ {goal.id} (이 레벨 정보로 진전 불가)")
+                if not self._do_descend(goal, ImpasseType.SNC, "state", None):
                     self._emit_output()
                     break
-                sub = self.ag.create_substate(goal, ImpasseType.SNC, "state", [])
-                child = kids[0]
-                self.ag.wm.add(sub.id, "focus", child)     # focus descends one level
-                self.emit("decide", "substate",
-                          f"substate {sub.id} 생성 (goal=상위 impasse 해소) · focus 하강 {focus} → {child}",
-                          highlight=[f"({sub.id} ^superstate {goal.id})",
-                                     f"({sub.id} ^impasse no-change)", f"({sub.id} ^focus {child})"])
                 self._emit_output()
                 # NO break: next cycle decides at the new bottom goal (the substate)
             else:
@@ -438,14 +433,66 @@ class _Tracer:
     def _goal_focus(self, gid):
         return next((v for (i, a, v) in self.ag.wm if i == gid and a == "focus"), None)
 
-    def _descent_source(self, gid):
-        """The node whose children the impasse substate descends into. A substate has
-        its own ^focus; the TOP goal has no ^focus (only ^goal), so it descends from the
-        ARCKG root on the state (S1 ^arckg <root>)."""
-        f = self._goal_focus(gid)
-        if f is not None:
-            return f
-        return next((v for (i, a, v) in self.ag.wm if i == gid and a == "arckg"), None)
+    def _goal_group(self, gid):
+        """이 goal 의 ^focus 값들 = 현재 계층의 노드 그룹(관측 대상 = 하강 스코프). 없으면
+        (top goal) ^arckg 루트로 폴백 — legacy(expr_solver) 는 focus 를 안 쓰고 이 경로로 하강."""
+        g = [v for (i, a, v) in self.ag.wm if i == gid and a == "focus"]
+        if g:
+            return g
+        root = next((v for (i, a, v) in self.ag.wm if i == gid and a == "arckg"), None)
+        return [root] if root else []
+
+    def _do_descend(self, goal, imp_type, attr, opname=None):
+        """impasse → 한 ARCKG 계층 하강. next 그룹 = 현재 ^focus 그룹의 자식 전부(focus_solver;
+        kg['_focus']) / 첫 자식(legacy). substate 에:
+          ^level  = ARCKG 5계층명 대문자(TASK/PAIR/GRID/OBJECT/PIXEL) — 지금 어느 계층인지
+          ^focus  = 그 계층의 노드 그룹 (관측 대상 = operator arg 후보 목록)
+          ^cursor = 현재 관측 커서(한 노드) — observe 가 이걸 하나씩 옮기며 훑는다."""
+        idx = self.ag.kg.get("idx") if hasattr(self.ag, "kg") else None
+        srcs = self._goal_group(goal.id)
+        kids = [c for src in srcs
+                for c in (idx["children"].get(src, []) if idx else [])] if idx else []
+        if not kids:
+            self.emit("decide", "substate", f"자식 없음 (from {srcs}) — 더 하강 불가, 종료")
+            return None
+        focusmode = bool(getattr(self.ag, "kg", None) and self.ag.kg.get("_focus"))
+        lv = kids if focusmode else kids[:1]
+        layer = (idx["level"].get(lv[0], "") if idx else "").upper()   # TASK/PAIR/GRID/OBJECT/PIXEL
+        sub = self.ag.create_substate(goal, imp_type, attr, [])
+        self.ag.wm.add(sub.id, "level", layer)        # ARCKG 계층명(대문자)
+        for c in lv:
+            self.ag.wm.add(sub.id, "focus", c)        # 계층 노드 그룹 (관측 대상)
+        self.ag.wm.add(sub.id, "to-observe", "yes")   # 관측할 게 있음 → observe(arg 없이) → arg-선택 substate
+        short = [str(c).split('.')[-1] for c in lv]
+        self.emit("decide", "substate",
+                  f"substate {sub.id} 생성 · {opname or 'descend'} 하강 → level={layer} focus={short}",
+                  highlight=[f"({sub.id} ^superstate {goal.id})", f"({sub.id} ^level {layer})"]
+                            + [f"({sub.id} ^focus {c})" for c in lv]
+                            + [f"({sub.id} ^to-observe yes)"])
+        return sub
+
+    def _open_arg_substate(self, goal, opname):
+        """observe/compare 가 arg(대상) 없이 걸린 ONC impasse → **arg-선택 substate**. 그 안의
+        select 가 super(goal)의 커서(^cursor/^cmp-active)를 정하면 impasse 가 풀려 pop 된다
+        (SNC 분기). ARCKG 계층 하강(_do_descend)과 달리 계층은 그대로 — 같은 goal 의 arg 만 정함."""
+        from pysoar.decide import ImpasseType
+        self.emit("apply", "op-apply", f"{opname}: arg(대상) 미정 → WM 변화 없음")
+        self.emit("decide", "substate",
+                  f"operator no-change impasse @ {goal.id} (op={opname}: arg 미정 → select 로 결정)")
+        # super 의 operator 선택 해제 — 안 지우면 select 이 super 커서를 세우는 순간 apply*{opname}
+        # 규칙이 (아직 선택된 operator + 새 커서로) elaboration 에서 발화해 body 없이 flag 만 세운다.
+        # 지우면 arg 확보 후 operator 가 **새로** 선택·apply 되어 body(관측/비교)가 실행된다.
+        for (i, a, v) in list(self.ag.wm):
+            if i == goal.id and a == "operator":
+                self.ag.wm.remove(i, a, v)
+        goal.selected = None
+        sub = self.ag.create_substate(goal, ImpasseType.ONC, "operator", [])
+        self.ag.wm.add(sub.id, "select-for", opname)
+        self.ag.wm.add(sub.id, "superstate", goal.id)
+        self.emit("decide", "substate",
+                  f"substate {sub.id} 생성 · {opname} 의 arg 선택 (superstate={goal.id})",
+                  highlight=[f"({sub.id} ^select-for {opname})", f"({sub.id} ^superstate {goal.id})"])
+        self._emit_output()
 
 
 def fine_trace(task, tid="0a", setup=None, max_cycles=10):

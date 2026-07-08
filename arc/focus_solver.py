@@ -45,7 +45,7 @@ from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pysoar import Agent, Cond, Action, Production          # noqa: E402
-from arc.expr_solver import build_arckg, _load_value         # noqa: E402 (reuse, read-only)
+from arc.expr_solver import build_arckg, _load_value, _tup   # noqa: E402 (reuse, read-only)
 
 
 # ---------------------------------------------------------------------------
@@ -87,10 +87,16 @@ def index_arckg(root):
             "level": level, "edges": edges}
 
 
-def _focus(ag):
-    """Focus node of the CURRENT (bottom) goal -- attention descends via substates."""
+def _cursor(ag):
+    """관측 커서 = 현재 substate 의 ^cursor (한 노드). observe 가 이걸 ^focus 그룹 안에서
+    하나씩 옮기며 훑는다. (계층명 = ^level 대문자, 관측 대상 그룹 = ^focus, 커서 = ^cursor.)"""
     sid = ag.stack[-1].id
-    return next((v for (i, a, v) in ag.wm if i == sid and a == "focus"), None)
+    return next((v for (i, a, v) in ag.wm if i == sid and a == "cursor"), None)
+
+
+def _focus_group(ag, sid):
+    """현재 substate 의 ^focus 값들 = 이 계층의 노드 그룹(관측 대상 = operator arg 후보 목록)."""
+    return [v for (i, a, v) in ag.wm if i == sid and a == "focus"]
 
 
 def _siblings(idx, f):
@@ -98,30 +104,138 @@ def _siblings(idx, f):
     return [s for s in idx["children"].get(par, [])] if par else []
 
 
+def _receipt_leaves(idobj):
+    """comparison receipt 의 id(중첩 dict 또는 노드 id 문자열) → 모든 leaf 노드 id 목록.
+    1차={id1,id2: node_id str}, n차=id1/id2 가 (n-1)차 id dict (comparison.py 규약)."""
+    if isinstance(idobj, str):
+        return [idobj]
+    if not isinstance(idobj, dict):
+        return []
+    out = []
+    for k in ("id1", "id2"):
+        if k in idobj:
+            out += _receipt_leaves(idobj[k])
+    return out
+
+
+def _lca(ids):
+    """노드 id 들의 최장 공통 세그먼트 prefix = LCA 노드 id. ARC-solver memory_paths.
+    _lca_node_id 의 n-원 확장 — relation(1·2·n차 edge)은 LCA 폴더 아래 저장됐다."""
+    segs = [i.split(".") for i in ids if isinstance(i, str)]
+    if not segs:
+        return None
+    common = []
+    for tup in zip(*segs):
+        if all(s == tup[0] for s in tup):
+            common.append(tup[0])
+        else:
+            break
+    return ".".join(common) if common else None
+
+
+def _short(node_id, lca):
+    """노드 id → LCA 상대 short name (ARC-solver memory_paths._short_name): LCA 이후 세그먼트를
+    점 없이 이어붙임. 예) LCA="T0a.P0", "T0a.P0.G0.O2" → "G0O2"."""
+    if lca and node_id.startswith(lca + "."):
+        return node_id[len(lca) + 1:].replace(".", "")
+    return node_id.split(".")[-1]
+
+
+def _edge_name(idobj, lca):
+    """comparison receipt 의 id → ARC-solver 파일이름 양식 edge 문자열(comparison._id_to_edge_str):
+    leaf 노드 id = LCA 상대 short name, 두 피연산자를 E_{a}-{b} 로. 중첩(n차)은 괄호로 감싸
+    '무엇과 무엇의 비교'가 보이게 한다. 예) E_G0-G1 · E_G0O0-G1O1 · E_(E_P0G0-P0G1)-(E_P1G0-P1G1)."""
+    if isinstance(idobj, str):
+        return _short(idobj, lca)
+    a, b = idobj.get("id1"), idobj.get("id2")
+    sa, sb = _edge_name(a, lca), _edge_name(b, lca)
+    if isinstance(a, dict):
+        sa = f"({sa})"
+    if isinstance(b, dict):
+        sb = f"({sb})"
+    return f"E_{sa}-{sb}"
+
+
+def _store_receipt(ag, host_id, attr, val):
+    """comparison receipt(result 하위)를 relation 노드 아래 **nested cascade** 로 적재한다.
+    list(격자·좌표)는 셀 단위로 폭발시키지 않고 **통짜 한 leaf**(_tup), dict 는 하위 토글, scalar
+    는 leaf. → category ▸ → size ▸ → {type, comp1, comp2} 로 **모든 property·COMM/DIFF 무관 전부**
+    펼쳐진다 (사용자 요청: 전부 보여야 함). id 구분자는 노드와 동일하게 '.' 로 통일."""
+    if isinstance(val, list):
+        ag.wm.add(host_id, attr, _tup(val))              # 격자/좌표 = 통짜 한 leaf (폭발 금지)
+    elif isinstance(val, dict):
+        sub = f"{host_id}.{attr}"
+        ag.wm.add(host_id, attr, sub)
+        for k, v in val.items():
+            _store_receipt(ag, sub, str(k), v)
+    else:
+        ag.wm.add(host_id, attr, val)
+
+
+def _store_relation(ag, receipt, anchor=None):
+    """ARCKG compare() 의 comparison receipt(dict)를 relation edge 로 WM 에 적재한다
+    (harness §0.5: relation = compare 결과 = edge). receipt 전체가 하나의 relation node:
+    (edge ^type COMM/DIFF)(edge ^score n/total)(edge ^<property> COMM/DIFF). 반환 = node id.
+    'type' 은 ARC-solver receipt 규약(result.type = 전체 COMM/DIFF); verdict 는 안 쓴다.
+
+    이름·위치 = ARC-solver 의 relation json 파일과 동형: node id = '{LCA}/{E_a-b}' (LCA 폴더
+    경로 + memory_paths 파일이름). edge 는 한 폴더에 뭉치지 않고 **각자의 LCA 노드** 아래로
+    분산(P0 것은 P0, P1 것은 P1, 2차는 task root) 되어, 각 node 가 '하위 노드 무엇 vs 다른
+    노드 무엇의 비교결과' 를 자기 이름으로 담는다. → WM 토글 트리에 cascade 로 보인다 (§2-5)."""
+    res = receipt.get("result", {})
+    idobj = receipt.get("id", "?")
+    nodes = ag.kg.get("idx", {}).get("nodes", {})
+    lca = anchor or _lca(_receipt_leaves(idobj))
+    host = lca if (lca and lca in nodes) else "S1"
+    rid = f"{lca or 'S1'}.{_edge_name(idobj, lca)}"       # ARC-solver 파일이름(E_a-b) — 구분자 '.' 로 통일
+    ag.wm.add(rid, "type", res.get("type", "?"))          # 전체 COMM/DIFF (result.type 규약; top-level 요약)
+    ag.wm.add(rid, "score", res.get("score", "?"))
+    _store_receipt(ag, rid, "category", res.get("category", {}))   # category → nested cascade, 전부 (사용자 요청)
+    ag.wm.add(host, "relation", rid)                      # LCA 노드 아래 개별 edge (folder 미러)
+    ag.kg.setdefault("relations_wm", []).append(rid)
+    return rid
+
+
 # ---------------------------------------------------------------------------
 # operator bodies (RHS functions): the ARCKG/comparison work
 # ---------------------------------------------------------------------------
-def _op_observe(ag):
-    """Look at the FOCUS node: load its own properties + which children it has
-    (refs only). If it has same-level siblings, load THEIR comparable property too
-    (so compare can run). No siblings -> nothing to compare -> ready to descend."""
-    idx, f = ag.kg["idx"], _focus(ag)
-    node = idx["nodes"][f]
-    ag.wm.add(f, "type", idx["level"][f])
+def _load_props(ag, nid, node):
+    """노드의 to_json 속성 전부를 (nid ^property nid.property) 아래 **한 토글**로 묶어 적재한다.
+    → dashboard 에서 한 노드 토글 아래가 [property(1토글)] + [자식 node 토글들] + [개별 relation
+    토글들] 로 정리된다 (사용자 요청 2026-07-08). 솔버는 속성을 WM 이 아니라 to_json() 으로 직접
+    읽으므로(이 묶음은 표시 전용) 안전하다."""
+    pid = f"{nid}.property"
+    ag.wm.add(nid, "property", pid)
     for k, v in node.to_json().items():
-        _load_value(ag.wm, f, k, v)
-    kids = idx["edges"][f]
-    for edge, c in kids:
-        ag.wm.add(f, edge, c)                  # child EXISTS (ref, ARCKG edge name); contents not loaded
-    sibs = [s for s in _siblings(idx, f) if s != f]
-    if sibs:
-        ag.wm.add(f, "has-siblings", "yes")
-        for s in sibs:                          # load peers' property for the comparison
-            ag.wm.add(s, "type", idx["level"][s])
-            for k, v in idx["nodes"][s].to_json().items():
-                _load_value(ag.wm, s, k, v)
-    else:
-        ag.wm.add(f, "has-siblings", "no")      # no peers here -> compare cannot fire
+        _load_value(ag.wm, pid, k, v)
+
+
+def _artifact_slot(ag, nid, level):
+    """harness §6 의 파생 아티팩트 슬롯을 노드에 건다: TASK.solution / PAIR.program.
+    to_json property 가 아니라(task.py/pair.py 계약 상 관측만) *구조적 슬롯* 이므로 ^property 밖
+    별도 edge 로 둔다. 비어있는 채로 시작하고, 이후 흐름(search→program · generalize→solution)이
+    이 슬롯을 채운다. 이걸 driver 로 쓸 것: 슬롯이 비면 impasse → 하강."""
+    if level == "task":
+        ag.wm.add(nid, "solution", "{}")          # 빈 dict — 이후 흐름(generalize)이 채움
+    elif level == "pair":
+        ag.wm.add(nid, "program", "{}")           # 빈 dict — 이후 흐름(search)이 채움
+
+
+def _op_observe(ag):
+    """관측 커서 ^focus 가 가리키는 **단 하나**의 노드를 관측한다 (형제 곁다리 로드 없음 — 사용자
+    교정: 관측된 것끼리만 compare 대상). 그 뒤 커서를 같은 계층(^level)의 다음 미관측 노드로
+    옮긴다(하나하나 훑기). 계층 전부 관측되면 ^observed + 비교 agenda 를 짠다(compare 가 소비)."""
+    idx, sid = ag.kg["idx"], ag.stack[-1].id
+    f = _cursor(ag)
+    if f is None:
+        return                                  # arg(대상) 미정 → 변화 없음 → ONC impasse → arg-선택 substate
+    node, lvl = idx["nodes"][f], idx["level"][f]
+    ag.wm.add(f, "type", lvl)
+    _load_props(ag, f, node)                    # 이 노드의 to_json → ^property 한 토글
+    _artifact_slot(ag, f, lvl)                  # TASK.solution / PAIR.program 슬롯 (§6)
+    for edge, c in idx["edges"][f]:
+        ag.wm.add(f, edge, c)                   # 자식 존재(ref)
+    # ^seen 표시 + cursor 소비는 apply*observe 규칙이 (body 뒤 settle 에서).
 
 
 def _imbalance_goal(group, props, key):
@@ -145,59 +259,203 @@ def _imbalance_goal(group, props, key):
     return None
 
 
+def _build_agenda(ag, sid, group):
+    """관측 끝난 계층의 비교 목록을 **WM 에 선언적으로** 깐다 (Python 리스트 아님 — 프로세스가
+    고정 스크립트가 아니라 *규칙이 소비하는 WM 구조*가 되도록). 각 비교 = (S ^cmp <cid>) 마커 +
+    (<cid> ^kind ..)(^order i)[+ arg WME]. (S ^cmp-active <첫>) = 커서. compare 규칙이 하나씩 소비.
+    무엇을 비교할지는 ARCKG level 구조로 지각(perception): peers / within / cross / predict.
+      PAIR : peers — 관측된 pair 들 비교 → 불균형(결핍 역할) 발견
+      GRID : 훈련 pair 별 within(G0↔G1) → cross(입력·변화·출력 삼중쌍) → predict
+      OBJECT: 없음 — observe 만 하고 정지 (사용자 요청)."""
+    idx = ag.kg["idx"]; lvls, par = idx["level"], idx["parent"]
+    kind = lvls[group[0]] if group else None
+    specs = []                                          # (cid, kind, order)
+    if kind == "pair" and len(group) >= 2:
+        cid = f"{sid}.cmp:peers"
+        for m in group:
+            ag.wm.add(cid, "member", m)                 # arg: 비교할 pair 들 (WM 에 선언적)
+        specs.append((cid, "peers", 0))
+    elif kind == "grid":
+        bypair = {}
+        for g in group:
+            bypair.setdefault(par[g], []).append(g)
+        train = sorted(p for p, gs in bypair.items() if len(gs) >= 2)   # G0·G1 다 있는 훈련 pair
+        order = 0
+        for p in train:
+            g0, g1 = sorted(bypair[p])
+            cid = f"{sid}.cmp:within.{p.split('.')[-1]}"
+            ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1); ag.wm.add(cid, "pair", p)
+            specs.append((cid, "within", order)); order += 1
+        if len(train) >= 2:
+            for which in ("input", "change", "output"):
+                cid = f"{sid}.cmp:cross.{which}"
+                ag.wm.add(cid, "which", which)
+                for p in train:
+                    ag.wm.add(cid, "pair", p)
+                specs.append((cid, "cross", order)); order += 1
+        specs.append((f"{sid}.cmp:predict", "predict", order))
+    for cid, k, order in specs:
+        ag.wm.add(sid, "cmp", cid)                       # 계층 아래 비교 목록(선언적)
+        ag.wm.add(cid, "kind", k)
+        ag.wm.add(cid, "order", str(order))
+    if specs:
+        ag.wm.add(sid, "to-compare", "yes")     # compare(arg 없이) 제안 → SELECT 가 cmp-active 세움
+    else:
+        ag.wm.add(sid, "compared", "yes")       # 비교 없음(object/단일) → 하강/정지
+
+
 def _op_compare(ag):
-    """Compare the focus node with its same-level siblings, property by property:
-    all equal -> COMM, otherwise -> DIFF. Whatever DIFFERS is un-resolved -> compare
-    DISCOVERS a GOAL on THIS substate. This discovered ^goal is the ONLY thing that makes
-    solve fire here (solve keys on ^goal, never on 'compared', so it carries NO bias
-    about HOW to solve). When one sibling lacks a role the others have -- an IMBALANCE
-    (e.g. P0,P1 have 'output', Pa lacks it) -- the goal NAMES the node + the role to
-    PRODUCE (Pa, output); otherwise the goal just points at the differing properties
-    (already on (sid ^diff ...)). This is the goal being *discovered in the substate*,
-    after observing + comparing all peers -- not handed down."""
-    idx, f = ag.kg["idx"], _focus(ag)
-    sid = ag.stack[-1].id                                  # results go on the CURRENT (sub)state
-    group = [s for s in _siblings(idx, f)]
+    """^cmp-active 가 가리키는 비교 하나를 수행(원자연산: kg_compare / imbalance / predict — array
+    비교는 production 으로 못 하니 body 가 그 원자연산만). ^done 은 apply*compare 규칙이. 다음
+    비교 선택(커서 이동)은 **select operator** 가 한다 (arg 결정 분리, 사용자 요청)."""
+    sid = ag.stack[-1].id
+    c = next((v for (i, a, v) in ag.wm if i == sid and a == "cmp-active"), None)
+    if c is None:
+        return
+    kind = next((v for (i, a, v) in ag.wm if i == c and a == "kind"), None)
+    _do_compare_kind(ag, sid, c, kind)
+
+
+def _op_select(ag):
+    """**arg-선택 substate 의 operator.** observe/compare 가 arg 없이 propose 되어 걸린 impasse 를
+    푼다 — superstate 의 다음 관측/비교 대상을 preference(순서상 **첫 미완료** = a안)로 골라 super 의
+    ^cursor / ^cmp-active 를 세운다. 그러면 super 의 observe/compare 가 그 arg 로 apply 가능해져
+    impasse 가 해소되고 substate 는 pop 된다(fine_trace). §1-3 의 '후보 탐색'은 이 body 에 얹을 자리.
+      select-for observe: 다음 미관측 focus → super ^cursor. 없으면 super ^observed + 비교 agenda.
+      select-for compare: 다음 미완료 cmp → super ^cmp-active. 없으면 super ^compared."""
+    sid = ag.stack[-1].id                                        # 현재 = arg-선택 substate
+    sup = next((v for (i, a, v) in ag.wm if i == sid and a == "superstate"), None)
+    for_op = next((v for (i, a, v) in ag.wm if i == sid and a == "select-for"), None)
+    if for_op == "observe":
+        unseen = [n for n in _focus_group(ag, sup) if not ag.wm.contains(n, "seen", "yes")]
+        if unseen:
+            ag.wm.add(sup, "cursor", unseen[0])                  # super 커서 = 첫 미관측
+        else:                                                    # 다 관측 → 비교 국면 전환
+            ag.wm.add(sup, "observed", "yes")
+            _build_agenda(ag, sup, _focus_group(ag, sup))        # (sup ^cmp ..) + ^to-compare
+    elif for_op == "compare":
+        pend = [(int(next(v for (i2, a2, v) in ag.wm if i2 == cid and a2 == "order")), cid)
+                for (i, a, cid) in ag.wm if i == sup and a == "cmp"
+                and not ag.wm.contains(cid, "done", "yes")]
+        if pend:
+            pend.sort(); ag.wm.add(sup, "cmp-active", pend[0][1])
+        else:
+            ag.wm.add(sup, "compared", "yes")
+    ag.wm.add(sid, "selected", "yes")                            # 이 substate 는 대상 정함 → retract → pop
+
+
+def _wm_vals(ag, cid, attr):
+    return [v for (i, a, v) in ag.wm if i == cid and a == attr]
+
+
+def _do_compare_kind(ag, sid, c, kind):
+    """cmp 마커 c 의 kind·arg(WM 에 선언적으로 있음)를 읽어 그 한 비교를 실행 (원자연산)."""
+    from ARCKG.comparison import compare as kg_compare
+    idx = ag.kg["idx"]; nodes = idx["nodes"]
+    if kind == "peers":
+        _compare_peers(ag, sid, _wm_vals(ag, c, "member"))
+    elif kind == "within":                                          # 한 pair G0↔G1 = 1차 변화
+        g0, g1, p = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0], _wm_vals(ag, c, "pair")[0]
+        rel = kg_compare(nodes[g0], nodes[g1])
+        _store_relation(ag, rel)
+        ag.kg.setdefault("within_edge", {})[p] = rel               # cross-change 에서 재사용
+        ag.wm.add(p, "edge", f"{p}.E_G0-G1")                        # PAIR 아래 새 요소
+    elif kind == "cross":
+        which = _wm_vals(ag, c, "which")[0]
+        _cross_grids(ag, sid, which, sorted(_wm_vals(ag, c, "pair")), kg_compare, nodes, idx)
+    elif kind == "predict":
+        _predict_test_output(ag, sid)
+
+
+def _cross_grids(ag, sid, which, pairs, kg_compare, nodes, idx):
+    """두 훈련 pair 를 GRID 레벨에서 비교(structure mapping) — which: input(G0↔G0)·
+    output(G1↔G1)·change((G0-G1)↔(G0-G1) 2차). LCA=TASK 아래 저장. property별 COMM/DIFF 를
+    kg['cross'][which] 에 남겨 predict 가 이용."""
+    p0, p1 = sorted(pairs)[:2]
+    if which == "change":
+        w = ag.kg.get("within_edge", {})
+        if p0 in w and p1 in w:
+            rel = kg_compare(w[p0], w[p1])
+            _store_relation(ag, rel)
+            ag.kg.setdefault("cross", {})["change"] = rel
+        return
+    e0, e1 = dict(idx["edges"][p0]), dict(idx["edges"][p1])
+    g0, g1 = e0.get(which), e1.get(which)
+    if g0 and g1:
+        rel = kg_compare(nodes[g0], nodes[g1])
+        _store_relation(ag, rel)
+        ag.kg.setdefault("cross", {})[which] = rel
+        ag.wm.add(sid, f"{which}-fixed", "yes" if rel["result"]["type"] == "COMM" else "no")
+
+
+def _compare_peers(ag, sid, group):
+    """관측된 형제(pair)들의 property 비교 → COMM/DIFF. 불균형(다수는 있는 역할을 소수 하나가
+    결핍; 예: Pa 에 output 없음)이면 goal 발견 = (node=결핍노드, produce=결핍역할)."""
+    idx = ag.kg["idx"]
     props = {m: idx["nodes"][m].to_json() for m in group}
     keys = sorted(set.intersection(*[set(p.keys()) for p in props.values()]))
-    comm, diff, imbal = [], [], None
+    diff, imbal = [], None
     for k in keys:
         vals = [props[m][k] for m in group]
         if all(v == vals[0] for v in vals):
-            comm.append(k)
             ag.wm.add(sid, "comm", k)
         else:
-            diff.append(k)
-            ag.wm.add(sid, "diff", k)
-            if imbal is None and isinstance(vals[0], dict):     # presence-dict -> imbalance?
+            ag.wm.add(sid, "diff", k); diff.append(k)
+            if imbal is None and len(group) >= 3 and isinstance(vals[0], dict):
                 imbal = _imbalance_goal(group, props, k)
-    if diff:                                                    # something un-resolved -> a goal
+    if diff:
         gid = f"{sid}.goal"
-        ag.wm.add(sid, "goal", gid)                             # DISCOVERED goal (fires solve)
+        ag.wm.add(sid, "goal", gid)
         if imbal:
-            ag.kg["goal"] = imbal
-            ag.wm.add(gid, "node", imbal["minority"])           # e.g. Pa
-            ag.wm.add(gid, "produce", imbal["missing"])         # e.g. output (reuses the domain role)
-    ag.kg.setdefault("compares", []).append({"node": f, "comm": comm, "diff": diff, "goal": imbal})
-    # REFINE: DIFF 된 orderable property(area/size/position/coordinate)는 통째
-    # COMM/DIFF 로 끝내지 않고 pairwise greater/less 로 정제해 관계를 도출한다
-    # (thinking_ops). 관계가 생기면 (f ^gather-pending yes) → aggregate 가 role 로 집계.
-    from arc import thinking_ops
-    ag.kg["last_relations"] = []
-    thinking_ops.write_relations(ag, f, group, props)
+            ag.wm.add(gid, "node", imbal["minority"])               # e.g. Pa
+            ag.wm.add(gid, "produce", imbal["missing"])             # e.g. output
+        else:
+            ag.wm.add(gid, "produce", ",".join(diff))
 
 
-# solve has NO body: it is an UNDEFINED operator. There is no apply rule and no
-# RHS-function, so selecting it changes nothing => OPERATOR no-change impasse. The
-# substate that opens exists to IMPLEMENT solve (SOAR operator-implementation
-# subgoaling); focus descends one ARCKG level so it can gather what implementing the
-# operator needs. When a future slice produces the result (the output grid), that
-# result resolves the impasse and CHUNKING compiles it into solve's apply rule --
-# thereafter solve produces the grid directly. observe/compare do the gathering.
-from arc.thinking_ops import _op_aggregate                     # noqa: E402
-from arc.solve_ops import SOLVE_BODIES                         # noqa: E402
-OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare,
-                   "aggregate": _op_aggregate, **SOLVE_BODIES}
+def _predict_test_output(ag, sid):
+    """cross-pair 결과로 테스트 출력 Pa.G1 의 GRID 3속성(size·color·contents)을 채운다:
+      - 출력끼리(G1↔G1) 전체 COMM → 출력 상수 → Pa.G1 = 관측된 훈련 출력 → 제출 준비.
+      - 아니면 속성별(size·color): 출력끼리 그 속성 COMM 이면 그대로 / within 변화가 pair 간
+        일관(2차 COMM)이면 그 공통변화 적용. contents 는 DIFF=범주형이라 표면비교로 못 얻어 제외.
+      - 3속성 다 정해지면 ^answer-ready, 아니면 goal(produce 미결) → solve*fallback → object 하강."""
+    root = ag.kg["arckg_root"]
+    cross = ag.kg.get("cross", {})
+    out_rel = cross.get("output")
+    # ① 출력 상수? (두 훈련 출력이 표면 동일 → 테스트 출력도 그 상수)
+    if out_rel is not None and out_rel["result"]["type"] == "COMM":
+        ans = ag.task["train"][0]["output"]
+        ag.kg["answer"] = ans
+        ag.add_output_wme("answer", tuple(tuple(r) for r in ans))
+        ag.wm.add(sid, "answer-ready", "yes")
+        ag.wm.add(sid, "predict", "output=상수(불변) → Pa.G1 = 훈련 출력")
+        ag.wm.remove(root.node_id, "solution", "{}")          # 빈 슬롯 → 채운 값으로
+        ag.wm.add(root.node_id, "solution", "output=상수(불변)")
+        return
+    # ② 속성별 도출 (size·color; contents 제외)
+    out_cat = (out_rel or {}).get("result", {}).get("category", {})
+    chg_cat = (cross.get("change") or {}).get("result", {}).get("category", {})
+    got = {}
+    for prop in ("size", "color"):
+        if out_cat.get(prop, {}).get("type") == "COMM":
+            got[prop] = "출력끼리 COMM → 그대로"
+        elif chg_cat.get(prop, {}).get("type") == "COMM":
+            got[prop] = "변화 일관 → 공통변화 적용"
+        if prop in got:
+            ag.wm.add(sid, f"predict-{prop}", got[prop])
+    missing = [p for p in ("size", "color", "contents") if p not in got]   # contents 는 항상 미결
+    ag.wm.add(sid, "predict", f"채움={list(got)} · 미결={missing}")
+    if missing:                                                     # 표면비교로 다 못 채움 → 하강
+        gid = f"{sid}.goal"
+        ag.wm.add(sid, "goal", gid)
+        ag.wm.add(gid, "produce", ",".join(missing))
+
+
+# operator body(RHS 함수) = production 으로 못 하는 원자연산만:
+#   observe = to_json 로드 · compare = kg_compare · select = 다음 대상 고르기(§1-3 탐색의 자리).
+# 제어(무엇을 언제)는 전부 propose/apply 규칙 + WM 플래그로. solve 는 미구현(ONC=하강),
+# submit 은 apply-only(답은 output-link 에).
+OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select}
 
 
 # ---------------------------------------------------------------------------
@@ -238,97 +496,51 @@ def _apply_state(name, *acts):
         [Action("<s>", a[0], a[1], a[2] if len(a) > 2 else "+") for a in acts])
 
 
-PRODUCTIONS = [
-    # observe: reflexive -- the current state's focus node is not yet seen
-    _propose("observe", [Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "<x>", negated=True)]),
-    # compare: focus seen AND it has same-level siblings, not yet compared
-    _propose("compare", [Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
-                         Cond("<f>", "has-siblings", "yes"), Cond("<f>", "compared", "<x>", negated=True)]),
-    # aggregate: compare left pairwise greater/less relations (gather-pending) not yet
-    # rolled into roles. REFLEXIVE information-gathering -- derives extremum roles from
-    # the relations compare produced (this is where "가장 큰" becomes a role). Gated so
-    # it runs BEFORE solve (perceive/gather before you attempt), same family as ^seen.
-    _propose("aggregate", [Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
-                           Cond("<f>", "gather-pending", "yes"),
-                           Cond("<f>", "aggregated", "<x>", negated=True)]),
-    # solve: the state has a GOAL and its focus has been OBSERVED -> propose to solve.
-    # solve is UNDEFINED -- NO apply rule, NO body (see OPERATOR_BODIES) -- so selecting it
-    # changes nothing => operator no-change impasse => a substate to IMPLEMENT it
-    # (fine_trace). The ^seen condition is Perception->Deliberation->Action ("observe the
-    # focus before you attempt to solve it"), a universal ordering -- NOT a domain method
-    # (contrast the deleted solve*post-compare, which wrongly said "solve VIA compare").
-    # The order emerges: at S1 observe(task) fires first (task unseen), then solve; in a
-    # substate observe->compare run first and compare DISCOVERS the ^goal, then solve.
-    # find: aggregate 가 role 을 냈다(select-pending) → 대상 선택. gathering 체인의
-    # 마지막 단계라 hypothesize/solve 보다 먼저 발화(tie 아님).
-    _propose("find", [Cond("<s>", "focus", "<f>"), Cond("<f>", "aggregated", "yes"),
-                      Cond("<f>", "select-pending", "yes"), Cond("<f>", "found", "<x>", negated=True)]),
+def _propose_nonode(prod_name, op_name, conds):
+    # arg(대상)를 붙이지 않고 operator 제안 (^node 없음). 대상은 arg-선택 substate 의 select 가
+    # super 의 커서로 정한다 — "propose 에 arg 를 박지 않는다"(사용자 요청)의 실체.
+    return Production(prod_name, conds,
+                      [Action("<s>", "operator", "<o>", "+"), Action("<o>", "name", op_name)])
 
-    # ── 풀이 파이프라인 (발견된 goal ^produce 가 있는 substate 에서만) ──
-    # "이 레벨에서 풀이 시도 → 실패(hyps-exhausted)하면 solve fallback 로 하강".
-    # hypothesize: goal(^produce) 있고 아직 가설 없음. (bootstrap goal 'solve' 는
-    # ^produce 가 없어 여기 안 걸림 → S1 에선 hypothesize 대신 solve*bootstrap 이 하강.)
-    _propose("hypothesize", [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
-                             Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
-                             Cond("<f>", "gather-pending", "<gp>", negated=True),
-                             Cond("<f>", "select-pending", "<sp>", negated=True),
-                             Cond("<s>", "hypotheses-built", "<x>", negated=True)]),
-    # predict: 후보 하나를 train 입력에 적용(내부 시뮬레이션).
-    _propose("predict", [Cond("<s>", "hypotheses-built", "yes"),
-                         Cond("<s>", "predicted", "<x>", negated=True),
-                         Cond("<s>", "consistent", "<y>", negated=True),
-                         Cond("<s>", "hyps-exhausted", "<z>", negated=True)]),
-    # evaluate: 예측을 train 오라클과 대조 → consistent 이거나 다음 후보로.
-    _propose("evaluate", [Cond("<s>", "predicted", "yes"),
-                          Cond("<s>", "consistent", "<x>", negated=True),
-                          Cond("<s>", "verified", "<y>", negated=True)]),
-    # verify: consistent 후보를 최종 확인 → verified.
-    _propose("verify", [Cond("<s>", "consistent", "<c>"),
-                        Cond("<s>", "verified", "<x>", negated=True)]),
-    # compose: verified 가설을 test 에 적용해 답 조립.
-    _propose("compose", [Cond("<s>", "verified", "<v>"),
-                         Cond("<s>", "answer-ready", "<x>", negated=True),
-                         Cond("<s>", "declined", "<y>", negated=True)]),
-    # submit: 답 준비됨 → 제출.
+
+PRODUCTIONS = [
+    # ── 관측/비교: arg(대상)를 propose 에 **박지 않는다.** super 에 세워진 ^cursor / ^cmp-active
+    #    (= arg-선택 substate 의 select 가 정해준 것)가 있어야 apply 된다. 없으면 body·apply 규칙
+    #    둘 다 변화 없음 → **ONC impasse → arg-선택 substate** 가 열리고 그 안 select 가 대상을 정함.
+    _propose_nonode("propose*observe", "observe",
+                    [Cond("<s>", "to-observe", "yes"), Cond("<s>", "observed", "<o>", negated=True)]),
+    _propose_nonode("propose*compare", "compare",
+                    [Cond("<s>", "to-compare", "yes"), Cond("<s>", "compared", "<x>", negated=True),
+                     Cond("<s>", "answer-ready", "<ar>", negated=True)]),   # 답 나오면 compare 멈추고 submit
+    # apply: super 커서(^cursor/^cmp-active)로 결과 플래그(^seen/^done) + 커서 **소비**(다음엔 다시 select).
+    Production("apply*observe",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "observe"), Cond("<s>", "cursor", "<f>")],
+               [Action("<f>", "seen", "yes"), Action("<s>", "cursor", "<f>", "-")]),
+    Production("apply*compare",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "compare"), Cond("<s>", "cmp-active", "<f>")],
+               [Action("<f>", "done", "yes"), Action("<s>", "cmp-active", "<f>", "-")]),
+
+    # ── select: arg-선택 substate 안에서 한 번 발화 — body 가 super 커서(^cursor/^cmp-active)를
+    #    세우고 자기 자신에 ^selected 표시. 그러면 -(^selected) 조건이 깨져 retract → substate 는
+    #    더 고를 게 없어 SNC → fine_trace 가 pop → super 의 observe/compare 가 그 arg 로 apply.
+    _propose_nonode("propose*select*observe", "select",
+                    [Cond("<s>", "select-for", "observe"), Cond("<s>", "selected", "<x>", negated=True)]),
+    _propose_nonode("propose*select*compare", "select",
+                    [Cond("<s>", "select-for", "compare"), Cond("<s>", "selected", "<x>", negated=True)]),
+
+    # submit: predict 가 답을 output-link 에 얹고 ^answer-ready → 제출·채점.
     _propose("submit", [Cond("<s>", "answer-ready", "yes"), Cond("<s>", "done", "<x>", negated=True)]),
 
-    # solve -- 두 변형(상호배타). bootstrap: 최상위 부트goal 'solve'(^produce 없음) →
-    # 하강해 pair 로. fallback: 발견된 goal 인데 hypothesize 가 다 틀림(hyps-exhausted)
-    # ∧ 아직 verified 없음 → 이 레벨 풀이 실패 → 하강(더 깊은 정보 수집).
+    # solve = 미구현(apply·body 없음) → ONC impasse → 한 ARCKG 계층 하강(fine_trace._do_descend).
     _propose_named("propose*solve*bootstrap", "solve",
-                   [Cond("<s>", "goal", "solve"), Cond("<s>", "focus", "<f>"),
-                    Cond("<f>", "seen", "yes"), Cond("<f>", "gather-pending", "<gp>", negated=True),
-                    Cond("<f>", "select-pending", "<sp>", negated=True)]),
+                   [Cond("<s>", "goal", "solve"), Cond("<s>", "observed", "yes")]),
     _propose_named("propose*solve*fallback", "solve",
                    [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
-                    Cond("<s>", "focus", "<f>"), Cond("<f>", "seen", "yes"),
-                    Cond("<f>", "gather-pending", "<gp>", negated=True),
-                    Cond("<f>", "select-pending", "<sp>", negated=True),
-                    Cond("<s>", "hyps-exhausted", "yes"), Cond("<s>", "verified", "<v>", negated=True)]),
+                    Cond("<s>", "compared", "yes"), Cond("<s>", "answer-ready", "<a>", negated=True)]),
 
-    _apply("observe", "seen"),
-    _apply("compare", "compared"),
-    # find apply: mark found + consume select-pending(gathering 체인 종료). body 가 ^selected.
-    Production("apply*find",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "find"),
-                Cond("<o>", "node", "<f>")],
-               [Action("<f>", "found", "yes"), Action("<f>", "select-pending", "yes", "-")]),
-    # aggregate apply: mark done (aggregated) AND consume the gather-pending gate so
-    # the next operator becomes eligible. Body (_op_aggregate) runs as this rule fires.
-    Production("apply*aggregate",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "aggregate"),
-                Cond("<o>", "node", "<f>")],
-               [Action("<f>", "aggregated", "yes"),
-                Action("<f>", "gather-pending", "yes", "-")]),
-    # 풀이 파이프라인 apply (플래그는 STATE <s> 에; body 가 실제 작업). predict↔evaluate
-    # 루프: evaluate 가 predicted 를 지워 다음 후보로 predict 재발화(generate-and-test).
-    _apply_state("hypothesize", ("hypotheses-built", "yes")),
-    _apply_state("predict", ("predicted", "yes")),
-    _apply_state("evaluate", ("predicted", "yes", "-")),      # 소비: 맞으면 body 가 consistent, 틀리면 다음 후보
-    _apply_state("verify"),                                   # body 가 verified 를 씀
-    _apply_state("compose"),                                  # body 가 answer-ready/declined 를 씀
     _apply_state("submit", ("done", "yes")),
-    # NO apply*solve: solve is deliberately un-implemented (that is what makes it impasse).
+    # select·solve 는 apply 규칙 없음: select body 가 super 커서를 세우는 것(=arg 고르기, §1-3 탐색
+    # 자리)이 곧 적용이고, solve 는 의도적 미구현(=하강).
 ]
 
 
@@ -380,7 +592,9 @@ def inject_focus(ag):
     #     impasse and the substate descends one ARCKG level.
     ag.wm.add("S1", "arckg", rid)                     # ARCKG root lives on the state
     ag.wm.add("S1", "goal", "solve")                  # TOP GOAL: solve the task (bootstrap, under-specified)
-    ag.wm.add("S1", "focus", rid)                     # attention starts on the task (observe reveals its pairs)
+    ag.wm.add("S1", "level", "TASK")                  # ARCKG 계층명(대문자)
+    ag.wm.add("S1", "focus", rid)                     # 이 계층 노드 그룹 = TASK 하나
+    ag.wm.add("S1", "to-observe", "yes")              # 관측할 게 있음 → observe(arg 없이) 제안 → impasse → select
 
 
 def setup_focus_agent(task, tid="0a", record=False):
@@ -393,17 +607,11 @@ def setup_focus_agent(task, tid="0a", record=False):
 
 
 OP_DOCS = {
-    "observe": "focus 노드의 property + 자식 존재 확인 (자식 내용 X) → ^seen",
-    "compare": "focus의 형제들과 property 비교 → COMM/DIFF. orderable(area/size/position)은 pairwise greater/less로 refine → 관계 도출. 불균형이면 ^goal 발견(node/produce)",
-    "aggregate": "compare가 쌓은 greater/less 관계를 role로 집계 → extremum+/-(=가장 큼/작음). 관계가 없으면 발화 안 함",
-    "find": "aggregate가 낸 role(extremum+ on area)로 대상 object 선택 → ^selected",
-    "hypothesize": "train pair에서 변환 가설을 랭킹 생성(predefined DSL 조합). 후보 없으면 hyps-exhausted → 하강",
-    "predict": "현재 후보 가설을 train 입력마다 적용(내부 시뮬레이션) → 예측 격자",
-    "evaluate": "예측을 train 출력(오라클)과 대조. 다 맞으면 consistent, 틀리면 다음 후보(generate-and-test)",
-    "verify": "consistent 후보를 train 전체에서 최종 재확인 → verified",
-    "compose": "verified 가설을 test 입력에 적용해 답 조립(make_grid+coloring) → ^answer-ready",
-    "submit": "답을 output-link로 제출 → ^done",
-    "solve": "미구현 operator (apply 규칙·body 없음). goal이 있고 이 레벨 풀이가 실패(hyps-exhausted)면 제안. 변화 없음 → operator no-change impasse → 하강. 결과가 나오면 chunking으로 학습",
+    "observe": "arg(대상) **없이** propose → ^cursor(=arg-선택 substate 의 select 가 세워줌)가 있을 때만 관측(property→^property)·^seen. 없으면 no-change → ONC impasse → arg-선택 substate",
+    "compare": "arg 없이 propose → ^cmp-active(select 가 세워줌) 있을 때만 그 비교 수행(원자연산 kg_compare). 없으면 impasse. PAIR=peers(불균형→goal), GRID=within×pair→cross(삼중쌍)→predict",
+    "select": "arg-선택 substate 안의 operator. observe/compare 가 arg 없이 걸린 impasse 를 푼다 — superstate 의 다음 대상을 preference(순서상 첫 미완료=a안)로 골라 super ^cursor/^cmp-active 세팅 → impasse 해소·pop. §1-3 탐색 자리",
+    "submit": "predict 가 output-link 에 얹은 답 제출 → 채점 → ^done",
+    "solve": "미구현 operator (apply·body 없음). goal 있고 이 레벨에서 답 못 냄 → 변화 없음 → operator no-change impasse → 한 계층 하강. (bootstrap: TASK 관측 후 PAIR 로)",
 }
 
 
@@ -431,8 +639,9 @@ def _dash_data(task, tid="0a", max_cycles=60):   # observe+compare+aggregate+fin
                    "color": "✓" if a["correct"] else "✗"}
                   for i, a in enumerate(tr.attempts)]
     correct_i = next((i for i, a in enumerate(tr.attempts) if a["correct"]), None)
+    from arc.dashboard import wm_deltas
     return {
-        "id": tid, "events": events, "wm_states": wm_states,
+        "id": tid, "events": events, "wm_states": wm_deltas(wm_states),
         "grids": {"train": task["train"],
                   "test": [{"input": tp["input"]} for tp in task["test"]]},
         "candidates": candidates, "correct_attempt": correct_i, "n_steps": len(events),

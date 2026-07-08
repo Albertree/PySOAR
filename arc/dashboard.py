@@ -75,6 +75,21 @@ def rules_manifest():
     return out
 
 
+def wm_deltas(wm_states):
+    """dedupe 된 wm_states(각 원소 = 그 시점 full WM triple 리스트)를 base+delta 로 압축한다.
+    각 결과 원소 = {"a":[추가 triple], "r":[삭제 triple]} (직전 state 대비). WM 은 단조 증가라
+    큰 relation receipt 가 매 state 반복 저장되는데(→ HTML 수십 MB), delta 면 추가된 그 순간에만
+    실린다. JS wmStates() 가 순차 적용해 full WM 을 복원한다 — 표시되는 정보는 100% 동일."""
+    deltas, prev, prevset = [], [], set()
+    for st in wm_states:
+        curset = {tuple(t) for t in st}
+        add = [t for t in st if tuple(t) not in prevset]
+        rem = [t for t in prev if tuple(t) not in curset]
+        deltas.append({"a": add, "r": rem})
+        prev, prevset = st, curset
+    return deltas
+
+
 def task_data(tid, task):
     from arc.fine_trace import fine_trace
     from arc.expr_solver import candidates
@@ -93,7 +108,7 @@ def task_data(tid, task):
     gt = [tp["output"] for tp in task["test"]]
     correct_i = next((i for i, c in enumerate(cands) if c["grid"] == gt), None)
     return {
-        "id": tid, "events": events, "wm_states": wm_states,
+        "id": tid, "events": events, "wm_states": wm_deltas(wm_states),
         "grids": {"train": task["train"],
                   "test": [{"input": tp["input"]} for tp in task["test"]]},
         "candidates": [{"answer": c["grid"], "position": c["position"], "color": c["color"]}
@@ -176,9 +191,12 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
 .maprow.on .mwave{color:#dfe6f5}
 .wme{font-family:ui-monospace,monospace;font-size:12px;padding:1px 6px;border-radius:4px;display:block;margin:1px 0;white-space:nowrap}
 .wme.hl{background:var(--add);color:var(--addt);font-weight:600}
-#wm{min-width:max-content}
+/* #wm = panel 폭의 스크롤 컨테이너(overflow:auto from .panel>div). 콘텐츠(.tree)를
+   width:max-content 로 넓혀 긴 id/값 줄이 넘치면 #wm 이 **가로 스크롤**을 낸다 (사용자 요청).
+   (이전 #wm{min-width:max-content} 는 #wm 자체를 넓혀 panel overflow:hidden 이 잘라 스크롤 불가였음) */
+#wm{min-width:0}
 /* ARCKG tree (toggle) -- mirrors ARC-solver dashboard */
-.tree{font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.55}
+.tree{font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.55;width:max-content;min-width:100%}
 .tree details{margin:0} .tree summary{cursor:pointer;list-style:none;white-space:nowrap;color:#c2c8d4}
 .tree summary::-webkit-details-marker{display:none}
 .tree summary::before{content:"\25B8";color:var(--muted);display:inline-block;width:1.1em;text-align:center}
@@ -187,6 +205,16 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
 .tree .leaf{padding-left:1.1em;white-space:nowrap;color:#c2c8d4}
 /* fixed-width +/-/~ change marker so lines never shift between steps */
 .tree .wpre{display:inline-block;width:1em;text-align:center;font-weight:700}
+/* ARCKG NODE rows tinted by hierarchy level (node = property/relation 아닌 노드 줄; TASK 제외):
+   PAIR=파스텔 오렌지 · GRID=파스텔 노랑 · OBJECT=파스텔 녹색 · PIXEL=파스텔 파랑.
+   add/rem(초록/빨강 배경) 규칙을 아래에 둬서 그게 이 색칠을 덮는다(우선순위 낮음).
+   modify(글자색 add-t/rem-t/mix-t)와는 배경 vs 글자라 공존. */
+.tree summary.lvl-pair,.tree .leaf.lvl-pair{background:rgba(255,164,82,.20);border-radius:3px}
+.tree summary.lvl-grid,.tree .leaf.lvl-grid{background:rgba(238,214,92,.17);border-radius:3px}
+.tree summary.lvl-object,.tree .leaf.lvl-object{background:rgba(120,214,140,.16);border-radius:3px}
+.tree summary.lvl-pixel,.tree .leaf.lvl-pixel{background:rgba(122,176,236,.18);border-radius:3px}
+/* relation(비교 edge) 노드 = 파스텔 라벤더 — LCA 노드 아래 cascade (ARC-solver E_*-*.json 미러) */
+.tree summary.lvl-rel,.tree .leaf.lvl-rel{background:rgba(190,150,255,.16);border-radius:3px}
 /* the line itself changed -> full (text + background) */
 .tree .leaf.add,.tree summary.add{background:var(--add);color:var(--addt);border-radius:3px}
 .tree .leaf.rem,.tree summary.rem{background:var(--rm);color:var(--rmt);border-radius:3px}
@@ -373,6 +401,16 @@ function ancestors(id){ // Tx.P0.G0.O0 -> [Tx.P0.G0, Tx.P0, Tx]
  for(let k=parts.length-1;k>0;k--) out.push(parts.slice(0,k).join('.'));
  return out;
 }
+// ARCKG 노드 id -> 레벨 클래스 (파스텔 배경용). TASK(T…, 1세그먼트)와 비-ARCKG(S1/O1/percept)
+// 는 ''. 마지막 세그먼트 첫 글자로 판별: P=pair,G=grid,O=object,X=pixel.
+function arckgLevel(id){
+ // NODE 레벨 파스텔만 담당. relation 은 여기서 칠하지 않는다 (body 에서 ^relation edge 인
+ // 최상위 노드에만 lvl-rel; 그 하위 receipt(category/속성)는 칠하지 않음 — 사용자 요청).
+ const p=String(id).split('.');
+ if(p[0][0]!=='T'||p.length<2) return '';
+ const last=p[p.length-1];
+ return ({P:'lvl-pair',G:'lvl-grid',O:'lvl-object',X:'lvl-pixel'})[last[0]]||'';
+}
 function renderWM(wm,added,removed,removedTriples){
  // ONE working memory rooted at S1. Every line is a full WME triplet. Toggles
  // are CLOSED by default. A line whose own WME changed -> full (text+bg). A
@@ -388,7 +426,7 @@ function renderWM(wm,added,removed,removedTriples){
  const ensure=id=>{ if(!nodes[id]) nodes[id]={props:[],kids:[]}; return nodes[id]; };
  // pointer attributes (attention cursor) mark a node but do NOT own it -> render as a
  // leaf marker; the node itself expands under its structural edge (input-link / ARCKG).
- const POINTER=new Set(['focus']);
+ const POINTER=new Set(['focus','level','cursor','cmp-active']);   // 계층명·노드그룹·관측커서·비교커서 = leaf 마커
  all.forEach(t=>{
    const [id,attr,val]=t;
    if(Array.isArray(val)){ ensure(id).props.push([attr,val]); return; }
@@ -420,15 +458,19 @@ function renderWM(wm,added,removed,removedTriples){
  function body(id){
    const n=nodes[id]; if(!n) return '';
    let h='';
-   n.props.forEach(([a,v])=>{ const disp=Array.isArray(v)?trunc(JSON.stringify(v),40):trunc(v,40);
+   n.props.forEach(([a,v])=>{ const disp=Array.isArray(v)?trunc(JSON.stringify(v),44):trunc(v,40);
      const mk=lineMark(fmtTriple([id,a,v]),null);
      h+=`<div class="leaf${mk.cls}"><span class=wpre>${mk.pre}</span>${esc('('+id+' ^'+a+' '+disp+')')}</div>`; });
-   n.kids.forEach(([edge,cid,disp])=>{ const ew=fmtTriple([id,edge,disp||cid]); const mk=lineMark(ew,cid);
+   // 한 노드 아래 자식 순서: property(1토글) → 자식 node 토글들 → 개별 relation 토글들 (사용자 요청)
+   const KORD={property:0,example:1,test:1,input:1,output:1,object:1,relation:3};
+   n.kids.slice().sort((x,y)=>((KORD[x[0]]??2)-(KORD[y[0]]??2))).forEach(([edge,cid,disp])=>{ const ew=fmtTriple([id,edge,disp||cid]); const mk=lineMark(ew,cid);
      const loaded=nodes[cid]&&(nodes[cid].props.length||nodes[cid].kids.length);
+     // 최상위 relation edge 만 라벤더. 그 하위(receipt: category/속성)는 칠하지 않는다 (사용자 요청)
+     const lvl=(edge==='relation')?'lvl-rel':arckgLevel(cid);
      if(loaded&&!shown.has(cid)){ shown.add(cid);
-       h+=`<details data-nid="${esc(cid)}"${wmOpen.has(String(cid))?' open':''}><summary class="${mk.cls.trim()}"><span class=wpre>${mk.pre}</span>${esc(ew)}</summary>${body(cid)}</details>`;
-     } else if(loaded){ h+=`<div class="leaf${mk.cls}"><span class=wpre>${mk.pre}</span>${esc(ew)}</div>`;   // dup edge to an already-expanded object -> plain leaf (no marker)
-     } else h+=`<div class="leaf${mk.cls}"><span class=wpre>${mk.pre}</span>${esc(ew)} <span class=hint>(lazy)</span></div>`;
+       h+=`<details data-nid="${esc(cid)}"${wmOpen.has(String(cid))?' open':''}><summary class="${(lvl+mk.cls).trim()}"><span class=wpre>${mk.pre}</span>${esc(ew)}</summary>${body(cid)}</details>`;
+     } else if(loaded){ h+=`<div class="leaf ${lvl}${mk.cls}"><span class=wpre>${mk.pre}</span>${esc(ew)}</div>`;   // dup edge to an already-expanded object -> plain leaf (no marker)
+     } else h+=`<div class="leaf ${lvl}${mk.cls}"><span class=wpre>${mk.pre}</span>${esc(ew)} <span class=hint>(lazy)</span></div>`;
    });
    return h;
  }
@@ -444,6 +486,20 @@ function renderWM(wm,added,removed,removedTriples){
 const STAGE={match:'match','rule-fire':'fire','rule-retract':'retract','wm-update':'wm-update',
  'wme-add':'add',decide:'decide','op-select':'select','op-apply':'apply',quiescence:'quiescence',
  output:'output','input-noop':'input',substate:'substate'};
+// wm_states 는 base+delta({a,r})로 저장됨(용량 축소). 순차 적용해 각 state 의 full WM 을
+// 복원하고 task 별로 캐시한다 (표시 정보는 full 저장과 100% 동일).
+const _WMC={};
+function wmStates(ti){
+ if(ti in _WMC) return _WMC[ti];
+ const raw=D.tasks[ti].wm_states, out=[];
+ for(let i=0;i<raw.length;i++){
+   const d=raw[i]||{a:[],r:[]};
+   if(i===0){ out.push((d.a||[]).slice()); continue; }
+   const rem=new Set((d.r||[]).map(t=>JSON.stringify(t)));
+   out.push(out[i-1].filter(t=>!rem.has(JSON.stringify(t))).concat(d.a||[]));
+ }
+ _WMC[ti]=out; return out;
+}
 function renderStep(){
  const t=D.tasks[ti],ev=t.events,e=ev[step];
  $('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=hint>step ${step+1}/${ev.length} · cycle ${e.cycle}</span>
@@ -464,9 +520,10 @@ function renderStep(){
  }).join('');
  const onr=document.querySelector('.maprow.on'); if(onr) onr.scrollIntoView({block:'nearest'});
  const hl=new Set(e.highlight);
- const wm=D.tasks[ti].wm_states[e.wm_state];
+ const WMS=wmStates(ti);                 // delta 로 저장된 wm_states 를 full 로 복원(캐시)
+ const wm=WMS[e.wm_state];
  // added/removed by diffing this step's WM vs the previous step's
- const prevWm=step>0?D.tasks[ti].wm_states[ev[step-1].wm_state]:[];
+ const prevWm=step>0?WMS[ev[step-1].wm_state]:[];
  const cur=new Set(wm.map(fmtTriple)), prev=new Set(prevWm.map(fmtTriple));
  const added=new Set([...cur].filter(x=>!prev.has(x)));
  const removed=new Set([...prev].filter(x=>!cur.has(x)));

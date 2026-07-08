@@ -100,31 +100,19 @@ def _op_find(ag):
 # 후보가 없으면(단일 target 계열 아님) hyps-exhausted → solve fallback 로 하강.
 # ---------------------------------------------------------------------------
 def _op_hypothesize(ag):
-    """가설 = input→output 관계. 두 경로:
-    (1) structure-mapping: G0 를 seed 로 GRID 3속성(size/color/contents) 관계를 pair 간
-        일반화 (relation_solve). contents 가 잡히면 완결.
-    (2) fallback: 단일 object dsl arg 합성(program synthesis)."""
+    """[Phase 1 · 2026-07-08] 전역 finder 단락 제거.
+
+    이전엔 relation_solve.generalize(전역 task)가 focus/레벨을 무시하고 PAIR 에서
+    정답을 계산해 하강을 막았다 — 4문제 전부 186 step(§2-4 증상), 그리고 _CORNERS=
+    (H-h,W-w) 같은 손코딩 finder(§1-5). 이제 이 레벨에 (아직) 합성기가 없으면
+    hyps-exhausted 로 표시 → solve*fallback 이 impasse 하강을 잇는다.
+
+    → 합성은 Phase 2-3 에서 GRID/OBJECT 레벨의 compare 결과로, 손코딩 finder 없이
+      재도입한다. 지금은 도크스트링의 원래 설계('solve descends, unsolved')로 복귀 —
+      문제를 풀기보다 하강·비교·WM/ARCKG 축적이 문제마다 다르게 보이는 게 목적."""
     s = _sid(ag)
-    prog = relation_solve.generalize(ag.task["train"])         # per-property 관계 일반화
-    desc = relation_solve.describe(prog)
-    ag.kg["last_prog"] = desc                                  # 대시보드 3속성 슬롯
-    for k, v in desc.items():                                  # 조립 상태를 WM 에 남김(패널이 읽음)
-        ag.wm.add(s, f"target-{k}", v)
-    if relation_solve.is_complete(prog):                       # contents 해소 → 완결 프로그램
-        ag.kg["solve"] = {"mode": "relational", "prog": prog, "verified": None}
-        ag.wm.add(s, "hyp", "relational: " + ", ".join(f"{k}={v}" for k, v in desc.items()))
-        return
-    # (2) fallback: dsl 단일 object 가설
-    samples, testinfo = _samples_and_test(ag.task)
-    if not samples or not (hyps := ranked_hypotheses(samples)):
-        ag.wm.add(s, "hyps-exhausted", "yes")                 # 관계 미완 ∧ dsl 도 불가 → 하강
-        ag.kg["solve"] = {"mode": "none", "hyps": [], "idx": 0}
-        return
-    ag.kg["solve"] = {"mode": "dsl", "samples": samples, "test": testinfo,
-                      "hyps": hyps, "idx": 0, "verified": None}
-    for h in hyps[:6]:                                        # 후보를 WM 에 나열(대시보드)
-        ag.wm.add(s, "hyp", _name(h))
-    ag.kg["last_hyps"] = [_name(h) for h in hyps[:6]]
+    ag.wm.add(s, "hyps-exhausted", "yes")
+    ag.kg["solve"] = {"mode": "none", "hyps": [], "idx": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -215,8 +203,8 @@ def _op_compose(ag):
 
 
 # submit 은 body 없음: apply*submit 이 ^done 을 쓰고, 답은 이미 output-link 에 있음.
-SOLVE_BODIES = {
-    "find": _op_find, "hypothesize": _op_hypothesize, "predict": _op_predict,
+SOLVE_BODIES = {                                          # find 제거 (2026-07-08)
+    "hypothesize": _op_hypothesize, "predict": _op_predict,
     "evaluate": _op_evaluate, "verify": _op_verify, "compose": _op_compose,
 }
 

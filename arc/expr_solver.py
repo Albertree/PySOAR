@@ -51,9 +51,11 @@ def _target_and_others(in_objs, out_obj):
     return None, []
 
 
-# to_json keys whose value is a full 2D grid -- kept as a compact hashable 2D
-# (rendered as a grid image in the dashboard) instead of exploding into cells.
-_GRID_VALUED = {"contents", "shape"}
+# to_json keys whose LIST value is kept WHOLE (one compact hashable value) instead
+# of exploding into indexed sub-nodes (.0 .1 .2 …). contents/shape = 2D grid image;
+# coordinate = list of [row,col] — the intelligence reads it as one coordinate list,
+# not as separate cells, so it renders as a single `[[r,c],…]` leaf (사용자 요청 2026-07-08).
+_WHOLE_VALUED = {"contents", "shape", "coordinate"}
 
 
 def _tup(v):
@@ -62,8 +64,8 @@ def _tup(v):
 
 def _load_value(wm, nid, attr, val):
     """Recursively load one to_json value as WMEs (dict/list -> nested sub-node;
-    scalar -> leaf). 2D-grid props stay compact."""
-    if attr in _GRID_VALUED and isinstance(val, list):
+    scalar -> leaf). 2D-grid props + coordinate stay whole (see _WHOLE_VALUED)."""
+    if attr in _WHOLE_VALUED and isinstance(val, list):
         wm.add(nid, attr, _tup(val))
     elif isinstance(val, dict):
         sub = f"{nid}.{attr}"
