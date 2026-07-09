@@ -199,26 +199,23 @@ def _store_relation(ag, receipt, anchor=None):
 # ---------------------------------------------------------------------------
 # operator bodies (RHS functions): the ARCKG/comparison work
 # ---------------------------------------------------------------------------
-def _load_props(ag, nid, node):
-    """노드의 to_json 속성 전부를 (nid ^property nid.property) 아래 **한 토글**로 묶어 적재한다.
-    → dashboard 에서 한 노드 토글 아래가 [property(1토글)] + [자식 node 토글들] + [개별 relation
-    토글들] 로 정리된다 (사용자 요청 2026-07-08). 솔버는 속성을 WM 이 아니라 to_json() 으로 직접
-    읽으므로(이 묶음은 표시 전용) 안전하다."""
+def _load_props(ag, nid, node, lvl):
+    """노드의 **서술적 사실**을 (nid ^property nid.property) 아래 한 토글로 묶는다 (사용자 결정
+    2026-07-09):
+      · ^type      = 계층 메타(task/pair/grid/object) — 서술적이라 property 안으로.
+      · to_json    = ARCKG 속성 전부.
+      · 아티팩트 슬롯 = TASK.solution / PAIR.program (§6 파생 슬롯; 이후 hypothesize/generalize 가 채움).
+    operator 가 만드는 **과정 마커(^seen·^cursor 등)는 property 밖**에 둔다 — '문제에 대한 사실' vs
+    '에이전트가 한 것' 을 섞지 않기 위해. 솔버는 속성을 to_json() 으로 직접 읽으므로 이 묶음은 표시용."""
     pid = f"{nid}.property"
     ag.wm.add(nid, "property", pid)
+    ag.wm.add(pid, "type", lvl)                        # 계층 메타(서술적)
     for k, v in node.to_json().items():
         _load_value(ag.wm, pid, k, v)
-
-
-def _artifact_slot(ag, nid, level):
-    """harness §6 의 파생 아티팩트 슬롯을 노드에 건다: TASK.solution / PAIR.program.
-    to_json property 가 아니라(task.py/pair.py 계약 상 관측만) *구조적 슬롯* 이므로 ^property 밖
-    별도 edge 로 둔다. 비어있는 채로 시작하고, 이후 흐름(search→program · generalize→solution)이
-    이 슬롯을 채운다. 이걸 driver 로 쓸 것: 슬롯이 비면 impasse → 하강."""
-    if level == "task":
-        ag.wm.add(nid, "solution", "{}")          # 빈 dict — 이후 흐름(generalize)이 채움
-    elif level == "pair":
-        ag.wm.add(nid, "program", "{}")           # 빈 dict — 이후 흐름(search)이 채움
+    if lvl == "task":                                 # 파생 아티팩트 슬롯 → property 아래
+        ag.wm.add(pid, "solution", "{}")              # 빈 dict — 이후 흐름(generalize)이 채움
+    elif lvl == "pair":
+        ag.wm.add(pid, "program", "{}")               # 빈 dict — 이후 흐름(hypothesize/search)이 채움
 
 
 def _op_observe(ag):
@@ -230,11 +227,9 @@ def _op_observe(ag):
     if f is None:
         return                                  # arg(대상) 미정 → 변화 없음 → ONC impasse → arg-선택 substate
     node, lvl = idx["nodes"][f], idx["level"][f]
-    ag.wm.add(f, "type", lvl)
-    _load_props(ag, f, node)                    # 이 노드의 to_json → ^property 한 토글
-    _artifact_slot(ag, f, lvl)                  # TASK.solution / PAIR.program 슬롯 (§6)
+    _load_props(ag, f, node, lvl)               # ^property = {type + to_json + 아티팩트 슬롯}
     for edge, c in idx["edges"][f]:
-        ag.wm.add(f, edge, c)                   # 자식 존재(ref)
+        ag.wm.add(f, edge, c)                   # 자식 존재(ref) — edge(구조)는 property 밖 그대로
     # ^seen 표시 + cursor 소비는 apply*observe 규칙이 (body 뒤 settle 에서).
 
 
@@ -503,8 +498,9 @@ def _predict_test_output(ag, sid):
         ag.add_output_wme("answer", tuple(tuple(r) for r in ans))
         ag.wm.add(sid, "answer-ready", "yes")
         ag.wm.add(sid, "predict", "output=상수(불변) → Pa.G1 = 훈련 출력")
-        ag.wm.remove(root.node_id, "solution", "{}")          # 빈 슬롯 → 채운 값으로
-        ag.wm.add(root.node_id, "solution", "output=상수(불변)")
+        pid = f"{root.node_id}.property"                      # 아티팩트 슬롯은 이제 property 아래
+        ag.wm.remove(pid, "solution", "{}")                   # 빈 슬롯 → 채운 값으로
+        ag.wm.add(pid, "solution", "output=상수(불변)")
         return
     # ② 속성별 도출 (size·color; contents 제외)
     out_cat = (out_rel or {}).get("result", {}).get("category", {})
