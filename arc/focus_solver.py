@@ -306,6 +306,7 @@ def _build_agenda(ag, sid, group):
             cid = f"{sid}.cmp:match.{p.split('.')[-1]}"
             ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1); ag.wm.add(cid, "pair", p)
             specs.append((cid, "match", 0))
+            ag.wm.add(sid, "to-hypothesize", "yes")             # match 끝나면 hypothesize 발화(OBJECT 만)
     for cid, k, order in specs:
         ag.wm.add(sid, "cmp", cid)                       # 계층 아래 비교 목록(선언적)
         ag.wm.add(cid, "kind", k)
@@ -522,11 +523,86 @@ def _predict_test_output(ag, sid):
         ag.wm.add(gid, "produce", ",".join(missing))
 
 
+def _obj_cc(node):
+    """ARCKG object node → (절대 셀 목록, 색). color dict 중 True 인 것이 그 object 색."""
+    j = node.to_json()
+    return [tuple(c) for c in j["coordinate"]], next((k for k, v in j["color"].items() if v), 0)
+
+
+def _hypothesize_program(ag, gid0, gid1, out_grid):
+    """**한 PAIR 의 G0→G1 program(가설) 합성 + 검증** (시나리오 2026-07-10, 모듈 함수):
+      1) foreground(비-0색) object 만.  2) 유사도 greedy 1-1 대응(중복 없이 — 한 object 는 한 번).
+      3) per-object 변환 = (Δ=G1첫셀-G0첫셀, 색=G1색).  4) make_grid+coloring 으로 **시뮬레이션 조립**
+         (G0 각 object 를 Δ 이동해 G1 색으로).  5) train output 과 대조 = 검증.
+    반환 = (통과여부, program[list of (obj,dr,dc,color)]). 데이터(mapping)에서 나오지 task 하드코딩
+    아님(§1-5). pair-specific·specific value 허용(일반화는 이후 단계). 못 만들면(다중셀 등 실패) →
+    호출부가 hypothesized=failed → **main process 가** PIXEL 하강(hypothesize 안에서 하강 금지)."""
+    import sys
+    _arc = os.path.expanduser("~/Desktop/ARC-solver")
+    if _arc not in sys.path:
+        sys.path.insert(0, _arc)
+    from procedural_memory.DSL.transformation import make_grid, coloring   # frozen DSL 2개
+    from ARCKG.comparison import compare as kg_compare
+    idx = ag.kg["idx"]; nodes = idx["nodes"]
+    o0 = [o for o in idx["children"].get(gid0, []) if _obj_cc(nodes[o])[1] != 0]   # FG
+    o1 = [o for o in idx["children"].get(gid1, []) if _obj_cc(nodes[o])[1] != 0]
+    scored = []
+    for a in o0:
+        for b in o1:
+            n, tot = _score_frac(kg_compare(nodes[a], nodes[b])["result"].get("score", "0/1"))
+            scored.append((n / tot, a, b))
+    scored.sort(key=lambda x: -x[0])
+    usedA, usedB, prog = set(), set(), []
+    for _s, a, b in scored:                                     # greedy 1-1 (중복 객체 없이)
+        if a in usedA or b in usedB:
+            continue
+        usedA.add(a); usedB.add(b)
+        ca, _ = _obj_cc(nodes[a]); cb, colb = _obj_cc(nodes[b])
+        prog.append((a, cb[0][0] - ca[0][0], cb[0][1] - ca[0][1], colb))
+    size = {"height": len(out_grid), "width": len(out_grid[0])}
+    from collections import Counter
+    ig = ag.task["train"][0]["input"]
+    grid = make_grid(size, fill=Counter(v for r in ig for v in r).most_common(1)[0][0])
+    for a, dr, dc, colb in prog:                                # 시뮬레이션 조립
+        for (r, c) in _obj_cc(nodes[a])[0]:
+            rr, cc = r + dr, c + dc
+            if 0 <= rr < size["height"] and 0 <= cc < size["width"]:
+                grid = coloring(grid, (rr, cc), colb)
+    return grid == out_grid, prog                               # 검증 = train output 대조
+
+
+def _op_hypothesize(ag):
+    """**hypothesize operator body** — OBJECT 레벨 object mapping 을 program 으로 합성·검증한다.
+    한 PAIR(첫 train pair)에서 _hypothesize_program 호출: 통과면 PAIR.program 채우고
+    (sid ^hypothesized yes) + program-step 노출, 실패면 (sid ^hypothesized failed)."""
+    idx, sid = ag.kg["idx"], ag.stack[-1].id
+    root = ag.kg["arckg_root"]
+    p0 = root.example_pairs[0]
+    gid0, gid1 = p0.input_grid.node_id, p0.output_grid.node_id
+    ok, prog = _hypothesize_program(ag, gid0, gid1, ag.task["train"][0]["output"])
+    if ok:
+        ag.wm.add(sid, "hypothesized", "yes")
+        ppid = f"{p0.node_id}.property"                         # PAIR.program 슬롯(§6, property 아래)
+        if ag.wm.contains(ppid, "program", "{}"):
+            ag.wm.remove(ppid, "program", "{}")
+        ag.wm.add(ppid, "program", f"{len(prog)}-step: object별 (Δ,색) 재조립 → G1 재현")
+        for k, (a, dr, dc, colb) in enumerate(prog):            # program 구조 노출(§2-5)
+            st = f"{sid}.prog.s{k}"
+            ag.wm.add(sid, "program-step", st)
+            ag.wm.add(st, "obj", a.split(".")[-1])
+            ag.wm.add(st, "move", f"({dr},{dc})")
+            ag.wm.add(st, "recolor", str(colb))
+    else:
+        ag.wm.add(sid, "hypothesized", "failed")                # → main process 가 PIXEL 하강
+
+
 # operator body(RHS 함수) = production 으로 못 하는 원자연산만:
 #   observe = to_json 로드 · compare = kg_compare · select = 다음 대상 고르기(§1-3 탐색의 자리).
+#   hypothesize = object mapping → program 합성·검증(시뮬레이션 조립; 모듈 DSL make_grid/coloring).
 # 제어(무엇을 언제)는 전부 propose/apply 규칙 + WM 플래그로. solve 는 미구현(ONC=하강),
 # submit 은 apply-only(답은 output-link 에).
-OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select}
+OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select,
+                   "hypothesize": _op_hypothesize}
 
 
 # ---------------------------------------------------------------------------
@@ -598,6 +674,16 @@ PRODUCTIONS = [
                     [Cond("<s>", "select-for", "observe"), Cond("<s>", "selected", "<x>", negated=True)]),
     _propose_nonode("propose*select*compare", "select",
                     [Cond("<s>", "select-for", "compare"), Cond("<s>", "selected", "<x>", negated=True)]),
+
+    # ── hypothesize: OBJECT 레벨 object mapping 이 끝나면(compared) 발화 — object mapping 을
+    #    program(가설)으로 합성·검증(body=시뮬레이션 조립·train 대조). arg-선택 substate 불필요
+    #    (대상 object 는 mapping 에 있음). 통과=hypothesized yes(+PAIR.program), 실패=failed.
+    _propose_named("propose*hypothesize", "hypothesize",
+                   [Cond("<s>", "to-hypothesize", "yes"), Cond("<s>", "compared", "yes"),
+                    Cond("<s>", "hypothesized", "<h>", negated=True)]),
+    Production("apply*hypothesize",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "hypothesize")],
+               [Action("<s>", "hyp-applied", "yes")]),          # body 가 ^hypothesized yes/failed 세움
 
     # submit: predict 가 답을 output-link 에 얹고 ^answer-ready → 제출·채점.
     _propose("submit", [Cond("<s>", "answer-ready", "yes"), Cond("<s>", "done", "<x>", negated=True)]),
