@@ -619,7 +619,7 @@ OP_DOCS = {
 # dashboard generation (reuses dashboard._HTML; separate file, zero impact on the
 # working expr_solver dashboard)
 # ---------------------------------------------------------------------------
-def _dash_data(task, tid="0a", max_cycles=60):   # observe+compare+aggregate+find+solve+…×levels
+def _dash_data(task, tid="0a", max_cycles=1000):   # observe+compare+aggregate+find+solve+…×levels
     from arc.fine_trace import _Tracer
     tr = _Tracer(task, tid, setup=setup_focus_agent)
     events = tr.run(max_cycles=max_cycles)
@@ -655,13 +655,49 @@ def _rules_manifest():
             for p in PRODUCTIONS]
 
 
+def _safe_dash_data(task, tid, timeout_s=180):   # 제출 예산과 동일한 문제당 3분
+    """_dash_data 를 **태스크당 타임아웃 + 예외 격리**로 감싼다. 일반 ARC-AGI 태스크는 솔버가
+    가정한 구조(2 train + 1 test 등)와 달라 크래시하거나 오래 걸릴 수 있으므로, 한 태스크가
+    전체 생성을 죽이지 않게 한다. 실패/초과 시 빈 이벤트 stub + ^error 필드 → 대시보드는 그
+    태스크를 '무진행(n_steps=0)'으로 표시한다 (다양성 관찰이 목적이라 실패도 하나의 데이터)."""
+    import signal
+    class _TO(Exception):
+        pass
+    def _h(sig, frm):
+        raise _TO()
+    stub = {"id": tid, "events": [], "wm_states": [],
+            "grids": {"train": task.get("train", []),
+                      "test": [{"input": tp["input"]} for tp in task.get("test", [])]},
+            "candidates": [], "correct_attempt": None, "n_steps": 0, "error": None}
+    old = signal.signal(signal.SIGALRM, _h)
+    try:
+        signal.alarm(timeout_s)
+        d = _dash_data(task, tid)
+        signal.alarm(0)
+        return d
+    except _TO:
+        stub["error"] = f"timeout>{timeout_s}s"
+        return stub
+    except Exception as e:                               # noqa: BLE001 (관찰용, 어떤 실패든 stub)
+        stub["error"] = f"{type(e).__name__}: {str(e)[:120]}"
+        return stub
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
+
+
 def make_dashboard(tasks, dataset="focus (slice 1)"):
     """tasks: [(tid, task_dict), ...] — 대시보드 TASK BROWSER 에 카드로 나열."""
     from arc.dashboard import _HTML
     if isinstance(tasks, dict):                        # 단일 태스크 하위호환: make_dashboard(task_dict)
         tasks = [("task", tasks)]
-    data = {"dataset": dataset,
-            "tasks": [_dash_data(t, tid) for tid, t in tasks],
+    dash = []
+    for i, (tid, t) in enumerate(tasks, 1):
+        d = _safe_dash_data(t, tid)
+        term = "" if d["n_steps"] == 0 else ("✓풀림" if d.get("correct_attempt") is not None else "종료/중지")
+        print(f"  [{i:2}/{len(tasks)}] {tid:12} n_steps={d['n_steps']:6} {d.get('error') or term}", flush=True)
+        dash.append(d)
+    data = {"dataset": dataset, "tasks": dash,
             "rules": _rules_manifest(), "op_docs": OP_DOCS}
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_dashboard.html")
     with open(out, "w") as f:
@@ -687,10 +723,55 @@ def _load_made_and_real():
     return tasks
 
 
+def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, include_made=True):
+    """다양성 관찰용 묶음: easy 9 + made 2 + ARC-AGI 문제.
+    - agi_ids 지정 시: **그 id 들 정확히** 사용(area 필터 무시) — 서브셋 재생성용.
+    - 미지정 시: training 에서 **max(train grid area) ≤ area_cap** (≈≤14x14) 인 것 앞에서 n_agi 개.
+      WM 정렬 병목이 격자크기 비례라 시간/크기 예산 보호. 정렬 결정적 — 재현 가능.
+    목적은 풀이가 아니라 '현재 로직이 낯선 태스크에 어떻게 적용되나' 관찰(harness §2-4)."""
+    import glob
+    from arc.dataset import list_tasks, load_task
+    here = os.path.dirname(os.path.abspath(__file__))
+    tasks = []
+    if include_easy:
+        tasks += [(tid, load_task(p)) for tid, p in list_tasks("easy_a")]     # easy 9
+    if include_made:
+        for tid in ("made000a", "made000b"):                                 # made 2
+            p = os.path.join(here, "data", "made", f"{tid}.json")
+            if os.path.exists(p):
+                tasks.append((tid, load_task(p)))
+    agi_root = os.path.expanduser("~/Desktop/ARC-solver/data/ARC_AGI")
+    if agi_ids:                                                              # 명시 id 셋
+        for tid in agi_ids:
+            hits = glob.glob(os.path.join(agi_root, "**", f"{tid}.json"), recursive=True)
+            if hits:
+                tasks.append((tid, load_task(hits[0])))
+        return tasks
+    picked = 0                                                              # 자동 선택
+    for p in sorted(glob.glob(os.path.join(agi_root, "training", "*.json"))):
+        if picked >= n_agi:
+            break
+        t = load_task(p)
+        try:
+            area = max(len(g["input"]) * len(g["input"][0]) for g in t["train"])
+        except Exception:                                                    # noqa: BLE001
+            continue
+        if area > area_cap:
+            continue
+        tasks.append((os.path.splitext(os.path.basename(p))[0], t))
+        picked += 1
+    return tasks
+
+
+# 고정 관찰 세트 (사용자 지정 2026-07-09): easy 9 + made 2 + 실제 ARC-AGI 4 = 15
+SURVEY_AGI = ["08ed6ac7", "0ca9ddb6", "009d5c81", "11852cab"]
+
 if __name__ == "__main__":
     # made000a/b 가 없으면 먼저 생성
     from arc.make_made_tasks import write_all
     write_all()
-    tasks = _load_made_and_real()
-    out = make_dashboard(tasks)
-    print(f"wrote {out}\n  tasks: {[tid for tid, _ in tasks]}\nopen it:  open {out}")
+    tasks = _load_survey(agi_ids=SURVEY_AGI)
+    print(f"survey: easy 9 + made 2 + ARC-AGI {len(SURVEY_AGI)} — 총 {len(tasks)} 태스크 (max_cycles=1000)")
+    out = make_dashboard(tasks, dataset="survey (easy·made·ARC-AGI 15)")
+    sz = os.path.getsize(out) / 1e6
+    print(f"wrote {out}  ({sz:.1f} MB)\nopen it:  open {out}")

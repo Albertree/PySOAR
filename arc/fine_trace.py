@@ -64,6 +64,10 @@ class _Tracer:
         self.events = []
         self.cycle = 0
         self._cands: set = set()               # materialised ^operator + WMEs
+        # A안(2-사이클 충실 ONC): operator 가 적용됐으나 무변화면 여기에 (name, kind) 를 기록하고
+        # 이 사이클은 apply-fail 로 깨끗이 닫는다. no-change impasse 는 **다음 사이클 DECIDE** 에서
+        # 감지(원본 SOAR: no-change 는 한 사이클 뒤에 드러남). kind: 'arg'(observe/compare) | 'descend'(solve).
+        self._pending_onc: dict = {}            # goal_id -> (op_name, kind)
         # ARC-AGI 3회 재시도 환경 (submit → 채점 → 오답이면 다음 후보로 retry)
         from arc.environment import ARCEnvironment
         self.env = ARCEnvironment([(tid, task)])
@@ -280,105 +284,99 @@ class _Tracer:
             imp, cands = run_preference_semantics(slot)
             self.emit("decide", "decide",
                       f"preference resolution → impasse={imp.name}, candidates={list(cands)}")
+            from pysoar.decide import ImpasseType
+            # ── A안: 2-사이클 충실 ONC 감지 ────────────────────────────────────
+            # 지난 사이클에 이 operator 를 적용했으나 무변화였다면(pending) → 이번 사이클 DECIDE 가
+            # operator-no-change impasse 를 감지한다(원본 SOAR: no-change 는 한 사이클 뒤에 드러남).
+            # substate 생성/하강 후 **빈 apply phase → output**. 재적용하지 않는다.
+            pend = self._pending_onc.get(goal.id)
+            if (pend and imp.name == "NONE" and len(cands) == 1
+                    and self.ag.operator_name(cands[0]) == pend[0]):
+                name, kind = pend
+                del self._pending_onc[goal.id]
+                self.emit("decide", "op-select",
+                          f"({goal.id} ^operator {cands[0]}) [name={name}] — 지속·무진전")
+                ended = False
+                if kind == "arg":
+                    self.emit("decide", "substate",
+                              f"operator no-change impasse @ {goal.id} "
+                              f"(op={name} 지속·무진전 → arg-선택 substate)")
+                    self._open_arg_substate(goal, name)
+                else:  # 'descend' — 미구현(solve)
+                    self.emit("decide", "substate",
+                              f"operator no-change impasse @ {goal.id} (op={name} 미구현 → 한 계층 하강)")
+                    ended = not self._do_descend(goal, ImpasseType.ONC, "operator", name)
+                # 새 substate 는 아직 operator 가 없음 → 이 사이클 APPLY 는 비어 있음 → OUTPUT
+                self.emit("apply", "phase", f"cycle {self.cycle} — APPLY (비어 있음 · 새 substate)")
+                self.emit("apply", "op-apply", "새 substate — 이 사이클 apply 는 비어 있음")
+                self._emit_output()
+                if ended:
+                    break
+                continue
+
             if imp.name == "NONE" and len(cands) == 1:
                 op = cands[0]
                 self.ag._install_operator(goal, op)      # architecture installs bare WME
-                name = self.ag.operator_name(op)         # operator object -> its ^name
-                # the candidate +'s persist until their proposal retracts (during
-                # apply, when the result flag is set) -- _sync_candidates drops them.
+                name = self.ag.operator_name(op)
                 self.emit("decide", "op-select",
-                          f"({goal.id} ^operator {op}) [name={name}]",
-                          highlight=[str(op)])
-                # APPLY -- the operator's body is the RHS-FUNCTION of its apply*<name>
-                # production: it runs WHEN that rule fires (inside elaborate), so its
-                # structure + the rule's flag are ONE application. (SOAR: the effect is
-                # produced BY the apply rule firing, not in a separate pre-apply step.)
-                self.emit("apply", "phase", f"cycle {self.cycle} — APPLY ({name})")
-                body = self.ag.body_for(op)
-                has_apply = any(p.name == f"apply*{name}"
-                                for p in self.ag.elaborator.productions)
-                if body is None and not has_apply:
-                    # UNIMPLEMENTED operator: no apply rule, no RHS-function -> applying
-                    # it changes nothing => OPERATOR no-change impasse (SOAR attribute_of_
-                    # impasse: operator selected + no change -> ONC, attribute=operator).
-                    # The substate opens to IMPLEMENT the operator (SOAR operator-
-                    # implementation subgoaling); focus descends ONE ARCKG level so it can
-                    # gather what implementing it needs. When a future slice returns the
-                    # result, chunking compiles it into this operator's apply rule.
-                    from pysoar.decide import ImpasseType
-                    self.emit("apply", "op-apply",
-                              f"{name}: 적용 규칙 없음(미구현) → WM 변화 없음")
-                    self.emit("decide", "substate",
-                              f"operator no-change impasse @ {goal.id} (op={name}: 어떻게 적용할지 모름)")
-                    if not self._do_descend(goal, ImpasseType.ONC, "operator", name):
-                        self._emit_output()
-                        break
+                          f"({goal.id} ^operator {op}) [name={name}]", highlight=[str(op)])
+                st = self._apply_operator(goal, op, name)
+                if st == "onc_arg":
+                    # CYCLE 1 (apply-fail): observe/compare 가 arg 없이 적용→무변화. no-change 는
+                    # **다음 사이클** DECIDE 에서 감지(위 pending 분기). 이 사이클은 I→P→D→A→O 로 닫는다.
+                    self._pending_onc[goal.id] = (name, "arg")
                     self._emit_output()
-                    # NO break: next cycle decides at the new bottom goal (the substate)
-                elif body is not None and not has_apply:
-                    # no apply*<name> production -> the body IS the whole application
-                    # (e.g. descend moves the focus pointer). Run it as the apply.
-                    before = set(self.ag.wm)
-                    body(self.ag)
-                    after = set(self.ag.wm)
-                    added = sorted(after - before)
-                    removed = sorted(before - after)
-                    if added or removed:
-                        parts = ([f"+{len(added)}"] if added else []) + \
-                                ([f"−{len(removed)}"] if removed else [])
-                        self.emit("apply", "wme-add", f"{name} (apply) · {' '.join(parts)} WME",
-                                  highlight=[_wstr(t) for t in added] + [_wstr(t) for t in removed],
-                                  detail=_kg_detail(self.ag.kg, name), rule=name, wave=None)
-                    self.elaborate("apply")
+                elif st == "onc_descend":
+                    self._pending_onc[goal.id] = (name, "descend")
                     self._emit_output()
-                    if name == "submit":
-                        if not self._submit_and_maybe_retry():
-                            break
-                    elif self.ag.wm.contains("S1", "done", "yes"):
-                        break
-                else:
-                    # body tied to apply*<name> firing (structure + flag = one wm-update)
-                    before = set(self.ag.wm)
-                    self.elaborate("apply", body=body, op_name=name)
-                    self._emit_output()
-                    if before == set(self.ag.wm) and name in ("observe", "compare"):
-                        # arg(대상) 미정 → 적용 불가(WM 변화 없음) → ONC impasse → arg-선택 substate.
-                        # 그 안의 select 가 super 의 커서를 정하면 impasse 풀려 pop (SNC 분기).
-                        self._open_arg_substate(goal, name)
-                    elif name == "submit":
-                        if not self._submit_and_maybe_retry():
-                            break
-                    elif self.ag.wm.contains("S1", "done", "yes"):
-                        break
+                elif not self._after_apply(st):
+                    break
             elif imp.name == "NONE" and len(cands) == 0:
-                # NO operator selectable at this goal.
-                from pysoar.decide import ImpasseType
-                # (1) arg-선택 substate 인데 더 고를 게 없다 = arg 를 super 에 세워줬거나 전부 완료
-                #     → impasse 해소 → **pop** (superstate 로 복귀; super 의 observe/compare 가 apply).
-                selfor = next((v for (i, a, v) in self.ag.wm if i == goal.id and a == "select-for"), None)
+                selfor = next((v for (i, a, v) in self.ag.wm
+                               if i == goal.id and a == "select-for"), None)
                 if selfor is not None:
-                    self.emit("decide", "substate",
-                              f"arg 선택 끝 → substate {goal.id} pop · superstate 복귀")
+                    # ── A안 FOLD: arg 확보로 super 의 impasse 해소 → substate 제거(DECIDE)하고
+                    #     **같은 사이클**에 super operator 를 재선택·적용(APPLY). 독립 pop 사이클 없음
+                    #     (원본 SOAR: 제거는 부모 슬롯이 풀리는 DECIDE 에 folded, 부모 apply 는 그 사이클). ──
                     sup = self.ag.stack[-2] if len(self.ag.stack) >= 2 else None
+                    self.emit("decide", "substate",
+                              f"impasse 해소(arg 확보) → substate {goal.id} 제거(folded) · "
+                              f"superstate {sup.id if sup else '?'} 재개")
                     self.ag.remove_substates_below(max(len(self.ag.stack) - 2, 0))
-                    # super 의 operator 선택 해제 → 그 operator(observe/compare)가 arg 를 갖고 **새로**
-                    # 선택·apply 되어 body(관측/비교)가 실행된다. (안 지우면 apply 규칙만 propose
-                    # elaboration 에서 발화해 body 없이 flag 만 세워버림 — 방금의 버그.)
-                    if sup is not None:
-                        for (i, a, v) in list(self.ag.wm):
-                            if i == sup.id and a == "operator":
-                                self.ag.wm.remove(i, a, v)
-                        sup.selected = None
-                    self._emit_output()
+                    if sup is None:
+                        self.emit("apply", "phase", f"cycle {self.cycle} — APPLY (비어 있음)")
+                        self._emit_output()
+                        continue
+                    slot2 = self.ag.collect_operator_prefs(sup.id)
+                    imp2, cands2 = run_preference_semantics(slot2)
+                    if imp2.name == "NONE" and len(cands2) == 1:
+                        op2 = cands2[0]
+                        self.ag._install_operator(sup, op2)
+                        n2 = self.ag.operator_name(op2)
+                        self.emit("decide", "op-select",
+                                  f"({sup.id} ^operator {op2}) [name={n2}] — arg 확보 후 재개",
+                                  highlight=[str(op2)])
+                        st = self._apply_operator(sup, op2, n2)
+                        if st == "onc_arg":
+                            self._pending_onc[sup.id] = (n2, "arg")
+                            self._emit_output()
+                        elif st == "onc_descend":
+                            self._pending_onc[sup.id] = (n2, "descend")
+                            self._emit_output()
+                        elif not self._after_apply(st):
+                            break
+                    else:
+                        self.emit("apply", "phase", f"cycle {self.cycle} — APPLY (비어 있음)")
+                        self._emit_output()
                     continue
-                # (2) 그 외 = 이 레벨 정보로 진전 불가 → STATE NO-CHANGE IMPASSE → 한 ARCKG 계층 하강.
+                # arg-substate 아님 = 이 레벨 정보로 진전 불가 → STATE NO-CHANGE → 한 계층 하강.
                 self.emit("decide", "substate",
                           f"state no-change impasse @ {goal.id} (이 레벨 정보로 진전 불가)")
-                if not self._do_descend(goal, ImpasseType.SNC, "state", None):
-                    self._emit_output()
-                    break
+                ended = not self._do_descend(goal, ImpasseType.SNC, "state", None)
+                self.emit("apply", "phase", f"cycle {self.cycle} — APPLY (비어 있음 · 새 substate)")
                 self._emit_output()
-                # NO break: next cycle decides at the new bottom goal (the substate)
+                if ended:
+                    break
             else:
                 # tie/conflict/etc -- not expected in this (single-candidate) solver
                 self.emit("decide", "substate",
@@ -472,16 +470,12 @@ class _Tracer:
         return sub
 
     def _open_arg_substate(self, goal, opname):
-        """observe/compare 가 arg(대상) 없이 걸린 ONC impasse → **arg-선택 substate**. 그 안의
-        select 가 super(goal)의 커서(^cursor/^cmp-active)를 정하면 impasse 가 풀려 pop 된다
-        (SNC 분기). ARCKG 계층 하강(_do_descend)과 달리 계층은 그대로 — 같은 goal 의 arg 만 정함."""
+        """arg-선택 substate 를 **생성만** 한다 (impasse-detect 사이클의 DECIDE 에서 호출).
+        apply-fail 방출은 앞선 apply-fail 사이클이, 빈 apply·output 은 호출부가 담당한다(A안).
+        select 가 super 의 ^cursor/^cmp-active 를 정하면 impasse 가 풀려 fold 로 제거된다."""
         from pysoar.decide import ImpasseType
-        self.emit("apply", "op-apply", f"{opname}: arg(대상) 미정 → WM 변화 없음")
-        self.emit("decide", "substate",
-                  f"operator no-change impasse @ {goal.id} (op={opname}: arg 미정 → select 로 결정)")
         # super 의 operator 선택 해제 — 안 지우면 select 이 super 커서를 세우는 순간 apply*{opname}
-        # 규칙이 (아직 선택된 operator + 새 커서로) elaboration 에서 발화해 body 없이 flag 만 세운다.
-        # 지우면 arg 확보 후 operator 가 **새로** 선택·apply 되어 body(관측/비교)가 실행된다.
+        # 규칙이 elaboration 에서 발화해 body 없이 flag 만 세운다. 지우면 fold 에서 새로 선택·apply.
         for (i, a, v) in list(self.ag.wm):
             if i == goal.id and a == "operator":
                 self.ag.wm.remove(i, a, v)
@@ -492,7 +486,51 @@ class _Tracer:
         self.emit("decide", "substate",
                   f"substate {sub.id} 생성 · {opname} 의 arg 선택 (superstate={goal.id})",
                   highlight=[f"({sub.id} ^select-for {opname})", f"({sub.id} ^superstate {goal.id})"])
+        return sub
+
+    def _apply_operator(self, goal, op, name):
+        """APPLY phase 를 실행하고 상태 문자열을 반환한다 (main 루프와 fold 가 공용):
+           'onc_arg'     — observe/compare 적용했으나 무변화(arg 미정) → 호출부가 pending 기록
+           'onc_descend' — 미구현(solve) 적용, 규칙 없음 → 호출부가 pending 기록
+           'submit'      — submit 적용됨(채점은 호출부)
+           'done'        — (S1 ^done yes)
+           'ok'          — 정상 적용(WM 변화)."""
+        self.emit("apply", "phase", f"cycle {self.cycle} — APPLY ({name})")
+        body = self.ag.body_for(op)
+        has_apply = any(p.name == f"apply*{name}" for p in self.ag.elaborator.productions)
+        if body is None and not has_apply:
+            self.emit("apply", "op-apply", f"{name}: 적용 규칙 없음(미구현) → WM 변화 없음")
+            return "onc_descend"
+        if body is not None and not has_apply:
+            before = set(self.ag.wm)
+            body(self.ag)
+            after = set(self.ag.wm)
+            added, removed = sorted(after - before), sorted(before - after)
+            if added or removed:
+                parts = ([f"+{len(added)}"] if added else []) + ([f"−{len(removed)}"] if removed else [])
+                self.emit("apply", "wme-add", f"{name} (apply) · {' '.join(parts)} WME",
+                          highlight=[_wstr(t) for t in added] + [_wstr(t) for t in removed],
+                          detail=_kg_detail(self.ag.kg, name), rule=name, wave=None)
+            self.elaborate("apply")
+            return "submit" if name == "submit" else \
+                   ("done" if self.ag.wm.contains("S1", "done", "yes") else "ok")
+        # has_apply(+body): apply 규칙 발화 = 적용
+        before = set(self.ag.wm)
+        self.elaborate("apply", body=body, op_name=name)
+        if before == set(self.ag.wm) and name in ("observe", "compare"):
+            return "onc_arg"
+        return "submit" if name == "submit" else \
+               ("done" if self.ag.wm.contains("S1", "done", "yes") else "ok")
+
+    def _after_apply(self, st):
+        """_apply_operator 반환값 처리 공용부. output 방출 + submit/done 시 종료 여부 반환
+        (True=계속, False=run 루프 break)."""
         self._emit_output()
+        if st == "submit":
+            return self._submit_and_maybe_retry()
+        if st == "done":
+            return False
+        return True
 
 
 def fine_trace(task, tid="0a", setup=None, max_cycles=10):

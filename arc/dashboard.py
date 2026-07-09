@@ -260,8 +260,8 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
 .lbl{color:var(--muted);font-weight:600;margin-right:3px} .key{color:var(--gold);font-weight:600}
 .rule .txt{color:#c2c8d4} .arrow{color:var(--muted)}
 .opcard{border:1px solid var(--accent);border-radius:7px;padding:7px 9px;margin:4px 0;background:var(--p2)}
-table.g{border-collapse:collapse} table.g td{width:10px;height:10px;border:1px solid #222}
-.pair{display:flex;align-items:center;gap:5px;margin:3px 0} .pair .cap{font-size:10px;color:var(--muted);width:38px}
+table.g{border-collapse:collapse;table-layout:fixed;flex:none} table.g td{width:10px;height:10px;min-width:10px;border:1px solid #222}
+.pair{display:flex;align-items:center;gap:5px;margin:3px 0;width:max-content} .pair .cap{font-size:10px;color:var(--muted);width:38px;flex:none}
 .cand{display:inline-block;text-align:center;margin:0 8px 8px 0;vertical-align:top}
 .cand .cap{font-size:11px;color:var(--muted);display:block;margin-bottom:2px}
 .exprrow{font-family:ui-monospace,monospace;font-size:12px;margin:2px 0} .exprrow .a{color:var(--blue);min-width:64px;display:inline-block}
@@ -274,7 +274,7 @@ kbd{background:var(--p2);border:1px solid var(--line);border-radius:4px;padding:
 <div id="stepper">
  <div id="sbar"></div>
  <div id="phases"></div>
- <div class="panel" id="pmap"><h3>cycle map<span class="info">i<div class="tip">시스템의 <b>모든 원자적 변화 1개 = 1스텝</b>. ▶ = 현재 스텝. 클릭하거나 <b>← →</b> (또는 ↑ ↓)로 이동.<br><b>박스 친 줄 = 큰 단계</b>(input → propose → decide → apply → output)가 풀이의 구조. 그 아래 줄들이 그 단계 안에서 일어난 변화.<br><b>wave N</b>(평문) = 그 단계 안의 <b>elaboration sub-cycle</b>. <b>wave 1</b> = 정식 결정에 의한 1차 발화(propose의 operator 제안 / apply의 apply 규칙·body), <b>wave 2·3…</b> = 그 결과로 연쇄된 2차 wave. 같은 wave 번호 = 한 settle 라운드.<br>각 wave는 <b>match → fire → wm-update</b> 3원자단계로, cycle map에서 <b>왼쪽 색 띠</b>로 구분: <b style="color:#ff9d2e">match=주황</b>(LHS 충족/깨짐 검출), <b style="color:#b98aff">fire/retract=보라</b>(발화·철회를 한 색으로; rules 패널에선 초록/빨강 구분), <b class=g>wm-update=녹색</b>(preference가 WME로 들어가 WM 변화). operator <b>body</b>(직접 적용)는 wave가 아니라 APPLY phase의 효과라 색 띠·wave 번호가 없다. <b>WM은 wm-update에서만 바뀐다</b>(match·fire 땐 불변). 발화했는데 뒤에 wm-update가 없으면 = 그 결과가 o-support라 제거할 게 없는 무해한 철회.<br>각 줄은 <b>[wave][stage][detail]</b> 고정폭 컬럼으로 정렬되고, detail이 길면 <b>…</b>로 잘린다 — 줄을 클릭하면 <b>하단 바</b>에서 전체 텍스트를 본다.</div></span></h3><div id="map"></div></div>
+ <div class="panel" id="pmap"><h3>cycle map<span class="info">i<div class="tip">시스템의 <b>모든 원자적 변화 1개 = 1스텝</b>. ▶ = 현재 스텝. 클릭하거나 <b>↑↓</b>(한 스텝씩)·<b>←→</b>(다음/이전 wm-update로 점프)로 이동.<br><b>박스 친 줄 = 큰 단계</b>(input → propose → decide → apply → output)가 풀이의 구조. 그 아래 줄들이 그 단계 안에서 일어난 변화.<br><b>wave N</b>(평문) = 그 단계 안의 <b>elaboration sub-cycle</b>. <b>wave 1</b> = 정식 결정에 의한 1차 발화(propose의 operator 제안 / apply의 apply 규칙·body), <b>wave 2·3…</b> = 그 결과로 연쇄된 2차 wave. 같은 wave 번호 = 한 settle 라운드.<br>각 wave는 <b>match → fire → wm-update</b> 3원자단계로, cycle map에서 <b>왼쪽 색 띠</b>로 구분: <b style="color:#ff9d2e">match=주황</b>(LHS 충족/깨짐 검출), <b style="color:#b98aff">fire/retract=보라</b>(발화·철회를 한 색으로; rules 패널에선 초록/빨강 구분), <b class=g>wm-update=녹색</b>(preference가 WME로 들어가 WM 변화). operator <b>body</b>(직접 적용)는 wave가 아니라 APPLY phase의 효과라 색 띠·wave 번호가 없다. <b>WM은 wm-update에서만 바뀐다</b>(match·fire 땐 불변). 발화했는데 뒤에 wm-update가 없으면 = 그 결과가 o-support라 제거할 게 없는 무해한 철회.<br>각 줄은 <b>[wave][stage][detail]</b> 고정폭 컬럼으로 정렬되고, detail이 길면 <b>…</b>로 잘린다 — 줄을 클릭하면 <b>하단 바</b>에서 전체 텍스트를 본다.</div></span></h3><div id="map"></div></div>
  <div class="panel" id="pwm"><h3>working memory<span class="info">i<div class="tip"><b>S1을 루트로 한 단일 WM 트리.</b> 모든 줄 = <b>(id ^attr value)</b> WME 삼중쌍. ▸ 토글로 lazy 하위(pair·grid·object) 펼침. 우측 <b>⇕ all</b> = 전부 열기(일부라도 닫혀 있으면)/전부 닫기. 한 토글의 열림 상태는 다음 step으로 유지되고, 다음 step에서 새로 생긴 토글은 닫힌 채로 시작.<br>색: <span class=g>녹색 바탕</span>=그 줄 추가, <span class=r>빨강 바탕</span>=그 줄 삭제. 하위에서만 바뀐 상위 토글은 <b>글자색만</b> — <span class=g>녹=추가</span>/<span class=r>적=삭제</span>/<span class=o>주황=혼합</span>.<br>한 객체가 두 엣지로 가리켜질 때(예: 선택된 <b>(S1 ^operator O1)</b>와 그 acceptable preference <b>(S1 ^operator O1 +)</b>가 둘 다 O1을 가리킴) 하위는 <b>먼저 나온 엣지 아래에 한 번</b>만 펼치고, 나머지 엣지는 <b>평범한 leaf</b>로 둔다(중복 방지).</div></span><button class=allbtn onclick="toggleAll('wm')" title="전부 열기 / 전부 닫기">⇕ all</button></h3><div id="wm"></div></div>
  <div class="panel" id="prules"><h3>rules<span class="info">i<div class="tip">에이전트의 <b>기본 production 규칙</b> (절차적 지식). 이 step에 <b>발화한 규칙</b> = <span class=g>초록 테두리 ● fired</span>, <b>철회된 규칙</b> = <span class=r>빨강 테두리 ● retracted</span>. <b>match step</b>에선 발화/철회 직전 상태로 <span class=o>◌ matched(주황 점선=LHS 충족, 발화 대기)</span>·<span class=r>◌ unmatched(붉은 점선=LHS 깨짐, 철회 대기)</span> 표시. 철회는 LHS가 더는 만족되지 않아 instantiation이 사라진 것이라, 그 규칙의 조건이 <b>회색(미충족)</b>으로 보이는 게 정상이다. 조건은 <b>종류별 배경색</b>: <span class=bl>긍정(파랑 기)</span> = WM에 있어야 함, <span class=r>부정(빨강 기, 앞에 −)</span> = WM에 없어야 함. 글자색: <b>회색=미충족</b>, 충족되면 <span class=bl>긍정 파랑</span>/<span class=r>부정 빨강</span> 진한색. THEN의 operator = 금색. 한 규칙은 <b>모든 조건이 충족(=진한색)</b>일 때만 발화. 카드는 기본 <b>접힘</b>(WM과 동일) — 클릭해 펼치면 다음 step으로 유지. 우측 <b>⇕ all</b>로 전부 열기/닫기.</div></span><button class=allbtn onclick="toggleAll('rules')" title="전부 열기 / 전부 닫기">⇕ all</button></h3><div id="rules"></div></div>
  <div id="pright">
@@ -502,8 +502,9 @@ function wmStates(ti){
 }
 function renderStep(){
  const t=D.tasks[ti],ev=t.events,e=ev[step];
+ if(!ev.length){$('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=bad>${esc(t.error||'no steps')}</span> <span class=hint><kbd>Esc</kbd> 목록</span>`;$('phases').innerHTML='';$('map').innerHTML=`<div style="padding:24px;color:var(--muted)">진행 스텝 없음 — ${esc(t.error||'unknown')}</div>`;$('wm').innerHTML='';$('cand').innerHTML='';$('pevent').innerHTML='';return;}
  $('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=hint>step ${step+1}/${ev.length} · cycle ${e.cycle}</span>
-  <span class=hint>← → 스텝 · <kbd>Esc</kbd> 목록 · <kbd>Home/End</kbd></span>
+  <span class=hint>↑↓ 스텝 · ←→ wm-update · <kbd>Esc</kbd> 목록 · <kbd>Home/End</kbd></span>
   <span style="margin-left:auto">${t.correct_attempt===null?'<span class=bad>unsolved</span>':'<span class=ok>solved (try '+(t.correct_attempt+1)+')</span>'}</span>`;
  $('phases').innerHTML=PHASES.map(p=>`<div class="ph${p==e.phase?' on':''}">${p}</div>`).join('<span class=hint>→</span>');
  // colour-band the 3 wave atoms: match / fire+retract (one colour) / wm-update
@@ -620,10 +621,12 @@ document.addEventListener('keydown',ev=>{
    else if(ev.key=='Enter'){openTask();return;} else return;
    ev.preventDefault();renderBrowser();
  } else {
-   const n=D.tasks[ti].events.length;
-   // cycle map is vertical: Down/Right = next, Up/Left = prev
-   if(ev.key=='ArrowRight'||ev.key=='ArrowDown')step=Math.min(n-1,step+1);
-   else if(ev.key=='ArrowLeft'||ev.key=='ArrowUp')step=Math.max(0,step-1);
+   const evs=D.tasks[ti].events, n=evs.length;
+   // ↑↓ = 한 스텝씩(원자단계) · ←→ = 다음/이전 wm-update(=실제 WM 변화)로 점프
+   if(ev.key=='ArrowDown')step=Math.min(n-1,step+1);
+   else if(ev.key=='ArrowUp')step=Math.max(0,step-1);
+   else if(ev.key=='ArrowRight'){let j=step+1;while(j<n&&evs[j].kind!='wm-update')j++;step=j<n?j:n-1;}
+   else if(ev.key=='ArrowLeft'){let j=step-1;while(j>=0&&evs[j].kind!='wm-update')j--;step=j>=0?j:0;}
    else if(ev.key=='Home')step=0; else if(ev.key=='End')step=n-1;
    else if(ev.key=='Escape'){renderBrowser();return;} else return;
    ev.preventDefault();renderStep();
