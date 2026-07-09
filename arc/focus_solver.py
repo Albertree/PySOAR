@@ -290,21 +290,22 @@ def _build_agenda(ag, sid, group):
                 specs.append((cid, "cross", order)); order += 1
         specs.append((f"{sid}.cmp:predict", "predict", order))
     elif kind == "object":
-        # OBJECT: 각 train pair 의 G0-objects ↔ G1-objects 대응(correspondence). 하강 이유가
-        # contents DIFF(=GRID 하위 구성요소의 변환을 알아야 함)라, GRID간 object 대응이 핵심
-        # (GRID 내부 object 비교는 부차 — 사용자 설계). match = N×M kg_compare → score 순위.
-        bygrid = {}
+        # OBJECT: G0→G1 transformation 은 **한 PAIR 안**에서 찾는다 (사용자 교정 2026-07-10).
+        # inter-PAIR object 비교(P1·P2 의 G0×G1 매칭)는 **하지 않는다** — 변환은 P0 하나에서
+        # 도출하고, 다른 pair 는 나중에 그 변환을 *선택적으로 적용·검증*(부하 O(n²)→피함).
+        # 그래서 여기선 **첫 train pair 한 개**의 G0-objs ↔ G1-objs 대응만 만든다.
+        bygrid, bypair = {}, {}
         for o in group:
             bygrid.setdefault(par[o], []).append(o)             # object → 그 grid
-        bypair = {}
         for g in bygrid:
             bypair.setdefault(par[g], []).append(g)             # grid → 그 pair
-        order = 0
-        for p in sorted(pp for pp, gs in bypair.items() if len(gs) >= 2):   # G0·G1 다 있는 train pair
+        train = sorted(pp for pp, gs in bypair.items() if len(gs) >= 2)   # G0·G1 다 있는 pair
+        if train:
+            p = train[0]                                        # 첫 PAIR 만 (다음 PAIR 로 안 넘어감)
             g0, g1 = sorted(bypair[p])
             cid = f"{sid}.cmp:match.{p.split('.')[-1]}"
             ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1); ag.wm.add(cid, "pair", p)
-            specs.append((cid, "match", order)); order += 1
+            specs.append((cid, "match", 0))
     for cid, k, order in specs:
         ag.wm.add(sid, "cmp", cid)                       # 계층 아래 비교 목록(선언적)
         ag.wm.add(cid, "kind", k)
