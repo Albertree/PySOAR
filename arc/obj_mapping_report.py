@@ -65,20 +65,34 @@ def _ordinal(i):
     return f"{i + 1}번째"
 
 
+def _short(v, n=44):
+    """긴 값(contents/coordinate/shape 배열 등)을 … 로 축약해 문자열로."""
+    s = str(v)
+    return html.escape(s if len(s) <= n else s[:n] + "…")
+
+
+def _trunc(v, n=64):
+    """receipt comp 값: 짧으면 원형(JSON 구조 유지), 길면 … 축약 문자열로."""
+    s = json.dumps(v, ensure_ascii=False)
+    return v if len(s) <= n else s[:n] + "…"
+
+
 def _obj_props_html(oid, j, i):
     """object 한 개의 카드: '몇 번째' 순번 + O-이름 + contents 미니그리드 + 텍스트 속성행.
     시각화는 contents 만 (shape 미니그리드 제거)."""
     short = oid.split(".")[-1]
-    rows = [
-        ("소속(id)", html.escape(oid)),
-        ("area", j["area"]),
-        ("color", _colors(j["color"])),
-        ("coordinate", html.escape(str(j["coordinate"]))[:46]),
-        ("method", ",".join(k for k, v in j["method"].items() if v) or "-"),
-        ("position(lt)", _pos(j["position"])),
-        ("size", f"{j['size']['height']}×{j['size']['width']}"),
-        ("symmetry", _sym(j["symmetry"])),
-    ]
+    vals = {
+        "area": j["area"],
+        "color": _colors(j["color"]),
+        "contents": _short(j["contents"]),
+        "coordinate": _short(j["coordinate"]),
+        "method": ",".join(k for k, v in j["method"].items() if v) or "-",
+        "position": _pos(j["position"]),
+        "shape": _short(j["shape"]),
+        "size": f"{j['size']['height']}×{j['size']['width']}",
+        "symmetry": _sym(j["symmetry"]),
+    }
+    rows = [("소속(id)", html.escape(oid))] + [(p, vals[p]) for p in PROPS]  # 9속성 전부
     body = "".join(f"<div class=prow><span class=pk>{html.escape(k)}</span>"
                    f"<span class=pv>{v}</span></div>" for k, v in rows)
     hdr = (f"<div class=ohdr><span class=ord>{_ordinal(i)}</span>"
@@ -89,19 +103,18 @@ def _obj_props_html(oid, j, i):
 
 
 def _prune_receipt(receipt):
-    """플로팅 윈도우용 comparison receipt dict — 큰 배열(contents/shape/coordinate)은
-    {type} 로만(그림은 위에서 보이므로), 스칼라 속성은 comp1/comp2 까지 남긴다."""
+    """플로팅 윈도우용 comparison receipt dict — **9속성 전부** type + comp1/comp2 를 남긴다.
+    큰 배열(contents/shape/coordinate)도 빼지 않고 … 로 축약해 보여준다 (사용자 요청 2026-07-10)."""
     r = receipt["result"]
     cat = {}
     for k, v in r.get("category", {}).items():
         if not isinstance(v, dict):
             continue
         e = {"type": v.get("type")}
-        if k not in ("contents", "shape", "coordinate"):
-            if "comp1" in v:
-                e["comp1"] = v["comp1"]
-            if "comp2" in v:
-                e["comp2"] = v["comp2"]
+        if "comp1" in v:
+            e["comp1"] = _trunc(v["comp1"])
+        if "comp2" in v:
+            e["comp2"] = _trunc(v["comp2"])
         cat[k] = e
     return {"id": receipt.get("id"), "type": r.get("type"),
             "score": r.get("score"), "category": cat}
