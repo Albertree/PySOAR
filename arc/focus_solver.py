@@ -266,7 +266,7 @@ def _build_agenda(ag, sid, group):
     무엇을 비교할지는 ARCKG level 구조로 지각(perception): peers / within / cross / predict.
       PAIR : peers — 관측된 pair 들 비교 → 불균형(결핍 역할) 발견
       GRID : 훈련 pair 별 within(G0↔G1) → cross(입력·변화·출력 삼중쌍) → predict
-      OBJECT: 없음 — observe 만 하고 정지 (사용자 요청)."""
+      OBJECT: 각 train pair 의 G0-objects ↔ G1-objects 대응(match, score 순위)."""
     idx = ag.kg["idx"]; lvls, par = idx["level"], idx["parent"]
     kind = lvls[group[0]] if group else None
     specs = []                                          # (cid, kind, order)
@@ -294,6 +294,22 @@ def _build_agenda(ag, sid, group):
                     ag.wm.add(cid, "pair", p)
                 specs.append((cid, "cross", order)); order += 1
         specs.append((f"{sid}.cmp:predict", "predict", order))
+    elif kind == "object":
+        # OBJECT: 각 train pair 의 G0-objects ↔ G1-objects 대응(correspondence). 하강 이유가
+        # contents DIFF(=GRID 하위 구성요소의 변환을 알아야 함)라, GRID간 object 대응이 핵심
+        # (GRID 내부 object 비교는 부차 — 사용자 설계). match = N×M kg_compare → score 순위.
+        bygrid = {}
+        for o in group:
+            bygrid.setdefault(par[o], []).append(o)             # object → 그 grid
+        bypair = {}
+        for g in bygrid:
+            bypair.setdefault(par[g], []).append(g)             # grid → 그 pair
+        order = 0
+        for p in sorted(pp for pp, gs in bypair.items() if len(gs) >= 2):   # G0·G1 다 있는 train pair
+            g0, g1 = sorted(bypair[p])
+            cid = f"{sid}.cmp:match.{p.split('.')[-1]}"
+            ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1); ag.wm.add(cid, "pair", p)
+            specs.append((cid, "match", order)); order += 1
     for cid, k, order in specs:
         ag.wm.add(sid, "cmp", cid)                       # 계층 아래 비교 목록(선언적)
         ag.wm.add(cid, "kind", k)
@@ -377,8 +393,53 @@ def _do_compare_kind(ag, sid, c, kind):
     elif kind == "cross":
         which = _wm_vals(ag, c, "which")[0]
         _cross_grids(ag, sid, which, sorted(_wm_vals(ag, c, "pair")), kg_compare, nodes, idx)
+    elif kind == "match":                                           # OBJECT: G0-objs ↔ G1-objs 대응
+        g0, g1, p = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0], _wm_vals(ag, c, "pair")[0]
+        _compare_objects(ag, sid, c, g0, g1, p, kg_compare, nodes, idx)
     elif kind == "predict":
         _predict_test_output(ag, sid)
+
+
+def _score_frac(s):
+    """kg_compare result.score('n/total' = COMM수/전체속성) → (n, total). robust."""
+    try:
+        n, tot = str(s).split("/")
+        return int(n), int(tot) or 1
+    except Exception:                                              # noqa: BLE001
+        return 0, 1
+
+
+def _compare_objects(ag, sid, c, g0, g1, pair, kg_compare, nodes, idx, topk=16):
+    """한 train pair 의 **G0-objects × G1-objects 전부**를 kg_compare 해 유사도(score=COMM/전체)로
+    내림차순 순위. 높은 순위 = GRID 간 대응(correspondence) 후보 — '어느 object 가 어느 것이 됐나'.
+    (하드코딩 매칭 아님 — score 는 compare 결과에서, 순위는 그 정렬일 뿐, §1-5.)
+
+    크기 관리(§2-5 는 가시성, 하지만 N×M full cascade 는 큰 격자에서 폭발):
+      · 랭킹은 **상위 topk 만** (c ^match <mid>) 로 노출 + 총 비교 수(^n-compared) 로그.
+      · full relation edge(무엇이 COMM/DIFF = per-object 변환 스펙)는 **G0-object 당 최선 대응 1개만**
+        저장(N 개, N×M 아님) — 이게 hypothesize 가 쓸 변환 근거."""
+    g0objs, g1objs = idx["children"].get(g0, []), idx["children"].get(g1, [])
+    scored = []
+    for a in g0objs:
+        for b in g1objs:
+            rel = kg_compare(nodes[a], nodes[b])
+            n, tot = _score_frac(rel["result"].get("score", "0/1"))
+            scored.append((n / tot, n, tot, a, b, rel))
+    scored.sort(key=lambda t: (-t[0], t[3], t[4]))                # 유사도 ↓, 결정적 tiebreak
+    for rank, (sim, n, tot, a, b, rel) in enumerate(scored[:topk]):    # 상위만 노출(폭발 방지)
+        mid = f"{c}.m{rank}"
+        ag.wm.add(c, "match", mid)
+        ag.wm.add(mid, "g0obj", a)
+        ag.wm.add(mid, "g1obj", b)
+        ag.wm.add(mid, "score", f"{n}/{tot}")
+        ag.wm.add(mid, "rank", str(rank))
+    ag.wm.add(c, "n-compared", str(len(scored)))                  # 총 N×M 비교 수(로그, §1-5)
+    best = {}                                                      # G0-object 당 최선 대응
+    for (sim, n, tot, a, b, rel) in scored:
+        best.setdefault(a, rel)
+    for rel in best.values():
+        _store_relation(ag, rel)                                  # 변환 스펙(COMM/DIFF) 만 full 저장
+    ag.kg.setdefault("obj_match", {})[pair] = [(a, b, n, tot) for (sim, n, tot, a, b, rel) in scored]
 
 
 def _cross_grids(ag, sid, which, pairs, kg_compare, nodes, idx):
