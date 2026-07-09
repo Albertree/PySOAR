@@ -996,7 +996,7 @@ def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, includ
 
 
 # 고정 관찰 세트 (사용자 지정 2026-07-09): easy 9 + made 2 + 실제 ARC-AGI 4 = 15
-SURVEY_AGI = ["08ed6ac7", "0ca9ddb6", "009d5c81", "11852cab"]
+SURVEY_AGI = ["08ed6ac7", "0ca9ddb6", "009d5c81", "11852cab", "845d6e51", "868de0fa"]
 
 if __name__ == "__main__":
     # made000a/b 가 없으면 먼저 생성
