@@ -29,9 +29,11 @@ def make_grid(height, width, fill):
     return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
+def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
+    o = type("Obj", (), {})(); o.coord = coord; o.color = color; return o
 # --- input (this pair) ---
 input_grid = %s
-# --- synthesized program (rule-based) ---
+# --- objects & synthesized program (rule-based) ---
 '''
 
 
@@ -109,11 +111,12 @@ function gridHTML(g){{if(!g)return'';let h='<table class=g>';for(const row of g)
 function coloring(grid,cells,color){{let g=grid.map(r=>r.slice());for(const [r,c] of cells){{if(g[r]&&g[r][c]!==undefined)g[r][c]=color;}}return g;}}
 function make_grid(h,w,fill){{return Array.from({{length:h}},()=>Array(w).fill(fill));}}
 function apply_DSL(grid,func){{const args=Array.prototype.slice.call(arguments,2);return func.apply(null,[grid].concat(args));}}
+function obj(coord,color){{return {{coord:coord,color:color}};}}
 function eq(a,b){{return JSON.stringify(a)===JSON.stringify(b);}}
 function run(id){{
  const t=D[id];if(!t||!t.program)return;
- // 파이썬 program → JS: (r, c) 튜플 → [r,c], tfgN/output_grid 선언
- let js=t.program.replace(/\\((\\d+),\\s*(\\d+)\\)/g,'[$1,$2]').replace(/^(tfg\\d+|output_grid)\\s*=/gm,'var $1 =');
+ // 파이썬 program → JS: (r, c) 튜플 → [r,c], 변수(tfg/O/T/output_grid) 선언
+ let js=t.program.replace(/\\((\\d+),\\s*(\\d+)\\)/g,'[$1,$2]').replace(/^(tfg\\d+|output_grid|O\\d+|T\\d+)\\s*=/gm,'var $1 =');
  let input_grid=t.input.map(r=>r.slice());
  try{{ eval(js); }}catch(e){{ document.getElementById('v'+id).innerHTML='<span class=bad>실행 오류: '+e+'</span>'; return; }}
  document.getElementById('out'+id).innerHTML=gridHTML(output_grid);   // program 이 var 로 선언(eval leak)
