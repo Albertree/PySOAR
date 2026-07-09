@@ -31,17 +31,10 @@ EMPTY = "#D6FFFF"                 # 투명(빈=13) 셀 = ARC-TBD/basics/settings
 
 
 def _load():
+    """대시보드와 **동일한 15문제** (easy 9 + made 2 + ARC-AGI 4)를 순서대로 반환."""
     write_all()
-    from arc.dataset import list_tasks, load_task
-    import glob
-    tasks = {}
-    etid, epath = list_tasks("easy_a")[0]
-    tasks["easy000a"] = load_task(epath)
-    tasks["made000a"] = load_task(os.path.join(HERE, "data", "made", "made000a.json"))
-    tasks["made000b"] = load_task(os.path.join(HERE, "data", "made", "made000b.json"))
-    real = glob.glob(os.path.expanduser("~/Desktop/ARC-solver/data/**/08ed6ac7.json"), recursive=True)
-    tasks["08ed6ac7"] = load_task(real[0])
-    return tasks
+    from arc.focus_solver import _load_survey, SURVEY_AGI
+    return _load_survey(agi_ids=SURVEY_AGI)          # [(tid, task), ...]
 
 
 def _colors(cd):
@@ -219,10 +212,17 @@ pre.receipt{margin:0;font:10.5px/1.4 ui-monospace,Menlo,monospace;color:#bcd;whi
 """
 
 
+def _safe_section(tid, task):
+    try:
+        return _task_section(tid, task)
+    except Exception as e:                                       # noqa: BLE001 (낯선 구조 방어)
+        return (f"<section><h2>{html.escape(tid)}</h2>"
+                f"<div class=hint>렌더 실패: {html.escape(type(e).__name__)}: {html.escape(str(e)[:120])}</div></section>")
+
+
 def build():
     tasks = _load()
-    body = "".join(_task_section(t, tasks[t])
-                   for t in ("easy000a", "made000b", "08ed6ac7", "made000a"))
+    body = "".join(_safe_section(tid, task) for tid, task in tasks)
     doc = (f"<!doctype html><meta charset='utf-8'><title>ARBOR object mapping</title>"
            f"<style>{CSS}</style>"
            f"<h1>ARBOR — P0.G0 ↔ P0.G1 object mapping (N/{N})</h1>"

@@ -387,9 +387,8 @@ def _do_compare_kind(ag, sid, c, kind):
     elif kind == "within":                                          # 한 pair G0↔G1 = 1차 변화
         g0, g1, p = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0], _wm_vals(ag, c, "pair")[0]
         rel = kg_compare(nodes[g0], nodes[g1])
-        _store_relation(ag, rel)
-        ag.kg.setdefault("within_edge", {})[p] = rel               # cross-change 에서 재사용
-        ag.wm.add(p, "edge", f"{p}.E_G0-G1")                        # PAIR 아래 새 요소
+        _store_relation(ag, rel)                                   # (p ^relation p.E_G0-G1) + cascade
+        ag.kg.setdefault("within_edge", {})[p] = rel               # cross-change 에서 재사용(kg dict)
     elif kind == "cross":
         which = _wm_vals(ag, c, "which")[0]
         _cross_grids(ag, sid, which, sorted(_wm_vals(ag, c, "pair")), kg_compare, nodes, idx)
