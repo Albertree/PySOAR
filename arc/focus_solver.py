@@ -529,71 +529,112 @@ def _obj_cc(node):
     return [tuple(c) for c in j["coordinate"]], next((k for k, v in j["color"].items() if v), 0)
 
 
-def _hypothesize_program(ag, gid0, gid1, out_grid):
-    """**한 PAIR 의 G0→G1 program(가설) 합성 + 검증** (시나리오 2026-07-10, 모듈 함수):
-      1) foreground(비-0색) object 만.  2) 유사도 greedy 1-1 대응(중복 없이 — 한 object 는 한 번).
-      3) per-object 변환 = (Δ=G1첫셀-G0첫셀, 색=G1색).  4) make_grid+coloring 으로 **시뮬레이션 조립**
-         (G0 각 object 를 Δ 이동해 G1 색으로).  5) train output 과 대조 = 검증.
-    반환 = (통과여부, program[list of (obj,dr,dc,color)]). 데이터(mapping)에서 나오지 task 하드코딩
-    아님(§1-5). pair-specific·specific value 허용(일반화는 이후 단계). 못 만들면(다중셀 등 실패) →
-    호출부가 hypothesized=failed → **main process 가** PIXEL 하강(hypothesize 안에서 하강 금지)."""
-    import sys
-    _arc = os.path.expanduser("~/Desktop/ARC-solver")
-    if _arc not in sys.path:
-        sys.path.insert(0, _arc)
-    from procedural_memory.DSL.transformation import make_grid, coloring   # frozen DSL 2개
+def _fg_correspondence(ag, gid0, gid1):
+    """foreground(비-0색) object 를 유사도 greedy 1-1 대응(중복 없이). 각 대응쌍의 속성별 COMM/DIFF
+    도 함께 반환 — 어떤 DSL 을 쓸지 **규칙이 판단**할 근거. 반환 = [(g0obj, g1obj, category)].
+    (kg_compare 는 원자연산; 대응·COMM/DIFF 는 데이터, 조립·arg결정은 이후 **규칙**이 한다.)"""
     from ARCKG.comparison import compare as kg_compare
     idx = ag.kg["idx"]; nodes = idx["nodes"]
-    o0 = [o for o in idx["children"].get(gid0, []) if _obj_cc(nodes[o])[1] != 0]   # FG
+    o0 = [o for o in idx["children"].get(gid0, []) if _obj_cc(nodes[o])[1] != 0]
     o1 = [o for o in idx["children"].get(gid1, []) if _obj_cc(nodes[o])[1] != 0]
     scored = []
     for a in o0:
         for b in o1:
-            n, tot = _score_frac(kg_compare(nodes[a], nodes[b])["result"].get("score", "0/1"))
-            scored.append((n / tot, a, b))
+            rel = kg_compare(nodes[a], nodes[b])
+            n, tot = _score_frac(rel["result"].get("score", "0/1"))
+            scored.append((n / tot, a, b, rel["result"].get("category", {})))
     scored.sort(key=lambda x: -x[0])
-    usedA, usedB, prog = set(), set(), []
-    for _s, a, b in scored:                                     # greedy 1-1 (중복 객체 없이)
+    usedA, usedB, out = set(), set(), []
+    for _s, a, b, cat in scored:
         if a in usedA or b in usedB:
             continue
-        usedA.add(a); usedB.add(b)
-        ca, _ = _obj_cc(nodes[a]); cb, colb = _obj_cc(nodes[b])
-        prog.append((a, cb[0][0] - ca[0][0], cb[0][1] - ca[0][1], colb))
-    size = {"height": len(out_grid), "width": len(out_grid[0])}
-    from collections import Counter
-    ig = ag.task["train"][0]["input"]
-    grid = make_grid(size, fill=Counter(v for r in ig for v in r).most_common(1)[0][0])
-    for a, dr, dc, colb in prog:                                # 시뮬레이션 조립
-        for (r, c) in _obj_cc(nodes[a])[0]:
-            rr, cc = r + dr, c + dc
-            if 0 <= rr < size["height"] and 0 <= cc < size["width"]:
-                grid = coloring(grid, (rr, cc), colb)
-    return grid == out_grid, prog                               # 검증 = train output 대조
+        usedA.add(a); usedB.add(b); out.append((a, b, cat))
+    return out
 
 
 def _op_hypothesize(ag):
-    """**hypothesize operator body** — OBJECT 레벨 object mapping 을 program 으로 합성·검증한다.
-    한 PAIR(첫 train pair)에서 _hypothesize_program 호출: 통과면 PAIR.program 채우고
-    (sid ^hypothesized yes) + program-step 노출, 실패면 (sid ^hypothesized failed)."""
+    """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). object mapping 대응을 얻어,
+    각 대응쌍을 **변환 후보(xform)** 로 WM 에 노출한다 — 속성별 COMM/DIFF 를 그대로 실어(규칙이
+    'color DIFF ∧ coordinate COMM → coloring' 을 판단). 시뮬 grid 를 G0(input)로 초기화.
+    조립은 이후 coloring operator(규칙 propose/apply)가, 검증은 verify operator 가 한다.
+    (여기 body 는 '지각'만 — 대응/COMM-DIFF 노출 + 시뮬 초기화. 조립 로직은 Python 아님·규칙.)"""
     idx, sid = ag.kg["idx"], ag.stack[-1].id
     root = ag.kg["arckg_root"]
     p0 = root.example_pairs[0]
     gid0, gid1 = p0.input_grid.node_id, p0.output_grid.node_id
-    ok, prog = _hypothesize_program(ag, gid0, gid1, ag.task["train"][0]["output"])
-    if ok:
-        ag.wm.add(sid, "hypothesized", "yes")
-        ppid = f"{p0.node_id}.property"                         # PAIR.program 슬롯(§6, property 아래)
-        if ag.wm.contains(ppid, "program", "{}"):
-            ag.wm.remove(ppid, "program", "{}")
-        ag.wm.add(ppid, "program", f"{len(prog)}-step: object별 (Δ,색) 재조립 → G1 재현")
-        for k, (a, dr, dc, colb) in enumerate(prog):            # program 구조 노출(§2-5)
-            st = f"{sid}.prog.s{k}"
-            ag.wm.add(sid, "program-step", st)
-            ag.wm.add(st, "obj", a.split(".")[-1])
-            ag.wm.add(st, "move", f"({dr},{dc})")
-            ag.wm.add(st, "recolor", str(colb))
+    ag.wm.add(sid, "sim", _tup([list(r) for r in ag.task["train"][0]["input"]]))   # 시뮬 grid = G0
+    ag.wm.add(sid, "sim-pair", p0.node_id)
+    order = 0
+    for a, b, cat in _fg_correspondence(ag, gid0, gid1):        # 대응쌍 → 변환 후보 노출
+        xid = f"{sid}.xform.{order}"
+        ag.wm.add(sid, "xform", xid)
+        ag.wm.add(xid, "g0obj", a); ag.wm.add(xid, "g1obj", b); ag.wm.add(xid, "order", str(order))
+        for prop, v in cat.items():                            # 속성별 COMM/DIFF (규칙이 매칭)
+            t = v.get("type") if isinstance(v, dict) else v
+            if t in ("COMM", "DIFF"):
+                ag.wm.add(xid, t.lower(), prop)                # (xid ^diff color)(xid ^comm coordinate)…
+        ag.wm.add(xid, "g0cells", _tup([list(c) for c in _obj_cc(idx["nodes"][a])[0]]))
+        ag.wm.add(xid, "g1color", str(_obj_cc(idx["nodes"][b])[1]))
+        order += 1
+    if _recolor_pending(ag, sid):              # 재채색(color DIFF ∧ coord COMM) 후보 있으면
+        ag.wm.add(sid, "has-recolor", "yes")   # coloring 규칙 한 번만 발화(TIE 방지) — body 가 하나씩
     else:
-        ag.wm.add(sid, "hypothesized", "failed")                # → main process 가 PIXEL 하강
+        ag.wm.add(sid, "colored-all", "yes")   # 없으면 곧장 verify (시뮬=G0, 대개 실패 → PIXEL)
+
+
+def _recolor_pending(ag, sid):
+    """미적용 recolor xform(color DIFF ∧ coordinate COMM)이 남아 있나 — coloring 규칙의 조건."""
+    return [x for (i, a, x) in ag.wm if i == sid and a == "xform"
+            and ag.wm.contains(x, "diff", "color") and ag.wm.contains(x, "comm", "coordinate")
+            and not ag.wm.contains(x, "applied", "yes")]
+
+
+def _op_coloring(ag):
+    """**coloring DSL operator (apply body = 원자연산만)** — 첫 미적용 recolor xform 의 g0cells 를
+    g1color 로 시뮬 grid 에 칠한다(procedural_memory.coloring, frozen). '무엇을/언제'는 **규칙**
+    (propose*coloring: color DIFF ∧ coord COMM 인 xform 이 있을 때)이 정한다. 하나 칠하고 applied
+    표시 → 남은 게 없으면 colored-all(→ verify)."""
+    import sys
+    _arc = os.path.expanduser("~/Desktop/ARC-solver")
+    if _arc not in sys.path:
+        sys.path.insert(0, _arc)
+    from procedural_memory.DSL.transformation import coloring
+    sid = ag.stack[-1].id
+    pend = _recolor_pending(ag, sid)
+    if not pend:
+        ag.wm.add(sid, "colored-all", "yes"); return
+    sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
+    grid = [list(r) for r in sim]
+    for xid in sorted(pend, key=lambda x: int(next((v for (i, a, v) in ag.wm if i == x and a == "order"), "0"))):
+        cells = next((v for (i, a, v) in ag.wm if i == xid and a == "g0cells"), ())
+        color = int(next((v for (i, a, v) in ag.wm if i == xid and a == "g1color"), 0))
+        for (r, c) in cells:                                   # 그 object.coordinate 각 셀을
+            if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
+                grid = coloring(grid, (r, c), color)           # frozen DSL coloring 으로 g1color 로
+        ag.wm.add(xid, "applied", "yes")
+    ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
+    ag.wm.add(sid, "colored-all", "yes")                       # recolor 다 적용 → verify
+
+
+def _op_verify(ag):
+    """**verify operator (apply body)** — 시뮬 grid 를 train output 과 대조(원자). 같으면
+    (sid ^hypothesized yes) + PAIR.program 채움, 아니면 (sid ^hypothesized failed → main 이 PIXEL 하강)."""
+    sid = ag.stack[-1].id
+    sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
+    grid = [list(r) for r in (sim or [])]
+    out = ag.task["train"][0]["output"]
+    pid = next((v for (i, a, v) in ag.wm if i == sid and a == "sim-pair"), None)
+    if grid == [list(r) for r in out]:
+        ag.wm.add(sid, "hypothesized", "yes")
+        steps = [v for (i, a, v) in ag.wm if i == sid and a == "xform"
+                 if ag.wm.contains(v, "applied", "yes")]
+        if pid:
+            ppid = f"{pid}.property"
+            if ag.wm.contains(ppid, "program", "{}"):
+                ag.wm.remove(ppid, "program", "{}")
+            ag.wm.add(ppid, "program", f"coloring×{len(steps)} → G1 재현(규칙기반)")
+    else:
+        ag.wm.add(sid, "hypothesized", "failed")
 
 
 # operator body(RHS 함수) = production 으로 못 하는 원자연산만:
@@ -602,7 +643,7 @@ def _op_hypothesize(ag):
 # 제어(무엇을 언제)는 전부 propose/apply 규칙 + WM 플래그로. solve 는 미구현(ONC=하강),
 # submit 은 apply-only(답은 output-link 에).
 OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select,
-                   "hypothesize": _op_hypothesize}
+                   "hypothesize": _op_hypothesize, "coloring": _op_coloring, "verify": _op_verify}
 
 
 # ---------------------------------------------------------------------------
@@ -678,12 +719,26 @@ PRODUCTIONS = [
     # ── hypothesize: OBJECT 레벨 object mapping 이 끝나면(compared) 발화 — object mapping 을
     #    program(가설)으로 합성·검증(body=시뮬레이션 조립·train 대조). arg-선택 substate 불필요
     #    (대상 object 는 mapping 에 있음). 통과=hypothesized yes(+PAIR.program), 실패=failed.
+    # hypothesize = 시뮬레이션 open — body: 시뮬 grid=G0 + 대응→xform 후보(속성별 COMM/DIFF) 노출. 1회.
     _propose_named("propose*hypothesize", "hypothesize",
                    [Cond("<s>", "to-hypothesize", "yes"), Cond("<s>", "compared", "yes"),
-                    Cond("<s>", "hypothesized", "<h>", negated=True)]),
+                    Cond("<s>", "hyp-open", "<o>", negated=True)]),
     Production("apply*hypothesize",
                [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "hypothesize")],
-               [Action("<s>", "hyp-applied", "yes")]),          # body 가 ^hypothesized yes/failed 세움
+               [Action("<s>", "hyp-open", "yes")]),
+    # coloring DSL = **규칙기반**: color DIFF ∧ coordinate COMM 인 xform 이 있으면 propose →
+    #   apply(body=frozen coloring)가 그 object.coordinate 를 g1color 로 시뮬 grid 에 칠함. 하나씩(multi-cycle).
+    _propose_named("propose*coloring", "coloring",     # 단일 marker → 한 번만 propose(TIE 방지)
+                   [Cond("<s>", "has-recolor", "yes"), Cond("<s>", "colored-all", "<ca>", negated=True)]),
+    Production("apply*coloring",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "coloring")],
+               [Action("<s>", "color-step", "yes")]),      # body 가 시뮬 recolor + applied 표시
+    # verify = 시뮬 grid 를 train output 과 대조(원자) → hypothesized yes/failed.
+    _propose_named("propose*verify", "verify",
+                   [Cond("<s>", "colored-all", "yes"), Cond("<s>", "hypothesized", "<h>", negated=True)]),
+    Production("apply*verify",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "verify")],
+               [Action("<s>", "verify-step", "yes")]),          # body 가 ^hypothesized yes/failed 세움
 
     # submit: predict 가 답을 output-link 에 얹고 ^answer-ready → 제출·채점.
     _propose("submit", [Cond("<s>", "answer-ready", "yes"), Cond("<s>", "done", "<x>", negated=True)]),
