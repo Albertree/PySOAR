@@ -408,7 +408,7 @@ def _score_frac(s):
         return 0, 1
 
 
-def _compare_objects(ag, sid, c, g0, g1, pair, kg_compare, nodes, idx, topk=16):
+def _compare_objects(ag, sid, c, g0, g1, pair, kg_compare, nodes, idx, topk=None):
     """한 train pair 의 **G0-objects × G1-objects 전부**를 kg_compare 해 유사도(score=COMM/전체)로
     내림차순 순위. 높은 순위 = GRID 간 대응(correspondence) 후보 — '어느 object 가 어느 것이 됐나'.
     (하드코딩 매칭 아님 — score 는 compare 결과에서, 순위는 그 정렬일 뿐, §1-5.)
@@ -425,7 +425,7 @@ def _compare_objects(ag, sid, c, g0, g1, pair, kg_compare, nodes, idx, topk=16):
             n, tot = _score_frac(rel["result"].get("score", "0/1"))
             scored.append((n / tot, n, tot, a, b, rel))
     scored.sort(key=lambda t: (-t[0], t[3], t[4]))                # 유사도 ↓, 결정적 tiebreak
-    for rank, (sim, n, tot, a, b, rel) in enumerate(scored[:topk]):    # 상위만 노출(폭발 방지)
+    for rank, (sim, n, tot, a, b, rel) in enumerate(scored[:topk]):    # topk=None → 전부(사용자: 상한 제거)
         mid = f"{c}.m{rank}"
         ag.wm.add(c, "match", mid)
         ag.wm.add(mid, "g0obj", a)
