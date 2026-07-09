@@ -564,6 +564,12 @@ def _op_hypothesize(ag):
     gid0, gid1 = p0.input_grid.node_id, p0.output_grid.node_id
     ag.wm.add(sid, "sim", _tup([list(r) for r in ag.task["train"][0]["input"]]))   # 시뮬 grid = G0
     ag.wm.add(sid, "sim-pair", p0.node_id)
+
+    def _fg_index(gid):    # objects_of(grid) 순서(FG, 첫셀 정렬)에서 각 객체의 인덱스 — program 참조용
+        objs = sorted(((_obj_cc(idx["nodes"][o])) for o in idx["children"].get(gid, [])
+                       if _obj_cc(idx["nodes"][o])[1] != 0), key=lambda cc: (cc[0][0], cc[1]))
+        return {frozenset(cells): k for k, (cells, col) in enumerate(objs)}
+    in_idx, out_idx = _fg_index(gid0), _fg_index(gid1)
     order = 0
     for a, b, cat in _fg_correspondence(ag, gid0, gid1):        # 대응쌍 → 변환 후보 노출
         xid = f"{sid}.xform.{order}"
@@ -574,10 +580,10 @@ def _op_hypothesize(ag):
             if t in ("COMM", "DIFF"):
                 ag.wm.add(xid, t.lower(), prop)                # (xid ^diff color)(xid ^comm coordinate)…
         (g0cells, g0color), (g1cells, g1color) = _obj_cc(idx["nodes"][a]), _obj_cc(idx["nodes"][b])
-        ag.wm.add(xid, "g0cells", _tup([list(c) for c in g0cells]))   # 입력 객체 좌표(선택)
-        ag.wm.add(xid, "g0color", str(g0color))                       # 입력 객체 색
-        ag.wm.add(xid, "g1cells", _tup([list(c) for c in g1cells]))   # 출력 객체 좌표
+        ag.wm.add(xid, "g0cells", _tup([list(c) for c in g0cells]))   # 입력 객체 좌표(sim 조립용)
         ag.wm.add(xid, "g1color", str(g1color))                       # 출력 객체 색(칠할 색)
+        ag.wm.add(xid, "g0idx", str(in_idx.get(frozenset(g0cells), 0)))    # objects_of(input)[i] 참조
+        ag.wm.add(xid, "g1idx", str(out_idx.get(frozenset(g1cells), 0)))   # objects_of(output)[j] 참조
         order += 1
     if _recolor_pending(ag, sid):              # 재채색(color DIFF ∧ coord COMM) 후보 있으면
         ag.wm.add(sid, "has-recolor", "yes")   # coloring 규칙 한 번만 발화(TIE 방지) — body 가 하나씩
@@ -611,18 +617,20 @@ def _op_coloring(ag):
 
     def _wx(xid, attr):
         return next((v for (i, a, v) in ag.wm if i == xid and a == attr), None)
-    defs, steps = [], ["tfg0 = input_grid"]                    # level-1 형식(ARC-TBD): 실행가능 flat Python
+    # level-1 형식(ARC-TBD ast_example): 선택은 **objects_of(input)[i].coord**(객체 참조·provenance),
+    # 색은 target literal (출력참조는 순환이라 안 씀; 색의 일반화=rank 등은 이후 단계).
+    defs = ["in_objs = objects_of(input_grid)"]
+    steps = ["tfg0 = input_grid"]
     order = sorted(pend, key=lambda x: int(_wx(x, "order") or "0"))
     for k, xid in enumerate(order):
-        g0c = [tuple(c) for c in (_wx(xid, "g0cells") or ())]; g0col = int(_wx(xid, "g0color") or 0)
-        g1c = [tuple(c) for c in (_wx(xid, "g1cells") or ())]; g1col = int(_wx(xid, "g1color") or 0)
-        for (r, c) in g0c:                                     # frozen coloring atom 으로 입력셀 → 출력색
+        g0c = [tuple(c) for c in (_wx(xid, "g0cells") or ())]; g1col = int(_wx(xid, "g1color") or 0)
+        g0i = int(_wx(xid, "g0idx") or 0)
+        for (r, c) in g0c:                                     # frozen coloring atom 으로 입력셀 → target색
             if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
                 grid = coloring(grid, (r, c), g1col)
         ag.wm.add(xid, "applied", "yes")
-        defs.append(f"O{k} = obj({g0c}, {g0col})")             # 입력 객체(선택 대상) — 객체성 보존(§일반화)
-        defs.append(f"T{k} = obj({g1c}, {g1col})")             # 출력 객체(색 출처)
-        steps.append(f"tfg{k+1} = apply_DSL(tfg{k}, coloring, O{k}.coord, T{k}.color)")   # 값 아니라 참조
+        defs.append(f"O{k} = in_objs[{g0i}]")                  # 입력 객체 참조 (objects_of[i])
+        steps.append(f"tfg{k+1} = apply_DSL(tfg{k}, coloring, O{k}.coord, {g1col})")   # O_k.coord → 색
     steps.append(f"output_grid = tfg{len(pend)}")
     ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
     ag.wm.add(sid, "program-code", "\n".join(defs + [""] + steps))

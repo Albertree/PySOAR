@@ -31,9 +31,23 @@ def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
     o = type("Obj", (), {})(); o.coord = coord; o.color = color; return o
+def objects_of(grid):                        # 비-0색 4-연결 성분(FG object)을 첫셀 정렬로 추출
+    seen, objs = set(), []
+    for r in range(len(grid)):
+        for c in range(len(grid[0])):
+            if grid[r][c] != 0 and (r, c) not in seen:
+                col, stack, cells = grid[r][c], [(r, c)], []
+                while stack:
+                    y, x = stack.pop()
+                    if (y, x) in seen or not (0 <= y < len(grid) and 0 <= x < len(grid[0])) or grid[y][x] != col:
+                        continue
+                    seen.add((y, x)); cells.append((y, x))
+                    stack += [(y+1, x), (y-1, x), (y, x+1), (y, x-1)]
+                objs.append(obj(sorted(cells), col))
+    return sorted(objs, key=lambda o: (o.coord[0], o.color))
 # --- input (this pair) ---
 input_grid = %s
-# --- objects & synthesized program (rule-based) ---
+# --- objects (from grid) & synthesized program (rule-based) ---
 '''
 
 
@@ -80,7 +94,7 @@ def build():
                "#F012BE", "#FF851B", "#7FDBFF", "#870C25"]
     sections = []
     for d in data:
-        if d["program"] and d["program"].startswith("tfg0"):
+        if d["program"] and "apply_DSL" in d["program"]:
             full = (_PREAMBLE % json.dumps(d["input"])) + d["program"] + "\n"
             body = (f"<div class=row>"
                     f"<pre id='prog{d['id']}'>{full}</pre>"
@@ -96,7 +110,7 @@ def build():
         sections.append(f"<section><h2>{d['id']}{' ✓' if d['ok'] else ''}</h2>{body}</section>")
 
     payload = {d["id"]: {"input": d["input"], "output": d["output"],
-                         "program": d["program"] if (d["program"] or "").startswith("tfg0") else None}
+                         "program": d["program"] if "apply_DSL" in (d["program"] or "") else None}
                for d in data}
     doc = f"""<!doctype html><meta charset='utf-8'><title>ARBOR level-1 programs</title>
 <style>{CSS}</style>
@@ -112,11 +126,19 @@ function coloring(grid,cells,color){{let g=grid.map(r=>r.slice());for(const [r,c
 function make_grid(h,w,fill){{return Array.from({{length:h}},()=>Array(w).fill(fill));}}
 function apply_DSL(grid,func){{const args=Array.prototype.slice.call(arguments,2);return func.apply(null,[grid].concat(args));}}
 function obj(coord,color){{return {{coord:coord,color:color}};}}
+function objects_of(grid){{let seen=new Set(),objs=[];
+ for(let r=0;r<grid.length;r++)for(let c=0;c<grid[0].length;c++){{
+  if(grid[r][c]!==0&&!seen.has(r+','+c)){{let col=grid[r][c],st=[[r,c]],cells=[];
+   while(st.length){{let p=st.pop(),y=p[0],x=p[1];
+    if(seen.has(y+','+x)||y<0||y>=grid.length||x<0||x>=grid[0].length||grid[y][x]!==col)continue;
+    seen.add(y+','+x);cells.push([y,x]);st.push([y+1,x],[y-1,x],[y,x+1],[y,x-1]);}}
+   cells.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);objs.push(obj(cells,col));}}}}
+ objs.sort((a,b)=>a.coord[0][0]-b.coord[0][0]||a.coord[0][1]-b.coord[0][1]||a.color-b.color);return objs;}}
 function eq(a,b){{return JSON.stringify(a)===JSON.stringify(b);}}
 function run(id){{
  const t=D[id];if(!t||!t.program)return;
  // 파이썬 program → JS: (r, c) 튜플 → [r,c], 변수(tfg/O/T/output_grid) 선언
- let js=t.program.replace(/\\((\\d+),\\s*(\\d+)\\)/g,'[$1,$2]').replace(/^(tfg\\d+|output_grid|O\\d+|T\\d+)\\s*=/gm,'var $1 =');
+ let js=t.program.replace(/\\((\\d+),\\s*(\\d+)\\)/g,'[$1,$2]').replace(/^(tfg\\d+|output_grid|O\\d+|T\\d+|in_objs)\\s*=/gm,'var $1 =');
  let input_grid=t.input.map(r=>r.slice());
  try{{ eval(js); }}catch(e){{ document.getElementById('v'+id).innerHTML='<span class=bad>실행 오류: '+e+'</span>'; return; }}
  document.getElementById('out'+id).innerHTML=gridHTML(output_grid);   // program 이 var 로 선언(eval leak)
