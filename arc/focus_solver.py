@@ -327,9 +327,23 @@ def _op_select(ag):
     sup = next((v for (i, a, v) in ag.wm if i == sid and a == "superstate"), None)
     for_op = next((v for (i, a, v) in ag.wm if i == sid and a == "select-for"), None)
     if for_op == "observe":
-        unseen = [n for n in _focus_group(ag, sup) if not ag.wm.contains(n, "seen", "yes")]
+        idx = ag.kg.get("idx") if getattr(ag, "kg", None) else None
+        # (A) 소속(membership) 순서 유지: 노드 id 로 정렬. id 가 계층적(parent.child)이라 정렬하면
+        #     부모별로 묶인다 — P0.G0, P0.G1, P1.G0, P1.G1, Pa.G0. 부모를 넘나드는 마구잡이 관측 방지.
+        unseen = sorted(n for n in _focus_group(ag, sup) if not ag.wm.contains(n, "seen", "yes"))
         if unseen:
-            ag.wm.add(sup, "cursor", unseen[0])                  # super 커서 = 첫 미관측
+            target = unseen[0]
+            ag.wm.add(sup, "cursor", target)                    # super 커서 = 첫 미관측(정렬순)
+            # (B) 상위 level cursor 유지: 관측 대상의 부모 노드를, 그 부모를 ^focus 로 가진 goal 의
+            #     ^cursor 로 세운다(P0.G0 관측 중이면 PAIR goal ^cursor=P0). 하강해도 소속 path 가
+            #     상위 level 에 유지된다(그 goal 은 관측 끝나 inert — 표시용).
+            par = idx["parent"].get(target) if idx else None
+            pgoal = next((i for (i, a, v) in ag.wm if a == "focus" and v == par), None) if par else None
+            if pgoal is not None:
+                for (i, a, v) in list(ag.wm):
+                    if i == pgoal and a == "cursor":
+                        ag.wm.remove(i, a, v)                   # 이전 부모 cursor 치우고
+                ag.wm.add(pgoal, "cursor", par)                # 현재 부모로 갱신
         else:                                                    # 다 관측 → 비교 국면 전환
             ag.wm.add(sup, "observed", "yes")
             _build_agenda(ag, sup, _focus_group(ag, sup))        # (sup ^cmp ..) + ^to-compare
