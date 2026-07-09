@@ -605,14 +605,18 @@ def _op_coloring(ag):
         ag.wm.add(sid, "colored-all", "yes"); return
     sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
     grid = [list(r) for r in sim]
-    for xid in sorted(pend, key=lambda x: int(next((v for (i, a, v) in ag.wm if i == x and a == "order"), "0"))):
-        cells = next((v for (i, a, v) in ag.wm if i == xid and a == "g0cells"), ())
+    lines = ["tfg0 = input_grid"]                              # level-1 형식(ARC-TBD): 실행가능 flat Python
+    for k, xid in enumerate(sorted(pend, key=lambda x: int(next((v for (i, a, v) in ag.wm if i == x and a == "order"), "0")))):
+        cells = [tuple(c) for c in next((v for (i, a, v) in ag.wm if i == xid and a == "g0cells"), ())]
         color = int(next((v for (i, a, v) in ag.wm if i == xid and a == "g1color"), 0))
-        for (r, c) in cells:                                   # 그 object.coordinate 각 셀을
+        for (r, c) in cells:                                   # frozen coloring atom 으로 그 셀들을
             if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
-                grid = coloring(grid, (r, c), color)           # frozen DSL coloring 으로 g1color 로
+                grid = coloring(grid, (r, c), color)
         ag.wm.add(xid, "applied", "yes")
+        lines.append(f"tfg{k+1} = apply_DSL(tfg{k}, coloring, {cells}, {color})")   # 실행가능 한 줄
+    lines.append(f"output_grid = tfg{len(pend)}")
     ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
+    ag.wm.add(sid, "program-code", "\n".join(lines))           # PAIR.program 에 넣을 실행가능 프로그램
     ag.wm.add(sid, "colored-all", "yes")                       # recolor 다 적용 → verify
 
 
@@ -626,13 +630,12 @@ def _op_verify(ag):
     pid = next((v for (i, a, v) in ag.wm if i == sid and a == "sim-pair"), None)
     if grid == [list(r) for r in out]:
         ag.wm.add(sid, "hypothesized", "yes")
-        steps = [v for (i, a, v) in ag.wm if i == sid and a == "xform"
-                 if ag.wm.contains(v, "applied", "yes")]
+        code = next((v for (i, a, v) in ag.wm if i == sid and a == "program-code"), "output_grid = input_grid")
         if pid:
             ppid = f"{pid}.property"
             if ag.wm.contains(ppid, "program", "{}"):
                 ag.wm.remove(ppid, "program", "{}")
-            ag.wm.add(ppid, "program", f"coloring×{len(steps)} → G1 재현(규칙기반)")
+            ag.wm.add(ppid, "program", code)               # 실행가능 flat Python (level-1 형식)
     else:
         ag.wm.add(sid, "hypothesized", "failed")
 
