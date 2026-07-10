@@ -238,6 +238,13 @@ def _op_observe(ag):
     if f is None:
         return                                  # arg(대상) 미정 → 변화 없음 → ONC impasse → arg-선택 substate
     node, lvl = idx["nodes"][f], idx["level"][f]
+    if lvl == "pixel":
+        # PIXEL 은 색+좌표뿐이고 hypothesize 가 grid 를 직접 읽으므로 **픽셀 property 를 WM 에 안 올린다**.
+        # 성능: 큰 격자(예 196 픽셀)를 커서로 하나씩 훑으면 WM 폭증+naive rematch 로 매우 느려짐 →
+        # focus 픽셀 전부를 한 번에 seen 표시(bulk)해 관측을 O(1) 로. (개별 관측 정보는 어차피 안 씀.)
+        for p in _focus_group(ag, sid):
+            ag.wm.add(p, "seen", "yes")
+        return
     _load_props(ag, f, node, lvl)               # ^property = {type + to_json + 아티팩트 슬롯}
     for edge, c in idx["edges"][f]:
         ag.wm.add(f, edge, c)                   # 자식 존재(ref) — edge(구조)는 property 밖 그대로
