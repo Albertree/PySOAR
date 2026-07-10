@@ -370,29 +370,28 @@ def _op_select(ag):
       select-for compare: 다음 미완료 cmp → super ^cmp-active. 없으면 super ^compared."""
     sid = ag.stack[-1].id                                        # 현재 = arg-선택 substate
     sup = next((v for (i, a, v) in ag.wm if i == sid and a == "superstate"), None)
-    for_op = next((v for (i, a, v) in ag.wm if i == sid and a == "select-for"), None)
-    if for_op == "observe":
-        idx = ag.kg.get("idx") if getattr(ag, "kg", None) else None
-        # (A) 소속(membership) 순서 유지: 노드 id 로 정렬. id 가 계층적(parent.child)이라 정렬하면
-        #     부모별로 묶인다 — P0.G0, P0.G1, P1.G0, P1.G1, Pa.G0. 부모를 넘나드는 마구잡이 관측 방지.
-        unseen = sorted(n for n in _focus_group(ag, sup) if not ag.wm.contains(n, "seen", "yes"))
-        if unseen:
-            target = unseen[0]
-            ag.wm.add(sup, "cursor", target)                    # super 커서 = 첫 미관측(정렬순)
-            # (B) 상위 level cursor 유지: 관측 대상의 부모 노드를, 그 부모를 ^focus 로 가진 goal 의
-            #     ^cursor 로 세운다(P0.G0 관측 중이면 PAIR goal ^cursor=P0). 하강해도 소속 path 가
-            #     상위 level 에 유지된다(그 goal 은 관측 끝나 inert — 표시용).
-            par = idx["parent"].get(target) if idx else None
-            pgoal = next((i for (i, a, v) in ag.wm if a == "focus" and v == par), None) if par else None
-            if pgoal is not None:
-                for (i, a, v) in list(ag.wm):
-                    if i == pgoal and a == "cursor":
-                        ag.wm.remove(i, a, v)                   # 이전 부모 cursor 치우고
-                ag.wm.add(pgoal, "cursor", par)                # 현재 부모로 갱신
-        else:                                                    # 다 관측 → 비교 국면 전환
-            ag.wm.add(sup, "observed", "yes")
-            _build_agenda(ag, sup, _focus_group(ag, sup))        # (sup ^cmp ..) + ^to-compare
-    elif for_op == "compare":
+    idx = ag.kg.get("idx") if getattr(ag, "kg", None) else None
+    # 무엇을 고를지는 **WM 상태에서 추론**한다 (select-for 값에 의존하지 않음, 사용자 요청):
+    #   미관측 focus 노드가 있으면 → 관측 대상(super ^cursor). 관측이 다 끝났으면(없으면) → observed 전환
+    #   후, 미완료 cmp 를 비교 대상(super ^cmp-active), 그것도 없으면 compared. (관측이 비교보다 먼저 오므로
+    #   'unseen 유무 → observed → cmp' 우선순위가 기존 select-for observe/compare 분기를 그대로 재현.)
+    unseen = sorted(n for n in _focus_group(ag, sup) if not ag.wm.contains(n, "seen", "yes"))
+    if unseen:                                                   # (A) 관측 대상: 소속 순서(노드 id 정렬)로 첫 미관측
+        target = unseen[0]
+        ag.wm.add(sup, "cursor", target)                        # super 커서 = 첫 미관측(정렬순 = 부모별 묶임)
+        # (B) 상위 level cursor 유지: 관측 대상의 부모를 그 부모를 ^focus 로 가진 goal 의 ^cursor 로 세워
+        #     하강해도 소속 path 가 상위 level 에 남게 한다.
+        par = idx["parent"].get(target) if idx else None
+        pgoal = next((i for (i, a, v) in ag.wm if a == "focus" and v == par), None) if par else None
+        if pgoal is not None:
+            for (i, a, v) in list(ag.wm):
+                if i == pgoal and a == "cursor":
+                    ag.wm.remove(i, a, v)
+            ag.wm.add(pgoal, "cursor", par)
+    elif not ag.wm.contains(sup, "observed", "yes"):            # 다 관측 → 비교 국면 전환
+        ag.wm.add(sup, "observed", "yes")
+        _build_agenda(ag, sup, _focus_group(ag, sup))            # (sup ^cmp ..) + ^to-compare
+    else:                                                        # 관측 끝 → 비교 대상: 미완료 cmp 중 첫(order)
         pend = [(int(next(v for (i2, a2, v) in ag.wm if i2 == cid and a2 == "order")), cid)
                 for (i, a, cid) in ag.wm if i == sup and a == "cmp"
                 and not ag.wm.contains(cid, "done", "yes")]
@@ -860,10 +859,11 @@ PRODUCTIONS = [
     # ── select: arg-선택 substate 안에서 한 번 발화 — body 가 super 커서(^cursor/^cmp-active)를
     #    세우고 자기 자신에 ^selected 표시. 그러면 -(^selected) 조건이 깨져 retract → substate 는
     #    더 고를 게 없어 SNC → fine_trace 가 pop → super 의 observe/compare 가 그 arg 로 apply.
-    _propose_nonode("propose*select*observe", "select",
-                    [Cond("<s>", "select-for", "observe"), Cond("<s>", "selected", "<x>", negated=True)]),
-    _propose_nonode("propose*select*compare", "select",
-                    [Cond("<s>", "select-for", "compare"), Cond("<s>", "selected", "<x>", negated=True)]),
+    # 하나의 **일반 select** operator — observe·compare 를 이름으로 구분하지 않는다. arg-선택 substate 면
+    #   (^select-for <아무값>) 발화하고, **무엇을 고를지는 body 가 WM(미관측 focus 유무·observed·cmp 상태)에서
+    #   추론**한다 (사용자 요청 2026-07-10: specific 이름 대신 WM 을 읽어 대상 결정).
+    _propose_nonode("propose*select", "select",
+                    [Cond("<s>", "select-for", "<sf>"), Cond("<s>", "selected", "<x>", negated=True)]),
 
     # ── hypothesize: OBJECT 레벨 object mapping 이 끝나면(compared) 발화 — object mapping 을
     #    program(가설)으로 합성·검증(body=시뮬레이션 조립·train 대조). arg-선택 substate 불필요
