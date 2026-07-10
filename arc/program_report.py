@@ -45,6 +45,9 @@ def objects_of(grid):                        # 4-연결 동색 성분 전부(색
                     stack += [(y+1, x), (y-1, x), (y, x+1), (y, x-1)]
                 objs.append(obj(sorted(cells), col))
     return sorted(objs, key=lambda o: (o.coord[0], o.color))
+def pixels_of(grid):                         # 모든 셀 = pixel(coord=[(r,c)], color), 인덱스 r*W+c (PIXEL level)
+    H, W = len(grid), len(grid[0])
+    return [obj([(r, c)], grid[r][c]) for r in range(H) for c in range(W)]
 # --- input (this pair) ---
 input_grid = %s
 # --- objects (from grid) & synthesized program (rule-based) ---
@@ -60,12 +63,14 @@ def _run_programs():
         prog, ok = None, False
         try:
             tr = _Tracer(task, tid, setup=setup_focus_agent)
-            tr.run(max_cycles=1000)
+            tr.run(max_cycles=6000)                          # PIXEL 하강은 픽셀 개별관측으로 cycle 이 큼
             prog = next((v for (i, a, v) in tr.ag.wm if a == "program" and v != "{}"), None)
             ok = "yes" in [v for (i, a, v) in tr.ag.wm if a == "hypothesized"]
         except Exception as e:                              # noqa: BLE001
             prog = f"# 실행 오류: {type(e).__name__}: {e}"
-        out.append({"id": tid, "program": prog, "ok": ok,
+        lvl = ("pixel" if (prog and "in_px" in prog)
+               else "object" if (prog and "in_objs" in prog) else "-")
+        out.append({"id": tid, "program": prog, "ok": ok, "level": lvl,
                     "input": task["train"][0]["input"], "output": task["train"][0]["output"]})
     return out
 
@@ -134,11 +139,12 @@ function objects_of(grid){{let seen=new Set(),objs=[];
     seen.add(y+','+x);cells.push([y,x]);st.push([y+1,x],[y-1,x],[y,x+1],[y,x-1]);}}
    cells.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);objs.push(obj(cells,col));}}}}
  objs.sort((a,b)=>a.coord[0][0]-b.coord[0][0]||a.coord[0][1]-b.coord[0][1]||a.color-b.color);return objs;}}
+function pixels_of(grid){{let ps=[];for(let r=0;r<grid.length;r++)for(let c=0;c<grid[0].length;c++)ps.push(obj([[r,c]],grid[r][c]));return ps;}}
 function eq(a,b){{return JSON.stringify(a)===JSON.stringify(b);}}
 function run(id){{
  const t=D[id];if(!t||!t.program)return;
- // 파이썬 program → JS: (r, c) 튜플 → [r,c], 변수(tfg/O/T/output_grid) 선언
- let js=t.program.replace(/\\((\\d+),\\s*(\\d+)\\)/g,'[$1,$2]').replace(/^(tfg\\d+|output_grid|O\\d+|T\\d+|in_objs)\\s*=/gm,'var $1 =');
+ // 파이썬 program → JS: (r, c) 튜플 → [r,c], 변수(tfg/O/P/T/output_grid/in_objs/in_px) 선언
+ let js=t.program.replace(/\\((\\d+),\\s*(\\d+)\\)/g,'[$1,$2]').replace(/^(tfg\\d+|output_grid|O\\d+|P\\d+|T\\d+|in_objs|in_px)\\s*=/gm,'var $1 =');
  let input_grid=t.input.map(r=>r.slice());
  try{{ eval(js); }}catch(e){{ document.getElementById('v'+id).innerHTML='<span class=bad>실행 오류: '+e+'</span>'; return; }}
  document.getElementById('out'+id).innerHTML=gridHTML(output_grid);   // program 이 var 로 선언(eval leak)

@@ -330,7 +330,8 @@ def _build_agenda(ag, sid, group):
             g0, g1 = grids[0], grids[1]
             cid = f"{sid}.cmp:pxmatch"
             ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1)
-            specs.append((cid, "pxmatch", 0))                   # 비교만 (hypothesis 는 다음 단계)
+            specs.append((cid, "pxmatch", 0))
+            ag.wm.add(sid, "to-hypothesize", "yes")             # pxmatch 끝나면 hypothesize(PIXEL) 발화
     for cid, k, order in specs:
         ag.wm.add(sid, "cmp", cid)                       # 계층 아래 비교 목록(선언적)
         ag.wm.add(cid, "kind", k)
@@ -645,27 +646,46 @@ def _op_hypothesize(ag):
     ag.wm.add(sid, "sim", _tup([list(r) for r in ag.task["train"][0]["input"]]))   # 시뮬 grid = G0
     ag.wm.add(sid, "sim-pair", p0.node_id)
 
-    # objects_of(grid) 성분·순서(색0 포함, 첫셀 정렬)에서 각 객체의 인덱스 — 합성 program 의 in_objs[i] 참조용.
-    # program_report 의 objects_of 와 동일 알고리즘이라 인덱스가 그대로 맞음.
     g0grid = [list(r) for r in ag.task["train"][0]["input"]]
     g1grid = [list(r) for r in ag.task["train"][0]["output"]]
-    in_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(g0grid))}
-    out_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(g1grid))}
-    order = 0
-    for a, b, cat in _fg_correspondence(ag, gid0, gid1, g0grid, g1grid):   # 대응쌍 → 변환 후보 노출
-        xid = f"{sid}.xform.{order}"
-        ag.wm.add(sid, "xform", xid)
-        ag.wm.add(xid, "g0obj", a); ag.wm.add(xid, "g1obj", b); ag.wm.add(xid, "order", str(order))
-        for prop, v in cat.items():                            # 속성별 COMM/DIFF (규칙이 매칭)
-            t = v.get("type") if isinstance(v, dict) else v
-            if t in ("COMM", "DIFF"):
-                ag.wm.add(xid, t.lower(), prop)                # (xid ^diff color)(xid ^comm coordinate)…
-        (g0cells, g0color), (g1cells, g1color) = _obj_cc(idx["nodes"][a]), _obj_cc(idx["nodes"][b])
-        ag.wm.add(xid, "g0cells", _tup([list(c) for c in g0cells]))   # 입력 객체 좌표(sim 조립용)
-        ag.wm.add(xid, "g1color", str(g1color))                       # 출력 객체 색(칠할 색)
-        ag.wm.add(xid, "g0idx", str(in_idx.get(frozenset(g0cells), 0)))    # objects_of(input)[i] 참조
-        ag.wm.add(xid, "g1idx", str(out_idx.get(frozenset(g1cells), 0)))   # objects_of(output)[j] 참조
-        order += 1
+    if ag.wm.contains(sid, "level", "PIXEL"):
+        # PIXEL 가설: 같은좌표 G0↔G1 pixel 비교 → color DIFF(위치 COMM)인 셀마다 재채색 xform 하나.
+        # object xform 과 **같은 WME 형태**(diff=color·comm=coordinate·g0cells·g1color)라 아래 coloring/
+        # verify 규칙을 그대로 탄다. g0idx = r*W+c = pixels_of(input)[i] 참조(프로그램은 in_px[i].coord).
+        # 픽셀은 색+좌표뿐이므로 대응은 '같은 좌표'(coord COMM) — object 처럼 유사도 랭킹 불필요.
+        # 단 **같은 크기**일 때만 셀 단위 재채색 가능(크기변화는 재채색으로 못 함 → xform 없이 verify 실패 = 정직).
+        H0, W0, H1, W1 = len(g0grid), len(g0grid[0]), len(g1grid), len(g1grid[0])
+        W = W0; order = 0
+        for r in range(H0 if (H0, W0) == (H1, W1) else 0):
+            for c in range(W):
+                if g0grid[r][c] != g1grid[r][c]:                    # 변화 셀 = color DIFF ∧ coord COMM
+                    xid = f"{sid}.xform.{order}"
+                    ag.wm.add(sid, "xform", xid); ag.wm.add(xid, "px", "yes")
+                    ag.wm.add(xid, "order", str(order))
+                    ag.wm.add(xid, "diff", "color"); ag.wm.add(xid, "comm", "coordinate")
+                    ag.wm.add(xid, "g0cells", _tup([[r, c]]))       # 단일 셀 (pixel)
+                    ag.wm.add(xid, "g1color", str(g1grid[r][c]))    # 그 셀의 출력 색
+                    ag.wm.add(xid, "g0idx", str(r * W + c))         # pixels_of(input)[i]
+                    order += 1
+    else:
+        # OBJECT 가설: object mapping 대응 → xform (objects_of[i] 참조). in_idx/out_idx 는 program 참조용.
+        in_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(g0grid))}
+        out_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(g1grid))}
+        order = 0
+        for a, b, cat in _fg_correspondence(ag, gid0, gid1, g0grid, g1grid):   # 대응쌍 → 변환 후보 노출
+            xid = f"{sid}.xform.{order}"
+            ag.wm.add(sid, "xform", xid)
+            ag.wm.add(xid, "g0obj", a); ag.wm.add(xid, "g1obj", b); ag.wm.add(xid, "order", str(order))
+            for prop, v in cat.items():                            # 속성별 COMM/DIFF (규칙이 매칭)
+                t = v.get("type") if isinstance(v, dict) else v
+                if t in ("COMM", "DIFF"):
+                    ag.wm.add(xid, t.lower(), prop)                # (xid ^diff color)(xid ^comm coordinate)…
+            (g0cells, g0color), (g1cells, g1color) = _obj_cc(idx["nodes"][a]), _obj_cc(idx["nodes"][b])
+            ag.wm.add(xid, "g0cells", _tup([list(c) for c in g0cells]))   # 입력 객체 좌표(sim 조립용)
+            ag.wm.add(xid, "g1color", str(g1color))                       # 출력 객체 색(칠할 색)
+            ag.wm.add(xid, "g0idx", str(in_idx.get(frozenset(g0cells), 0)))    # objects_of(input)[i] 참조
+            ag.wm.add(xid, "g1idx", str(out_idx.get(frozenset(g1cells), 0)))   # objects_of(output)[j] 참조
+            order += 1
     if _recolor_pending(ag, sid):              # 재채색(color DIFF ∧ coord COMM) 후보 있으면
         ag.wm.add(sid, "has-recolor", "yes")   # coloring 규칙 한 번만 발화(TIE 방지) — body 가 하나씩
     else:
@@ -698,11 +718,14 @@ def _op_coloring(ag):
 
     def _wx(xid, attr):
         return next((v for (i, a, v) in ag.wm if i == xid and a == attr), None)
-    # level-1 형식(ARC-TBD ast_example): 선택은 **objects_of(input)[i].coord**(객체 참조·provenance),
-    # 색은 target literal (출력참조는 순환이라 안 씀; 색의 일반화=rank 등은 이후 단계).
-    defs = ["in_objs = objects_of(input_grid)"]
-    steps = ["tfg0 = input_grid"]
+    # level-1 형식: 선택은 **objects_of(input)[i].coord**(OBJECT) / **pixels_of(input)[i].coord**(PIXEL) —
+    # 실제 ARCKG 성분/픽셀 참조(provenance), 색은 target literal. PIXEL 이면 셀 단위(pixels_of[i]=r*W+c 번째 셀).
     order = sorted(pend, key=lambda x: int(_wx(x, "order") or "0"))
+    px = bool(order) and ag.wm.contains(order[0], "px", "yes")
+    src, ref, var = (("in_px = pixels_of(input_grid)", "in_px", "P") if px
+                     else ("in_objs = objects_of(input_grid)", "in_objs", "O"))
+    defs = [src]
+    steps = ["tfg0 = input_grid"]
     for k, xid in enumerate(order):
         g0c = [tuple(c) for c in (_wx(xid, "g0cells") or ())]; g1col = int(_wx(xid, "g1color") or 0)
         g0i = int(_wx(xid, "g0idx") or 0)
@@ -710,8 +733,8 @@ def _op_coloring(ag):
             if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
                 grid = coloring(grid, (r, c), g1col)
         ag.wm.add(xid, "applied", "yes")
-        defs.append(f"O{k} = in_objs[{g0i}]")                  # 입력 객체 참조 (objects_of[i])
-        steps.append(f"tfg{k+1} = apply_DSL(tfg{k}, coloring, O{k}.coord, {g1col})")   # O_k.coord → 색
+        defs.append(f"{var}{k} = {ref}[{g0i}]")               # 입력 성분/픽셀 참조 ([i])
+        steps.append(f"tfg{k+1} = apply_DSL(tfg{k}, coloring, {var}{k}.coord, {g1col})")   # .coord → 색
     steps.append(f"output_grid = tfg{len(pend)}")
     ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
     ag.wm.add(sid, "program-code", "\n".join(defs + [""] + steps))
