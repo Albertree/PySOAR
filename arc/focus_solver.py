@@ -53,7 +53,7 @@ from arc.expr_solver import build_arckg, _load_value, _tup   # noqa: E402 (reuse
 # can walk the hierarchy the lens defines).
 # ---------------------------------------------------------------------------
 def index_arckg(root):
-    nodes, parent, children, level, edges = {}, {}, {}, {}, {}
+    nodes, parent, children, level, edges, pixels = {}, {}, {}, {}, {}, {}
 
     def walk(node, par, lvl):
         nid = node.node_id
@@ -79,12 +79,23 @@ def index_arckg(root):
             for o in (getattr(node, "objects", None) or []):
                 kid_edges.append(("object", o))
                 walk(o, nid, "object")
+            # PIXEL: grid.pixels 를 **GRID 직속**으로 별도 인덱싱한다 (children 이 아니라 pixels[gid] 로).
+            # object 아래가 아니라 GRID 아래에 object 와 **형제**로 둔다 (사용자 2026-07-10): GRID 에서 바로
+            # pixel 접근 · object 경유 시 같은 픽셀이 여러 object 에 중복되는 복잡성 회피. children 에 안 넣어
+            # grid→object 하강은 불변; object 실패 후 grid.pixels 로 하강(_do_descend PIXEL 분기)만 이걸 쓴다.
+            gpx = []
+            for px in (getattr(node, "pixels", None) or []):
+                pid = px.node_id
+                nodes[pid] = px; parent[pid] = nid; level[pid] = "pixel"
+                edges[pid] = []; children[pid] = []
+                gpx.append(pid)
+            pixels[nid] = gpx
         children[nid] = [c.node_id for _, c in kid_edges]
         edges[nid] = [(e, c.node_id) for e, c in kid_edges]
 
     walk(root, None, "task")
     return {"nodes": nodes, "parent": parent, "children": children,
-            "level": level, "edges": edges}
+            "level": level, "edges": edges, "pixels": pixels}
 
 
 def _cursor(ag):
@@ -307,6 +318,19 @@ def _build_agenda(ag, sid, group):
             ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1); ag.wm.add(cid, "pair", p)
             specs.append((cid, "match", 0))
             ag.wm.add(sid, "to-hypothesize", "yes")             # match 끝나면 hypothesize 발화(OBJECT 만)
+    elif kind == "pixel":
+        # PIXEL: GRID.pixels 를 G0·G1 로 나눠 **G0-pixels ↔ G1-pixels 교차 비교**(cross-grid 우선 —
+        # grid 내부 pixel 끼리보다). object match 와 동형, 단위만 pixel. 같은 좌표끼리 kg_compare →
+        # color/coord COMM/DIFF 만(**delta·크기비교 없음**; 좌표차 표현은 별도 단계). (사용자 2026-07-10)
+        bygrid = {}
+        for px in group:
+            bygrid.setdefault(par[px], []).append(px)           # pixel → 그 GRID
+        grids = sorted(bygrid)                                   # [G0, G1] (같은 pair)
+        if len(grids) >= 2:
+            g0, g1 = grids[0], grids[1]
+            cid = f"{sid}.cmp:pxmatch"
+            ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1)
+            specs.append((cid, "pxmatch", 0))                   # 비교만 (hypothesis 는 다음 단계)
     for cid, k, order in specs:
         ag.wm.add(sid, "cmp", cid)                       # 계층 아래 비교 목록(선언적)
         ag.wm.add(cid, "kind", k)
@@ -375,6 +399,31 @@ def _wm_vals(ag, cid, attr):
     return [v for (i, a, v) in ag.wm if i == cid and a == attr]
 
 
+def _compare_pixels(ag, sid, c, g0, g1, kg_compare, nodes, idx):
+    """PIXEL: G0-pixels ↔ G1-pixels 를 **같은 좌표끼리** 교차 비교(cross-grid 우선). 각 쌍 kg_compare →
+    color/coord COMM/DIFF. **뺄셈·delta·크기비교 없음**(동등성만) — 좌표차/이동량 표현은 별도 단계.
+    변화 셀(color DIFF)만 relation(receipt)으로 저장 = pixel 수준 변환 스펙(어느 셀이 어떻게 바뀌나)."""
+    def _rc(p):
+        j = nodes[p].to_json()["coordinate"]
+        return (j["row_index"], j["col_index"])
+    px1 = {_rc(p): p for p in idx.get("pixels", {}).get(g1, [])}
+    comm = diff = 0
+    for p0 in sorted(idx.get("pixels", {}).get(g0, [])):
+        p1 = px1.get(_rc(p0))
+        if p1 is None:
+            continue
+        rel = kg_compare(nodes[p0], nodes[p1])
+        cat = rel["result"].get("category", {})
+        color_diff = (cat.get("color", {}).get("type") == "DIFF")
+        if color_diff:
+            diff += 1
+            _store_relation(ag, {"id": {"id1": p0, "id2": p1}, "result": rel["result"]}, anchor=c)
+        else:
+            comm += 1
+    ag.wm.add(c, "px-comm", str(comm))            # 안 변한 셀 수
+    ag.wm.add(c, "px-diff", str(diff))            # 변한(color DIFF) 셀 수 = pixel 변환 규모
+
+
 def _do_compare_kind(ag, sid, c, kind):
     """cmp 마커 c 의 kind·arg(WM 에 선언적으로 있음)를 읽어 그 한 비교를 실행 (원자연산)."""
     from ARCKG.comparison import compare as kg_compare
@@ -392,6 +441,9 @@ def _do_compare_kind(ag, sid, c, kind):
     elif kind == "match":                                           # OBJECT: G0-objs ↔ G1-objs 대응
         g0, g1, p = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0], _wm_vals(ag, c, "pair")[0]
         _compare_objects(ag, sid, c, g0, g1, p, kg_compare, nodes, idx)
+    elif kind == "pxmatch":                                         # PIXEL: G0-pixels ↔ G1-pixels 교차
+        g0, g1 = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0]
+        _compare_pixels(ag, sid, c, g0, g1, kg_compare, nodes, idx)
     elif kind == "predict":
         _predict_test_output(ag, sid)
 
@@ -798,6 +850,9 @@ PRODUCTIONS = [
     _propose_named("propose*solve*fallback", "solve",
                    [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
                     Cond("<s>", "compared", "yes"), Cond("<s>", "answer-ready", "<a>", negated=True)]),
+    # OBJECT hypothesize 실패 → solve(미구현) → ONC → _do_descend 가 GRID.pixels 로 하강(PIXEL).
+    _propose_named("propose*solve*pixel", "solve",
+                   [Cond("<s>", "hypothesized", "failed"), Cond("<s>", "pixel-open", "<p>", negated=True)]),
 
     _apply_state("submit", ("done", "yes")),
     # select·solve 는 apply 규칙 없음: select body 가 super 커서를 세우는 것(=arg 고르기, §1-3 탐색

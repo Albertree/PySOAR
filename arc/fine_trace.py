@@ -448,8 +448,22 @@ class _Tracer:
           ^cursor = 현재 관측 커서(한 노드) — observe 가 이걸 하나씩 옮기며 훑는다."""
         idx = self.ag.kg.get("idx") if hasattr(self.ag, "kg") else None
         srcs = self._goal_group(goal.id)
-        kids = [c for src in srcs
-                for c in (idx["children"].get(src, []) if idx else [])] if idx else []
+        # PIXEL 하강: OBJECT 레벨에서 hypothesize 가 실패(^hypothesized failed)했으면, object 의 자식이 아니라
+        # **부모 GRID 의 pixels** 로 하강한다 (사용자 2026-07-10: 되올라감 없이 그냥 descend → PIXEL, focus=GRID.pixels).
+        level_now = (idx["level"].get(srcs[0], "") if (idx and srcs) else "")
+        to_pixel = (idx is not None and srcs and level_now == "object"
+                    and self.ag.wm.contains(goal.id, "hypothesized", "failed"))
+        if to_pixel:
+            grids = []
+            for o in srcs:                          # object → 그 부모 GRID (G0·G1)
+                g = idx["parent"].get(o)
+                if g and g not in grids:
+                    grids.append(g)
+            kids = [px for g in grids for px in idx.get("pixels", {}).get(g, [])]
+            self.ag.wm.add(goal.id, "pixel-open", "yes")     # 재하강 방지 마커
+        else:
+            kids = [c for src in srcs
+                    for c in (idx["children"].get(src, []) if idx else [])] if idx else []
         if not kids:
             self.emit("decide", "substate", f"자식 없음 (from {srcs}) — 더 하강 불가, 종료")
             return None
