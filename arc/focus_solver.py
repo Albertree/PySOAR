@@ -643,31 +643,40 @@ def _op_hypothesize(ag):
     root = ag.kg["arckg_root"]
     p0 = root.example_pairs[0]
     gid0, gid1 = p0.input_grid.node_id, p0.output_grid.node_id
-    ag.wm.add(sid, "sim", _tup([list(r) for r in ag.task["train"][0]["input"]]))   # 시뮬 grid = G0
     ag.wm.add(sid, "sim-pair", p0.node_id)
 
     g0grid = [list(r) for r in ag.task["train"][0]["input"]]
     g1grid = [list(r) for r in ag.task["train"][0]["output"]]
     if ag.wm.contains(sid, "level", "PIXEL"):
-        # PIXEL 가설: 같은좌표 G0↔G1 pixel 비교 → color DIFF(위치 COMM)인 셀마다 재채색 xform 하나.
-        # object xform 과 **같은 WME 형태**(diff=color·comm=coordinate·g0cells·g1color)라 아래 coloring/
-        # verify 규칙을 그대로 탄다. g0idx = r*W+c = pixels_of(input)[i] 참조(프로그램은 in_px[i].coord).
-        # 픽셀은 색+좌표뿐이므로 대응은 '같은 좌표'(coord COMM) — object 처럼 유사도 랭킹 불필요.
-        # 단 **같은 크기**일 때만 셀 단위 재채색 가능(크기변화는 재채색으로 못 함 → xform 없이 verify 실패 = 정직).
-        H0, W0, H1, W1 = len(g0grid), len(g0grid[0]), len(g1grid), len(g1grid[0])
+        # PIXEL 가설 = **잔여(residual) 처리**: 상위(object) substate 가 재채색한 sim·program 을 이어받아,
+        # object 로 못 맞춘 셀(그 sim 이 아직 G1 과 다른 셀)만 pixel 로 재채색해 **object 가설에 덧붙인다**.
+        # object 로 완결된 문제(845·868·08ed)는 애초에 PIXEL 로 안 내려온다(object verify 통과). object 가
+        # 일부만 처리한 문제(예: 009d5c81)는 그 sim 에서 이어받아 잔여만 pixel 이 마감한다.
+        sup = ag.stack[-2].id if len(ag.stack) >= 2 else None
+        base_sim = next((v for (i, a, v) in ag.wm if i == sup and a == "sim"), None) if sup else None
+        base_prog = next((v for (i, a, v) in ag.wm if i == sup and a == "program-code"), None) if sup else None
+        sim0 = [list(r) for r in base_sim] if base_sim else [list(r) for r in g0grid]  # object 재채색 후 상태
+        ag.wm.add(sid, "sim", _tup(sim0))                       # pixel sim = object 재채색 결과에서 이어감
+        if base_prog:
+            ag.wm.add(sid, "base-program", base_prog)           # 덧붙일 object 가설(program)
+        # 잔여: object 재채색 후에도 G1 과 다른 셀만. object xform 과 같은 WME 형태(diff=color·comm=coordinate·
+        # g0cells·g1color, +px)라 아래 coloring/verify 규칙을 그대로 탄다. g0idx=r*W+c=pixels_of(input)[i].
+        # 같은 크기일 때만 셀 단위 재채색 가능(크기변화 → xform 없이 verify 실패 = 정직).
+        H0, W0, H1, W1 = len(sim0), len(sim0[0]), len(g1grid), len(g1grid[0])
         W = W0; order = 0
         for r in range(H0 if (H0, W0) == (H1, W1) else 0):
             for c in range(W):
-                if g0grid[r][c] != g1grid[r][c]:                    # 변화 셀 = color DIFF ∧ coord COMM
+                if sim0[r][c] != g1grid[r][c]:                  # 잔여 변화 셀 = color DIFF ∧ coord COMM
                     xid = f"{sid}.xform.{order}"
                     ag.wm.add(sid, "xform", xid); ag.wm.add(xid, "px", "yes")
                     ag.wm.add(xid, "order", str(order))
                     ag.wm.add(xid, "diff", "color"); ag.wm.add(xid, "comm", "coordinate")
-                    ag.wm.add(xid, "g0cells", _tup([[r, c]]))       # 단일 셀 (pixel)
-                    ag.wm.add(xid, "g1color", str(g1grid[r][c]))    # 그 셀의 출력 색
-                    ag.wm.add(xid, "g0idx", str(r * W + c))         # pixels_of(input)[i]
+                    ag.wm.add(xid, "g0cells", _tup([[r, c]]))    # 단일 셀 (pixel)
+                    ag.wm.add(xid, "g1color", str(g1grid[r][c]))  # 그 셀의 출력 색
+                    ag.wm.add(xid, "g0idx", str(r * W + c))       # pixels_of(input)[i]
                     order += 1
     else:
+        ag.wm.add(sid, "sim", _tup(g0grid))                     # OBJECT: 시뮬 grid = G0
         # OBJECT 가설: object mapping 대응 → xform (objects_of[i] 참조). in_idx/out_idx 는 program 참조용.
         in_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(g0grid))}
         out_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(g1grid))}
@@ -722,10 +731,17 @@ def _op_coloring(ag):
     # 실제 ARCKG 성분/픽셀 참조(provenance), 색은 target literal. PIXEL 이면 셀 단위(pixels_of[i]=r*W+c 번째 셀).
     order = sorted(pend, key=lambda x: int(_wx(x, "order") or "0"))
     px = bool(order) and ag.wm.contains(order[0], "px", "yes")
+    base = next((v for (i, a, v) in ag.wm if i == sid and a == "base-program"), None) if px else None
     src, ref, var = (("in_px = pixels_of(input_grid)", "in_px", "P") if px
                      else ("in_objs = objects_of(input_grid)", "in_objs", "O"))
-    defs = [src]
-    steps = ["tfg0 = input_grid"]
+    if base:
+        # PIXEL 잔여를 **object 가설(base)에 덧붙인다**: base 의 output_grid 라인만 떼고 tfg 번호를 이어감.
+        # in_px·P{k} defs 를 base 뒤에 두고(사용 전 정의됨) 잔여 tfg step 을 tfgK 부터 계속.
+        blines = [ln for ln in base.split("\n") if not ln.strip().startswith("output_grid")]
+        base_n = int(base.rsplit("output_grid = tfg", 1)[-1].strip()) if "output_grid = tfg" in base else 0
+        defs, steps = blines + [src], []
+    else:
+        defs, steps, base_n = [src], ["tfg0 = input_grid"], 0
     for k, xid in enumerate(order):
         g0c = [tuple(c) for c in (_wx(xid, "g0cells") or ())]; g1col = int(_wx(xid, "g1color") or 0)
         g0i = int(_wx(xid, "g0idx") or 0)
@@ -734,8 +750,8 @@ def _op_coloring(ag):
                 grid = coloring(grid, (r, c), g1col)
         ag.wm.add(xid, "applied", "yes")
         defs.append(f"{var}{k} = {ref}[{g0i}]")               # 입력 성분/픽셀 참조 ([i])
-        steps.append(f"tfg{k+1} = apply_DSL(tfg{k}, coloring, {var}{k}.coord, {g1col})")   # .coord → 색
-    steps.append(f"output_grid = tfg{len(pend)}")
+        steps.append(f"tfg{base_n+k+1} = apply_DSL(tfg{base_n+k}, coloring, {var}{k}.coord, {g1col})")  # .coord → 색
+    steps.append(f"output_grid = tfg{base_n + len(order)}")
     ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
     ag.wm.add(sid, "program-code", "\n".join(defs + [""] + steps))
     ag.wm.add(sid, "colored-all", "yes")                       # recolor 다 적용 → verify

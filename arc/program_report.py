@@ -68,7 +68,8 @@ def _run_programs():
             ok = "yes" in [v for (i, a, v) in tr.ag.wm if a == "hypothesized"]
         except Exception as e:                              # noqa: BLE001
             prog = f"# 실행 오류: {type(e).__name__}: {e}"
-        lvl = ("pixel" if (prog and "in_px" in prog)
+        lvl = ("merge" if (prog and "in_objs" in prog and "in_px" in prog)  # object 가설 + pixel 잔여
+               else "pixel" if (prog and "in_px" in prog)
                else "object" if (prog and "in_objs" in prog) else "-")
         out.append({"id": tid, "program": prog, "ok": ok, "level": lvl,
                     "input": task["train"][0]["input"], "output": task["train"][0]["output"]})
@@ -80,6 +81,8 @@ body{background:#0d1117;color:#d0d7de;font:13px/1.5 ui-monospace,monospace;margi
 h1{font-size:17px;margin:0 0 4px} .lead{color:#8b949e;margin-bottom:18px}
 section{border:1px solid #30363d;border-radius:9px;padding:14px 16px;margin:0 0 16px;background:#161b22}
 h2{font-size:15px;margin:0 0 10px}
+.bo{background:#1f6feb;color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:normal}
+.bp{background:#8957e5;color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:normal}
 .row{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
 pre{background:#0b0e14;border:1px solid #30363d;border-radius:7px;padding:11px 13px;overflow:auto;
  max-height:340px;font-size:12px;color:#c9d1d9;white-space:pre;flex:1 1 340px;min-width:320px}
@@ -110,9 +113,13 @@ def build():
                     f"<div class=gcol><span class=glbl>expected P0.G1</span><div id='exp{d['id']}'></div></div>"
                     f"</div>")
         else:
-            reason = d["program"] or "object level 에서 합성 실패 (recolor 규칙 미해당 → PIXEL 대상)"
-            body = f"<div class=none>program 없음 — {reason if reason.startswith('#') else reason}</div>"
-        sections.append(f"<section><h2>{d['id']}{' ✓' if d['ok'] else ''}</h2>{body}</section>")
+            reason = d["program"] or ("재채색 program 없음 — GRID 상수해(출력 불변) 또는 크기변화"
+                                      "(G0·G1 크기 다름) 라 셀 단위 재채색으로 변환 불가")
+            body = f"<div class=none>{reason}</div>"
+        badge = {"object": " <span class=bo>OBJECT recolor</span>",
+                 "pixel": " <span class=bp>PIXEL recolor</span>",
+                 "merge": " <span class=bo>OBJECT</span><span class=bp>+PIXEL 잔여</span>"}.get(d.get("level"), "")
+        sections.append(f"<section><h2>{d['id']}{' ✓' if d['ok'] else ''}{badge}</h2>{body}</section>")
 
     payload = {d["id"]: {"input": d["input"], "output": d["output"],
                          "program": d["program"] if "apply_DSL" in (d["program"] or "") else None}
