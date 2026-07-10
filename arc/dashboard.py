@@ -91,19 +91,13 @@ def wm_deltas(wm_states):
 
 
 def task_data(tid, task):
-    from arc.fine_trace import fine_trace
+    from arc.fine_trace import _Tracer
     from arc.expr_solver import candidates
-    events = fine_trace(task, tid)
-    # dedupe WM snapshots -- most steps share the same (large) WM, so store the
-    # distinct states once and have each event reference one by index.
-    wm_states, idx = [], {}
-    for e in events:
-        key = tuple(tuple(t) for t in e["wm"])
-        if key not in idx:
-            idx[key] = len(wm_states)
-            wm_states.append(e["wm"])
-        e["wm_state"] = idx[key]
-        del e["wm"]
+    # WM 스냅샷은 emit 이 연속중복 병합해 tr._wm_states 로 축소 저장(메모리 폭증 방지) — event 는
+    # wm_state 인덱스만 보유. (구 fine_trace() 는 events 만 주어 _wm_states 접근 불가 → _Tracer 직접.)
+    tr = _Tracer(task, tid)
+    events = tr.run()
+    wm_states = tr._wm_states
     cands = candidates(task, 3)
     gt = [tp["output"] for tp in task["test"]]
     correct_i = next((i for i, c in enumerate(cands) if c["grid"] == gt), None)

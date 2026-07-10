@@ -80,10 +80,24 @@ class _Tracer:
                       key=lambda t: (str(t[0]), str(t[1]), str(t[2])))
 
     def emit(self, phase, kind, label, highlight=None, detail=None, rule=None, wave=None):
+        # 메모리: event 마다 full WM 스냅샷을 들고 있으면 events×WM(대개 WM 수천 WME) 로 곱해져
+        # 큰 격자에서 수십~수백 GB(179GB OOM)까지 커진다. WM 이 안 바뀐 연속 event(대부분의 MATCH/
+        # FIRE/phase step)는 직전 상태 인덱스를 **재사용**하고, 바뀔 때만 새 상태를 push 한다.
+        # → 보관 메모리 = (WM 이 실제 바뀐 횟수)×WM 로 축소. 대시보드는 wm_state 인덱스로 상태를 찾는다.
+        if not hasattr(self, "_wm_states"):
+            self._wm_states, self._last_key, self._last_si = [], None, -1
+        wm = self._wm()
+        key = tuple(tuple(t) for t in wm)
+        if key == self._last_key:
+            si = self._last_si
+        else:
+            si = len(self._wm_states)
+            self._wm_states.append(wm)
+            self._last_key, self._last_si = key, si
         self.events.append({
             "seq": len(self.events), "phase": phase, "kind": kind, "label": label,
             "cycle": self.cycle, "wave": wave, "highlight": highlight or [],
-            "wm": self._wm(), "goal_stack": [g.id for g in self.ag.stack],
+            "wm_state": si, "goal_stack": [g.id for g in self.ag.stack],
             "detail": detail, "rule": rule,   # the responsible rule / operator
         })
 

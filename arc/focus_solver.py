@@ -425,7 +425,9 @@ def _compare_pixels(ag, sid, c, g0, g1, kg_compare, nodes, idx):
         color_diff = (cat.get("color", {}).get("type") == "DIFF")
         if color_diff:
             diff += 1
-            _store_relation(ag, {"id": {"id1": p0, "id2": p1}, "result": rel["result"]}, anchor=c)
+            # anchor 없이 — pixel id(T..P0.G0.X21, T..P0.G1.X21)의 LCA=T..P0(pair) 아래 E_G0X21-G1X21 로
+            # 저장(object relation 과 동일 관례). cmp 마커(S..cmp:pxmatch)를 앵커로 쓰면 S1 밑 잘못된 위치가 됨.
+            _store_relation(ag, {"id": {"id1": p0, "id2": p1}, "result": rel["result"]})
         else:
             comm += 1
     ag.wm.add(c, "px-comm", str(comm))            # 안 변한 셀 수
@@ -985,14 +987,7 @@ def _dash_data(task, tid="0a", max_cycles=1000):   # observe+compare+aggregate+f
     from arc.fine_trace import _Tracer
     tr = _Tracer(task, tid, setup=setup_focus_agent)
     events = tr.run(max_cycles=max_cycles)
-    wm_states, idx = [], {}
-    for e in events:
-        key = tuple(tuple(t) for t in e["wm"])
-        if key not in idx:
-            idx[key] = len(wm_states)
-            wm_states.append(e["wm"])
-        e["wm_state"] = idx[key]
-        del e["wm"]
+    wm_states = tr._wm_states           # emit 이 연속중복 병합해 이미 축소·인덱싱(events 는 wm_state 보유)
     # 제출 시도(3회 환경)를 대시보드 후보로: 각 시도의 답 격자 + 정답 여부.
     # HTML 은 c.answer 를 *테스트 pair 별 격자들의 리스트* 로 렌더(c.answer.map(grid)) →
     # 단일 test 답을 리스트로 감싼다.
