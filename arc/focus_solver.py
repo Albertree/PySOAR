@@ -968,6 +968,54 @@ OP_DOCS = {
 # dashboard generation (reuses dashboard._HTML; separate file, zero impact on the
 # working expr_solver dashboard)
 # ---------------------------------------------------------------------------
+def _cycle_tree(events):
+    """git dev-tree 용 **cycle 별 요약 노드** 목록. 각 노드 = 한 decision cycle:
+      depth  = substate 깊이(S1=0, 하강할수록 +1) → 그래프의 lane(가로 위치)
+      branch = 이 cycle 에 substate 가 생겼나(가지 침 = impasse)
+      summary= 한 줄 요약 (무엇이 선택·적용됐나 / 뭐가 안돼 substate 가 났나)
+      step   = 이 cycle 의 첫 이벤트 seq (노드 클릭 시 stepper 점프 대상)."""
+    import re
+    from itertools import groupby
+    nodes = []
+    for c, grp in groupby(events, key=lambda e: e["cycle"]):
+        ec = list(grp)
+        rep = next((e for e in ec if e["kind"] in ("op-select", "decide")), ec[-1])
+        gstk = rep.get("goal_stack") or ["S1"]
+        depth, gid = max(0, len(gstk) - 1), gstk[-1]
+        op = None
+        for e in ec:
+            if e["kind"] == "op-select":
+                m = re.search(r"name=([a-z]+)", e["label"])
+                if m:
+                    op = m.group(1)
+        sub = [e for e in ec if e["kind"] == "substate"]
+        applied = any(e["kind"] == "op-apply" and "새 substate" not in e["label"] for e in ec)
+        subd = next((e for e in ec if e["kind"] == "substate" and "생성" in e["label"]), None)
+        if sub:                                                   # 가지 침 (impasse → substate)
+            lab = (subd or sub[-1])["label"]
+            lv = re.search(r"level=([A-Z]+)", lab)
+            if "하강" in lab:
+                summ = f"‹{op or 'solve'}› 미구현 → 하강" + (f" · {lv.group(1)} 관측 시작" if lv else "")
+            elif "arg" in lab:
+                summ = f"‹{op or 'observe/compare'}› 대상 미정 → 대상 선택 substate"
+            elif "자식 없음" in lab:
+                summ = "더 하강할 계층 없음 → 종료"
+            else:
+                summ = lab[:70]
+            knd = "branch"
+        elif applied:
+            summ, knd = f"‹{op}› 선택 → 적용", "apply"
+        elif op:
+            summ, knd = f"‹{op}› 제안·선택", "select"
+        elif any(e["kind"] == "output" and "answer" in e["label"].lower() for e in ec):
+            summ, knd = "답 제출(output)", "output"
+        else:
+            summ, knd = (ec[-1]["label"] or "")[:70], "phase"
+        nodes.append({"cycle": c, "depth": depth, "goal": gid, "op": op or "", "kind": knd,
+                      "branch": bool(sub), "summary": summ, "step": ec[0]["seq"]})
+    return nodes
+
+
 def _dash_data(task, tid="0a", max_cycles=1000):   # observe+compare+aggregate+find+solve+…×levels
     from arc.fine_trace import _Tracer
     tr = _Tracer(task, tid, setup=setup_focus_agent)
@@ -984,6 +1032,7 @@ def _dash_data(task, tid="0a", max_cycles=1000):   # observe+compare+aggregate+f
     from arc.dashboard import wm_deltas
     return {
         "id": tid, "events": events, "wm_states": wm_deltas(wm_states),
+        "cycle_tree": _cycle_tree(events),                  # git dev-tree(좌측 패널) — cycle 노드 + substate 가지
         "grids": {"train": task["train"],
                   "test": [{"input": tp["input"]} for tp in task["test"]]},
         "candidates": candidates, "correct_attempt": correct_i, "n_steps": len(events),

@@ -136,7 +136,7 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
 /* four regions size by RATIO(fr) so the layout always fits the viewport width (no
    horizontal scroll). minmax(0,…) lets columns shrink below content; each panel
    scrolls its own overflow internally. ratios ≈ old 300:600:360:300 = 1:2:1.2:1 */
-#stepper{display:none;grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1.2fr) minmax(0,1fr);
+#stepper{display:none;grid-template-columns:230px minmax(0,1fr) minmax(0,1.9fr) minmax(0,1.15fr) minmax(0,0.95fr);
  grid-template-rows:auto auto 1fr auto;gap:6px;height:100vh;width:100vw;padding:6px}
 /* panel = fixed header + scrolling body (header never overlaps content) */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 11px;
@@ -151,14 +151,19 @@ body{font:13px/1.45 -apple-system,Segoe UI,sans-serif;margin:0;background:var(--
  border-radius:7px;z-index:99;font-size:11px;line-height:1.55;box-shadow:0 4px 14px rgba(0,0,0,.55)}
 .info:hover .tip{display:block} .info .tip b{color:var(--accent)}
 .info .g{color:var(--addt)} .info .r{color:var(--rmt)} .info .o{color:#ffb454} .info .bl{color:var(--blue)}
-#sbar{grid-column:1/5;grid-row:1;display:flex;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 12px}
-#phases{grid-column:1/5;grid-row:2;display:flex;gap:6px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+#sbar{grid-column:1/6;grid-row:1;display:flex;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 12px}
+#phases{grid-column:1/6;grid-row:2;display:flex;gap:6px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
 .ph{padding:3px 13px;border-radius:14px;border:1px solid var(--line);color:var(--muted);font-size:12px}
 .ph.on{background:#2d4a86;border-color:var(--accent);color:#fff}
-#pmap{grid-column:1;grid-row:3} #pwm{grid-column:2;grid-row:3} #prules{grid-column:3;grid-row:3}
-#pright{grid-column:4;grid-row:3;display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
+#ptree{grid-column:1;grid-row:3} #pmap{grid-column:2;grid-row:3} #pwm{grid-column:3;grid-row:3} #prules{grid-column:4;grid-row:3}
+#pright{grid-column:5;grid-row:3;display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
 #pprob{flex:0 0 auto;max-height:42%} #pcand{flex:1 1 auto}
-#pevent{grid-column:1/5;grid-row:4;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 13px;max-height:96px;overflow:auto}
+#pevent{grid-column:1/6;grid-row:4;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 13px;max-height:96px;overflow:auto}
+/* git dev-tree (좌측): cycle 노드 + substate 가지 */
+#tree{overflow:auto} #tree svg{display:block}
+.tn{cursor:pointer} .tn:hover circle{stroke:#fff;stroke-width:2}
+.tn text{fill:var(--muted);font:10px ui-monospace,monospace} .tn:hover text{fill:var(--txt)}
+.tn.cur circle{stroke:#fff;stroke-width:2.5} .tn.cur text{fill:#fff;font-weight:bold}
 /* uniform-width rows (no horizontal scroll); the detail column truncates with an
    ellipsis -- click a step to read the full text in the bottom event bar */
 .maprow{font-family:ui-monospace,monospace;font-size:11px;padding:2px 6px;border-radius:4px;cursor:pointer;display:flex;align-items:center;overflow:hidden;border-left:3px solid transparent}
@@ -268,6 +273,7 @@ kbd{background:var(--p2);border:1px solid var(--line);border-radius:4px;padding:
 <div id="stepper">
  <div id="sbar"></div>
  <div id="phases"></div>
+ <div class="panel" id="ptree"><h3>process tree<span class="info">i<div class="tip"><b>결정 사이클을 git 커밋 그래프처럼</b> 세로로. <b>한 점 = 한 cycle</b>. <b>가로 위치(lane) = substate 깊이</b>(왼쪽 S1, 오른쪽으로 갈수록 깊은 substate). <b>오른쪽으로 가지 치는 것 = substate 생성</b>(무언가 안 돼서 impasse → 한 계층 더 들어감), 왼쪽으로 합쳐지는 것 = substate 해소·복귀.<br>점 색: <span style="color:#FF851B">주황=substate 생성(가지)</span> · <span style="color:#2ECC40">초록=operator 적용</span> · <span style="color:#0074D9">파랑=선택</span> · <span style="color:#FFDC00">노랑=출력</span>. <b>점에 호버</b>하면 그 cycle 한 줄 요약(무엇이 선택·적용됐나 / 뭐가 안돼 substate 가 났나). <b>클릭</b>하면 그 cycle 로 이동. ▶=현재.</div></span></h3><div id="tree"></div></div>
  <div class="panel" id="pmap"><h3>cycle map<span class="info">i<div class="tip">시스템의 <b>모든 원자적 변화 1개 = 1스텝</b>. ▶ = 현재 스텝. 클릭하거나 <b>↑↓</b>(한 스텝씩)·<b>←→</b>(다음/이전 wm-update로 점프)로 이동.<br><b>박스 친 줄 = 큰 단계</b>(input → propose → decide → apply → output)가 풀이의 구조. 그 아래 줄들이 그 단계 안에서 일어난 변화.<br><b>wave N</b>(평문) = 그 단계 안의 <b>elaboration sub-cycle</b>. <b>wave 1</b> = 정식 결정에 의한 1차 발화(propose의 operator 제안 / apply의 apply 규칙·body), <b>wave 2·3…</b> = 그 결과로 연쇄된 2차 wave. 같은 wave 번호 = 한 settle 라운드.<br>각 wave는 <b>match → fire → wm-update</b> 3원자단계로, cycle map에서 <b>왼쪽 색 띠</b>로 구분: <b style="color:#ff9d2e">match=주황</b>(LHS 충족/깨짐 검출), <b style="color:#b98aff">fire/retract=보라</b>(발화·철회를 한 색으로; rules 패널에선 초록/빨강 구분), <b class=g>wm-update=녹색</b>(preference가 WME로 들어가 WM 변화). operator <b>body</b>(직접 적용)는 wave가 아니라 APPLY phase의 효과라 색 띠·wave 번호가 없다. <b>WM은 wm-update에서만 바뀐다</b>(match·fire 땐 불변). 발화했는데 뒤에 wm-update가 없으면 = 그 결과가 o-support라 제거할 게 없는 무해한 철회.<br>각 줄은 <b>[wave][stage][detail]</b> 고정폭 컬럼으로 정렬되고, detail이 길면 <b>…</b>로 잘린다 — 줄을 클릭하면 <b>하단 바</b>에서 전체 텍스트를 본다.</div></span></h3><div id="map"></div></div>
  <div class="panel" id="pwm"><h3>working memory<span class="info">i<div class="tip"><b>S1을 루트로 한 단일 WM 트리.</b> 모든 줄 = <b>(id ^attr value)</b> WME 삼중쌍. ▸ 토글로 lazy 하위(pair·grid·object) 펼침. 우측 <b>⇕ all</b> = 전부 열기(일부라도 닫혀 있으면)/전부 닫기. 한 토글의 열림 상태는 다음 step으로 유지되고, 다음 step에서 새로 생긴 토글은 닫힌 채로 시작.<br>색: <span class=g>녹색 바탕</span>=그 줄 추가, <span class=r>빨강 바탕</span>=그 줄 삭제. 하위에서만 바뀐 상위 토글은 <b>글자색만</b> — <span class=g>녹=추가</span>/<span class=r>적=삭제</span>/<span class=o>주황=혼합</span>.<br>한 객체가 두 엣지로 가리켜질 때(예: 선택된 <b>(S1 ^operator O1)</b>와 그 acceptable preference <b>(S1 ^operator O1 +)</b>가 둘 다 O1을 가리킴) 하위는 <b>먼저 나온 엣지 아래에 한 번</b>만 펼치고, 나머지 엣지는 <b>평범한 leaf</b>로 둔다(중복 방지).</div></span><button class=allbtn onclick="toggleAll('wm')" title="전부 열기 / 전부 닫기">⇕ all</button></h3><div id="wm"></div></div>
  <div class="panel" id="prules"><h3>rules<span class="info">i<div class="tip">에이전트의 <b>기본 production 규칙</b> (절차적 지식). 이 step에 <b>발화한 규칙</b> = <span class=g>초록 테두리 ● fired</span>, <b>철회된 규칙</b> = <span class=r>빨강 테두리 ● retracted</span>. <b>match step</b>에선 발화/철회 직전 상태로 <span class=o>◌ matched(주황 점선=LHS 충족, 발화 대기)</span>·<span class=r>◌ unmatched(붉은 점선=LHS 깨짐, 철회 대기)</span> 표시. 철회는 LHS가 더는 만족되지 않아 instantiation이 사라진 것이라, 그 규칙의 조건이 <b>회색(미충족)</b>으로 보이는 게 정상이다. 조건은 <b>종류별 배경색</b>: <span class=bl>긍정(파랑 기)</span> = WM에 있어야 함, <span class=r>부정(빨강 기, 앞에 −)</span> = WM에 없어야 함. 글자색: <b>회색=미충족</b>, 충족되면 <span class=bl>긍정 파랑</span>/<span class=r>부정 빨강</span> 진한색. THEN의 operator = 금색. 한 규칙은 <b>모든 조건이 충족(=진한색)</b>일 때만 발화. 카드는 기본 <b>접힘</b>(WM과 동일) — 클릭해 펼치면 다음 step으로 유지. 우측 <b>⇕ all</b>로 전부 열기/닫기.</div></span><button class=allbtn onclick="toggleAll('rules')" title="전부 열기 / 전부 닫기">⇕ all</button></h3><div id="rules"></div></div>
@@ -494,6 +500,29 @@ function wmStates(ti){
  }
  _WMC[ti]=out; return out;
 }
+let _treeTi=-1;
+function renderTree(){                              // git dev-tree: cycle 노드 + substate 가지
+ const ct=D.tasks[ti].cycle_tree||[];
+ if(!ct.length){$('tree').innerHTML='<div style="padding:16px;color:var(--muted);font-size:11px">no cycles</div>';return;}
+ if(_treeTi!==ti){                                  // 태스크 바뀌면 SVG 새로
+  _treeTi=ti;
+  const laneW=15,rowH=19,mx=13,my=9; let maxd=0; ct.forEach(n=>{if(n.depth>maxd)maxd=n.depth;});
+  const tx=mx+maxd*laneW+10, W=tx+180, H=my*2+ct.length*rowH;
+  const COL={branch:'#FF851B',apply:'#2ECC40',select:'#0074D9',output:'#FFDC00',phase:'#6b7280'};
+  let s='';
+  ct.forEach((n,i)=>{ if(i>0){const x=mx+n.depth*laneW,y=my+i*rowH+rowH/2,px=mx+ct[i-1].depth*laneW,py=my+(i-1)*rowH+rowH/2;
+    s+=`<path d="M${px} ${py}L${x} ${y}" stroke="#3a4152" stroke-width="1.6" fill="none"/>`; }});
+  ct.forEach((n,i)=>{ const x=mx+n.depth*laneW,y=my+i*rowH+rowH/2;
+    s+=`<g class=tn data-cycle="${n.cycle}" onclick="step=${n.step};renderStep()">`
+      +`<circle cx="${x}" cy="${y}" r="3.6" fill="${COL[n.kind]||COL.phase}"/>`
+      +`<text x="${tx}" y="${y+3.3}">c${n.cycle} ${esc(trunc(n.summary,24))}</text>`
+      +`<title>cycle ${n.cycle} · ${esc(n.goal)} · depth ${n.depth}\n${esc(n.summary)}</title></g>`; });
+  $('tree').innerHTML=`<svg width="${W}" height="${H}">${s}</svg>`;
+ }
+ const cyc=D.tasks[ti].events[step].cycle; let curEl=null;   // 현재 cycle 하이라이트
+ $('tree').querySelectorAll('.tn').forEach(g=>{const on=+g.dataset.cycle===cyc;g.classList.toggle('cur',on);if(on)curEl=g;});
+ if(curEl)curEl.scrollIntoView({block:'nearest'});
+}
 function renderStep(){
  const t=D.tasks[ti],ev=t.events,e=ev[step];
  if(!ev.length){$('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=bad>${esc(t.error||'no steps')}</span> <span class=hint><kbd>Esc</kbd> 목록</span>`;$('phases').innerHTML='';$('map').innerHTML=`<div style="padding:24px;color:var(--muted)">진행 스텝 없음 — ${esc(t.error||'unknown')}</div>`;$('wm').innerHTML='';$('cand').innerHTML='';$('pevent').innerHTML='';return;}
@@ -501,6 +530,7 @@ function renderStep(){
   <span class=hint>↑↓ 스텝 · ←→ wm-update · <kbd>Esc</kbd> 목록 · <kbd>Home/End</kbd></span>
   <span style="margin-left:auto">${t.correct_attempt===null?'<span class=bad>unsolved</span>':'<span class=ok>solved (try '+(t.correct_attempt+1)+')</span>'}</span>`;
  $('phases').innerHTML=PHASES.map(p=>`<div class="ph${p==e.phase?' on':''}">${p}</div>`).join('<span class=hint>→</span>');
+ renderTree();                                    // 좌측 git dev-tree (현재 cycle 하이라이트)
  // colour-band the 3 wave atoms: match / fire+retract (one colour) / wm-update
  const stageCls=k=>k=='match'?' st-match':((k=='rule-fire'||k=='rule-retract')?' st-fire':(k=='wm-update'?' st-wm':(k=='substate'?' st-impasse':'')));
  $('map').innerHTML=ev.map((x,i)=>{
