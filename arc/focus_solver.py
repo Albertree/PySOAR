@@ -979,9 +979,8 @@ def _cycle_tree(events):
     nodes = []
     for c, grp in groupby(events, key=lambda e: e["cycle"]):
         ec = list(grp)
-        rep = next((e for e in ec if e["kind"] in ("op-select", "decide")), ec[-1])
-        gstk = rep.get("goal_stack") or ["S1"]
-        depth, gid = max(0, len(gstk) - 1), gstk[-1]
+        stk = ec[-1].get("goal_stack") or ["S1"]              # cycle 끝 시점의 goal 스택(=살아있는 lane 들)
+        depth, gid = max(0, len(stk) - 1), stk[-1]
         op = None
         for e in ec:
             if e["kind"] == "op-select":
@@ -1012,7 +1011,7 @@ def _cycle_tree(events):
         else:
             summ, knd = (ec[-1]["label"] or "")[:70], "phase"
         nodes.append({"cycle": c, "depth": depth, "goal": gid, "op": op or "", "kind": knd,
-                      "branch": bool(sub), "summary": summ, "step": ec[0]["seq"]})
+                      "branch": bool(sub), "summary": summ, "step": ec[0]["seq"], "stack": stk})
     return nodes
 
 

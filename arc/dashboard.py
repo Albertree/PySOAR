@@ -507,12 +507,21 @@ function renderTree(){                              // git dev-tree: cycle 노�
  if(_treeTi!==ti){                                  // 태스크 바뀌면 SVG 새로
   _treeTi=ti;
   const laneW=15,rowH=19,mx=13,my=9; let maxd=0; ct.forEach(n=>{if(n.depth>maxd)maxd=n.depth;});
-  const tx=mx+maxd*laneW+10, W=tx+180, H=my*2+ct.length*rowH;
+  const laneX=L=>mx+L*laneW, rowY=i=>my+i*rowH+rowH/2;
+  const tx=laneX(maxd)+12, W=tx+185, H=my*2+ct.length*rowH;
   const COL={branch:'#FF851B',apply:'#2ECC40',select:'#0074D9',output:'#FFDC00',phase:'#6b7280'};
+  const laneCol=L=>['#5b6472','#FF851B','#2ECC40','#1f8fff','#F012BE','#e3b341','#7FDBFF'][L%7]; // lane0=메인(회색)
   let s='';
-  ct.forEach((n,i)=>{ if(i>0){const x=mx+n.depth*laneW,y=my+i*rowH+rowH/2,px=mx+ct[i-1].depth*laneW,py=my+(i-1)*rowH+rowH/2;
-    s+=`<path d="M${px} ${py}L${x} ${y}" stroke="#3a4152" stroke-width="1.6" fill="none"/>`; }});
-  ct.forEach((n,i)=>{ const x=mx+n.depth*laneW,y=my+i*rowH+rowH/2;
+  for(let i=1;i<ct.length;i++){                     // ── 가지 그리기: 부모 스택 vs 현재 스택 비교
+    const a=ct[i-1].stack||[],b=ct[i].stack||[],y0=rowY(i-1),y1=rowY(i),ym=(y0+y1)/2,cm=Math.min(a.length,b.length);
+    for(let L=0;L<cm;L++) if(a[L]===b[L])           // 지속 레인(같은 상태 유지) = 세로선. lane0(S1)=메인 세로선
+      s+=`<line x1="${laneX(L)}" y1="${y0}" x2="${laneX(L)}" y2="${y1}" stroke="${laneCol(L)}" stroke-width="1.7"/>`;
+    if(b.length>a.length) for(let L=a.length;L<b.length;L++)   // push = substate 생성 → 부모에서 오른쪽으로 갈라짐
+      s+=`<path d="M${laneX(L-1)} ${y0}C${laneX(L-1)} ${ym} ${laneX(L)} ${ym} ${laneX(L)} ${y1}" stroke="${laneCol(L)}" stroke-width="1.7" fill="none"/>`;
+    if(b.length<a.length) for(let L=b.length;L<a.length;L++)   // pop = substate 해소 → 부모 가지로 합쳐짐
+      s+=`<path d="M${laneX(L)} ${y0}C${laneX(L)} ${ym} ${laneX(b.length-1)} ${ym} ${laneX(b.length-1)} ${y1}" stroke="${laneCol(L)}" stroke-width="1.7" fill="none"/>`;
+  }
+  ct.forEach((n,i)=>{ const x=laneX(n.depth),y=rowY(i);   // ── 노드(점) = 현재 활성 상태의 레인에
     s+=`<g class=tn data-cycle="${n.cycle}" onclick="step=${n.step};renderStep()">`
       +`<circle cx="${x}" cy="${y}" r="3.6" fill="${COL[n.kind]||COL.phase}"/>`
       +`<text x="${tx}" y="${y+3.3}">c${n.cycle} ${esc(trunc(n.summary,24))}</text>`
