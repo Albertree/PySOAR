@@ -31,11 +31,11 @@ def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
     o = type("Obj", (), {})(); o.coord = coord; o.color = color; return o
-def objects_of(grid):                        # 비-0색 4-연결 성분(FG object)을 첫셀 정렬로 추출
+def objects_of(grid):                        # 4-연결 동색 성분 전부(색0 도 하나의 색) 첫셀 정렬로 추출
     seen, objs = set(), []
     for r in range(len(grid)):
         for c in range(len(grid[0])):
-            if grid[r][c] != 0 and (r, c) not in seen:
+            if (r, c) not in seen:
                 col, stack, cells = grid[r][c], [(r, c)], []
                 while stack:
                     y, x = stack.pop()
@@ -128,7 +128,7 @@ function apply_DSL(grid,func){{const args=Array.prototype.slice.call(arguments,2
 function obj(coord,color){{return {{coord:coord,color:color}};}}
 function objects_of(grid){{let seen=new Set(),objs=[];
  for(let r=0;r<grid.length;r++)for(let c=0;c<grid[0].length;c++){{
-  if(grid[r][c]!==0&&!seen.has(r+','+c)){{let col=grid[r][c],st=[[r,c]],cells=[];
+  if(!seen.has(r+','+c)){{let col=grid[r][c],st=[[r,c]],cells=[];
    while(st.length){{let p=st.pop(),y=p[0],x=p[1];
     if(seen.has(y+','+x)||y<0||y>=grid.length||x<0||x>=grid[0].length||grid[y][x]!==col)continue;
     seen.add(y+','+x);cells.push([y,x]);st.push([y+1,x],[y-1,x],[y,x+1],[y,x-1]);}}
