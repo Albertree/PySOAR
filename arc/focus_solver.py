@@ -475,19 +475,15 @@ def _compare_objects(ag, sid, c, g0, g1, pair, kg_compare, nodes, idx, topk=None
             n, tot = _score_frac(rel["result"].get("score", "0/1"))
             scored.append((n / tot, n, tot, a, b, rel))
     scored.sort(key=lambda t: (-t[0], t[3], t[4]))                # 유사도 ↓, 결정적 tiebreak
-    for rank, (sim, n, tot, a, b, rel) in enumerate(scored[:topk]):    # topk=None → 전부(사용자: 상한 제거)
-        mid = f"{c}.m{rank}"
-        ag.wm.add(c, "match", mid)
-        ag.wm.add(mid, "g0obj", a)
-        ag.wm.add(mid, "g1obj", b)
-        ag.wm.add(mid, "score", f"{n}/{tot}")
-        ag.wm.add(mid, "rank", str(rank))
-    ag.wm.add(c, "n-compared", str(len(scored)))                  # 총 N×M 비교 수(로그, §1-5)
+    # **대응 결과 = relation** 으로만 WM 에 남긴다 (LCA=pair 아래 E_G0O2-G1O0, S1 의 ARCKG 처럼 깔끔).
+    # 전체 N×M 순위(옛 m0..mN 후보 무더기)는 WM 에 안 쏟는다 — 그건 중간 탐색값이라 kg dict 에만 두고,
+    # 필요하면 대시보드가 참조한다. hypothesize 는 대응을 _fg_correspondence 로 재계산하므로 무영향.
     best = {}                                                      # G0-object 당 최선 대응
     for (sim, n, tot, a, b, rel) in scored:
         best.setdefault(a, rel)
     for rel in best.values():
-        _store_relation(ag, rel)                                  # 변환 스펙(COMM/DIFF) 만 full 저장
+        _store_relation(ag, rel)                                  # (pair ^relation pair.E_G0O2-G1O0) + cascade
+    ag.wm.add(c, "n-compared", str(len(scored)))                  # 총 비교 수 하나(로그) — 개별 순위는 WM 밖
     ag.kg.setdefault("obj_match", {})[pair] = [(a, b, n, tot) for (sim, n, tot, a, b, rel) in scored]
 
 
