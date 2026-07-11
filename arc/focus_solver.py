@@ -307,6 +307,9 @@ def _build_agenda(ag, sid, group):
                     ag.wm.add(cid, "pair", p)
                 specs.append((cid, "cross", order)); order += 1
         specs.append((f"{sid}.cmp:predict", "predict", order))
+        if train:
+            ag.wm.add(sid, "to-hypothesize", "yes")         # within/cross 비교 끝나면 GRID hypothesize 발화
+
     elif kind == "object":
         # OBJECT: G0→G1 transformation 은 **한 PAIR 안**에서 찾는다 (사용자 교정 2026-07-10).
         # inter-PAIR object 비교(P1·P2 의 G0×G1 매칭)는 **하지 않는다** — 변환은 P0 하나에서
@@ -510,8 +513,15 @@ def _cross_grids(ag, sid, which, pairs, kg_compare, nodes, idx):
 
 def _compare_peers(ag, sid, group):
     """관측된 형제(pair)들의 property 비교 → COMM/DIFF. 불균형(다수는 있는 역할을 소수 하나가
-    결핍; 예: Pa 에 output 없음)이면 goal 발견 = (node=결핍노드, produce=결핍역할)."""
+    결핍; 예: Pa 에 output 없음)이면 goal 발견 = (node=결핍노드, produce=결핍역할).
+    **각 pair 쌍(P0-P1·P0-Pa·P1-Pa)의 비교결과는 relation edge 로도 WM 에 남긴다** — grid/object
+    비교와 동일 관례(§2-2·§2-5). LCA=TASK 아래 E_P0-P1 … 로 cascade (사용자 교정 2026-07-11:
+    peers 비교가 결과를 relation 으로 안 남겨서 E_P0-P1 등이 WM 에 안 보이던 문제)."""
+    from ARCKG.comparison import compare as kg_compare
+    from itertools import combinations
     idx = ag.kg["idx"]
+    for a, b in combinations(sorted(group), 2):              # 모든 pair 쌍 → relation edge
+        _store_relation(ag, kg_compare(idx["nodes"][a], idx["nodes"][b]))
     props = {m: idx["nodes"][m].to_json() for m in group}
     keys = sorted(set.intersection(*[set(p.keys()) for p in props.values()]))
     diff, imbal = [], None
@@ -566,10 +576,9 @@ def _predict_test_output(ag, sid):
             ag.wm.add(sid, f"predict-{prop}", got[prop])
     missing = [p for p in ("size", "color", "contents") if p not in got]   # contents 는 항상 미결
     ag.wm.add(sid, "predict", f"채움={list(got)} · 미결={missing}")
-    if missing:                                                     # 표면비교로 다 못 채움 → 하강
-        gid = f"{sid}.goal"
-        ag.wm.add(sid, "goal", gid)
-        ag.wm.add(gid, "produce", ",".join(missing))
+    # 하강 goal 은 여기서 세우지 않는다 — GRID hypothesize 가 within(G0→G1) 변환을 속성별로 결론지으려
+    # 시도한 뒤, 못 내면 그때 goal(produce=미결)을 세운다 (predict↔hypothesize 가 동시에 solve 를
+    # 제안해 operator-tie 나는 것 방지; 하강 여부는 hypothesize 의 판정이 주도, 사용자 교정 2026-07-11).
 
 
 def _obj_cc(node):
@@ -629,6 +638,120 @@ def _fg_correspondence(ag, gid0, gid1, g0grid, g1grid):
     return out
 
 
+def _size_expr_search(train):
+    """출력 격자 크기 (H1,W1) 를 입력 크기 (H0,W0)+상수의 **식**으로 도출한다 — 손계산 금지, 후보식을
+    생성→모든 train pair 에 적용→출력크기와 대조→기각/생존 (§1-3·§4-1 의 generate-and-test 그대로).
+    반환 = (rule={'H':식|None,'W':식|None}, tried={'H':[(식,ok)],'W':[…]}). 살아남는 식이 없으면 None."""
+    atoms = [("H0", lambda H, W: H), ("W0", lambda H, W: W)]
+    ops = [("-", lambda x, k: x - k), ("+", lambda x, k: x + k),
+           ("*", lambda x, k: x * k), ("//", lambda x, k: x // k if k else 0)]
+    cands = []
+    for nm, fn in atoms:
+        cands.append((nm, fn))
+        for k in (1, 2, 3):
+            for osym, ofn in ops:
+                cands.append((f"{nm}{osym}{k}", lambda H, W, fn=fn, ofn=ofn, k=k: ofn(fn(H, W), k)))
+    dims = [(len(e["input"]), len(e["input"][0]), len(e["output"]), len(e["output"][0])) for e in train]
+    rule, tried, trials = {}, {}, {}
+    for axis, ti, own in (("H", 2, "H0"), ("W", 3, "W0")):
+        rule[axis] = None; tried[axis] = []; trials[axis] = []
+        # 그 축의 '자기' 입력차원(H1←H0, W1←W0)을 먼저 시도 → 정사각이라 값이 같아도 식이 자연스럽게 읽힘
+        ordered = sorted(cands, key=lambda dc: not dc[0].startswith(own))
+        for desc, fn in ordered:
+            per_pair = [{"in": (d[0], d[1]), "expected": d[ti], "got": fn(d[0], d[1]),
+                         "ok": fn(d[0], d[1]) == d[ti]} for d in dims]     # 후보 생성 → 즉시 각 pair 테스트
+            ok = all(p["ok"] for p in per_pair)                          # 모든 pair 에서 성립?
+            tried[axis].append((desc, ok))
+            trials[axis].append({"candidate": f"{axis}1={desc}", "per_pair": per_pair, "verdict": ok})
+            if ok and rule[axis] is None:
+                rule[axis] = desc
+    return rule, tried, trials
+
+
+def _color_map_search(train):
+    """전 train pair 를 셀 단위로 훑어 **입력색→출력색 전역 함수**를 도출(크기 COMM 인 pair 만).
+    한 입력색이 두 출력색으로 가면(=전역 함수 아님, 객체·위치 의존) None. 일관하면 그 map 반환."""
+    if any(len(e["input"]) != len(e["output"]) or len(e["input"][0]) != len(e["output"][0])
+           for e in train):
+        return None
+    mp = {}
+    for e in train:
+        i, o = e["input"], e["output"]
+        for r in range(len(i)):
+            for c in range(len(i[0])):
+                a, b = i[r][c], o[r][c]
+                if a in mp and mp[a] != b:
+                    return None
+                mp[a] = b
+    return mp
+
+
+def _global_recolor_program(g0grid, cmap):
+    """전역 색맵을 **기존 coloring DSL** 만으로 표현(§1-1: 새 DSL 없이) — 목표색 t 로 바뀌는 입력셀
+    (색 s, cmap[s]=t≠s)을 묶어 apply_DSL(coloring). map 을 셀묶음 재채색으로 물질화한 level-1 program."""
+    H, W = len(g0grid), len(g0grid[0])
+    bytarget = {}
+    for r in range(H):
+        for c in range(W):
+            s = g0grid[r][c]; t = cmap.get(s, s)
+            if t != s:
+                bytarget.setdefault(t, []).append([r, c])
+    lines = ["in_px = pixels_of(input_grid)", "", "tfg0 = input_grid"]
+    for k, t in enumerate(sorted(bytarget)):
+        lines.append(f"# 전역 색맵: {len(bytarget[t])}개 셀 → 색 {t}")
+        lines.append(f"tfg{k + 1} = apply_DSL(tfg{k}, coloring, {bytarget[t]}, {t})")
+    lines.append(f"output_grid = tfg{len(bytarget)}")
+    return "\n".join(lines)
+
+
+def _colorset(grid):
+    return frozenset(v for row in grid for v in row)
+
+
+def _grid_prop_value(prop, grid):
+    """GRID 목표속성의 값: size=(H,W) · color=색 집합 · contents=격자 그대로."""
+    if prop == "size":
+        return (len(grid), len(grid[0]))
+    if prop == "color":
+        return _colorset(grid)
+    return tuple(tuple(r) for r in grid)
+
+
+def _grid_property_hypotheses(prop, train, within_t, xout_t):
+    """GRID 목표속성(size|color)에 대한 **가설 후보 생성+검증** (모듈+규칙 기반 시도 탐색 — case 하드코딩
+    아님). *관계(COMM/DIFF)가 어떤 가설을 시도할지 고르고*, 실제 train 대조가 채택/기각한다(§2-2·§4-1):
+      keep      (within COMM)    : 출력.P = 입력.P
+      const     (cross-out COMM) : 출력.P = 훈련출력 공통값 (G1끼리 일정)
+      transform (within DIFF)    : 출력.P = f(입력.P) — size=출력크기식 탐색·color=전역색맵 (일정한 변화)
+    반환 = [{kind, pred, ok, extra}] — 생성·기각 후보 전부(첫 ok 가 결론). 상위(hypothesize)가 이 리스트를
+    WM 에 노출해 '무엇을 시도하고 무엇이 기각됐나'가 보이게 한다(object/pixel 가설과 동형)."""
+    ins = [_grid_prop_value(prop, e["input"]) for e in train]
+    outs = [_grid_prop_value(prop, e["output"]) for e in train]
+
+    def _fmt(v):
+        return f"{v[0]}x{v[1]}" if prop == "size" else (sorted(v) if isinstance(v, frozenset) else v)
+    cands = []
+    if within_t == "COMM":                                          # 관계가 keep 가설을 시사
+        ok = all(o == i for i, o in zip(ins, outs))
+        cands.append({"kind": "keep", "pred": "출력=입력", "ok": ok})
+    if xout_t == "COMM":                                            # 관계가 const 가설을 시사(G1끼리 COMM)
+        shared = outs[0] if all(o == outs[0] for o in outs) else None
+        cands.append({"kind": "const", "pred": f"={_fmt(shared)}" if shared is not None else "불일치",
+                      "ok": shared is not None, "value": shared})
+    if within_t == "DIFF":                                          # 관계가 transform 가설을 시사(변화)
+        if prop == "size":
+            rule, tried, trials = _size_expr_search(train)
+            ok = bool(rule["H"] and rule["W"])
+            cands.append({"kind": "transform", "ok": ok, "tried": tried, "rule": rule, "trials": trials,
+                          "pred": f"H1={rule['H']},W1={rule['W']}" if ok else "크기식없음"})
+        else:
+            cmap = _color_map_search(train)
+            ok = bool(cmap and any(k != v for k, v in cmap.items()))
+            cands.append({"kind": "transform", "ok": ok, "map": cmap if ok else None,
+                          "pred": f"전역색맵 {cmap}" if ok else "전역색맵없음"})
+    return cands
+
+
 def _op_hypothesize(ag):
     """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). object mapping 대응을 얻어,
     각 대응쌍을 **변환 후보(xform)** 로 WM 에 노출한다 — 속성별 COMM/DIFF 를 그대로 실어(규칙이
@@ -643,6 +766,74 @@ def _op_hypothesize(ag):
 
     g0grid = [list(r) for r in ag.task["train"][0]["input"]]
     g1grid = [list(r) for r in ag.task["train"][0]["output"]]
+    if ag.wm.contains(sid, "level", "GRID"):
+        # ── GRID hypothesize (사용자 2026-07-11): object/pixel 이 contents 가설을 세우듯, GRID 는
+        #    **grid.size·grid.color 가설**을 GRID 비교 관계로부터 생성·검증한다. 절차 시나리오가 아니라
+        #    속성마다 `_grid_property_hypotheses` 로 후보(keep/const/transform)를 만들어 train 대조로
+        #    채택/기각(§2-2 근거=COMM/DIFF · §4-1 generate-and-test). 관계가 가설을 *고르고*, 검증이 *결정*.
+        #      · size/color 중 하나라도 결론 못 냄 → 그 속성은 object/pixel property 의존 → 하강.
+        #      · contents 는 GRID 표면 독립 도출 불가 — size·color 규칙이 train 을 재현해야만 '설명'된다.
+        #        (size COMM + 전역색맵 재현) → GRID 종결(program+답). 아니면 contents 미결 → 하강.
+        train = ag.task["train"]
+        within = ag.kg.get("within_edge", {}).get(p0.node_id) or {}
+        wcat = within.get("result", {}).get("category", {})
+        ocat = (ag.kg.get("cross", {}).get("output") or {}).get("result", {}).get("category", {})
+        concl, chosen = {}, {}
+        for prop in ("size", "color"):                              # grid.size·grid.color 가설 생성·검증
+            hid = f"{sid}.gh.{prop}"
+            wt, ot = wcat.get(prop, {}).get("type", "?"), ocat.get(prop, {}).get("type", "?")
+            ag.wm.add(sid, "grid-hyp", hid); ag.wm.add(hid, "prop", prop)
+            ag.wm.add(hid, "within", wt); ag.wm.add(hid, "cross-out", ot)   # 어떤 관계가 가설을 시사했나
+            cands = _grid_property_hypotheses(prop, train, wt, ot)
+            log = ag.kg.setdefault("hyp_trials", [])                # **전체 시도표는 WM 아닌 kg 리스트로**(용량안전)
+            for cand in cands:                                      # 생성·기각 후보 전부 노출(object/pixel 와 동형)
+                ag.wm.add(hid, "cand", f"{cand['kind']}:{cand['pred']}:{'✓' if cand['ok'] else '✗'}")  # WM=요약만
+                # kg 로그 = 후보 1행 (표/CSV 용). 관계가 시사한 가설(kind)과 채택여부.
+                log.append({"task": ag.task_id, "level": "GRID", "target": prop, "kind": cand["kind"],
+                            "candidate": cand["pred"], "verdict": "pass" if cand["ok"] else "fail",
+                            "per_pair": None})
+                if prop == "size" and cand["kind"] == "transform":     # 크기식 brute-force = 후보별 per-pair 테스트
+                    for ax in ("H", "W"):
+                        for desc, ok in cand.get("tried", {}).get(ax, [])[:6]:
+                            ag.wm.add(hid, "tried", f"{ax}1={desc}:{'✓' if ok else '✗'}")  # WM=앞 6개만
+                        for tr in cand.get("trials", {}).get(ax, []):   # kg=전체 (생성→즉시 테스트→결과)
+                            log.append({"task": ag.task_id, "level": "GRID", "target": "size",
+                                        "kind": f"transform·{ax}", "candidate": tr["candidate"],
+                                        "verdict": "pass" if tr["verdict"] else "fail",
+                                        "per_pair": tr["per_pair"]})
+            win = next((c for c in cands if c["ok"]), None)
+            if win:
+                ag.wm.add(hid, "status", f"결론 [{win['kind']}] {win['pred']}")
+                concl[prop] = f"{win['kind']}:{win['pred']}"; chosen[prop] = win
+            else:
+                ag.wm.add(hid, "status", "미결 — object/pixel property 의존 → 하강")
+        # contents: size·color 규칙이 train 을 재현하면 '설명', 아니면 미결.
+        chid = f"{sid}.gh.contents"; ag.wm.add(sid, "grid-hyp", chid); ag.wm.add(chid, "prop", "contents")
+        ag.wm.add(chid, "within", wcat.get("contents", {}).get("type", "?"))
+        cmap = (chosen.get("color") or {}).get("map")
+        size_keep = (chosen.get("size") or {}).get("kind") == "keep"
+        if size_keep and cmap and [[cmap.get(v, v) for v in r] for r in g0grid] == g1grid:
+            # 크기 유지 + 전역색맵이 train 재현 → GRID 에서 종결(전역 recolor program + 테스트 답)
+            ppid = f"{p0.node_id}.property"
+            if ag.wm.contains(ppid, "program", "{}"):
+                ag.wm.remove(ppid, "program", "{}")
+            ag.wm.add(ppid, "program", _global_recolor_program(g0grid, cmap))
+            ag.wm.add(chid, "status", "설명됨(전역색맵으로 train 재현)")
+            ag.wm.add(sid, "hypothesized", "yes")
+            tin = ag.task["test"][0]["input"]
+            ans = [[cmap.get(v, v) for v in row] for row in tin]
+            ag.kg["answer"] = ans
+            ag.add_output_wme("answer", tuple(tuple(r) for r in ans))
+            ag.wm.add(sid, "answer-ready", "yes"); ag.wm.add(sid, "grid-verdict", "GRID 종결(전역색맵)")
+            return
+        ag.wm.add(chid, "status", "미결(셀단위 — object/pixel 로 하강)")
+        # size/color 를 GRID 에서 결론했으면 그 예측을 남기고, contents(및 미결 속성)만 하강한다.
+        miss = [p for p in ("size", "color") if p not in concl] + ["contents"]
+        ag.wm.add(sid, "grid-verdict",
+                  f"GRID 예측 size={concl.get('size', '미결')} · color={concl.get('color', '미결')} → 미결={miss} 하강")
+        gid = f"{sid}.goal"                                          # 하강 goal (predict 대신 여기서)
+        ag.wm.add(sid, "goal", gid); ag.wm.add(gid, "produce", ",".join(miss))
+        return
     if ag.wm.contains(sid, "level", "PIXEL"):
         # PIXEL 가설 = **잔여(residual) 처리**: 상위(object) substate 가 재채색한 sim·program 을 이어받아,
         # object 로 못 맞춘 셀(그 sim 이 아직 G1 과 다른 셀)만 pixel 로 재채색해 **object 가설에 덧붙인다**.
@@ -770,13 +961,40 @@ def _op_verify(ag):
         ag.wm.add(sid, "hypothesized", "failed")
 
 
+# ── grid.size / grid.color 를 채우는 두 DSL operator (coloring 과 대등한 기본 DSL 3종의 나머지 둘,
+#    사용자 결정 2026-07-12). coloring 이 contents 슬롯을 칠하듯, 이 둘은 **program 의 grid_size /
+#    grid_color 슬롯**을 채운다. hypothesize 가 노출한 가설(^size-hyp / ^color-hyp = *표현식*, 리터럴
+#    아님 → TASK.solution 일반화 가능)을 읽어 슬롯으로 물질화. 가설이 없거나 'unknown' 이면 슬롯을
+#    unknown 으로 남긴다(= 이 level 정보로 못 정함 → 하강 신호, '오류' 아님).
+#
+#    배선 계약(hypothesize 재작성 때 이걸 세우면 두 operator 가 발화):
+#      (sid ^set-size yes)   + (sid ^size-hyp  <expr|unknown>)   → set_grid_size → (sid ^slot-grid_size <expr>)
+#      (sid ^set-color yes)  + (sid ^color-hyp <expr|unknown>)   → set_grid_color→ (sid ^slot-grid_color <expr>)
+#    지금은 어떤 규칙도 set-size/set-color 를 세우지 않으므로 **휴면**(회귀 0). hypothesize 손볼 때 활성화.
+def _op_set_grid_size(ag):
+    """grid.size 슬롯 설정 DSL (apply body). ^size-hyp(표현식)을 읽어 grid_size 슬롯으로 물질화."""
+    sid = ag.stack[-1].id
+    expr = next((v for (i, a, v) in ag.wm if i == sid and a == "size-hyp"), "unknown")
+    ag.wm.add(sid, "slot-grid_size", expr)          # program 의 grid_size 슬롯(표현식 or 'unknown')
+    ag.wm.add(sid, "size-set", "yes")               # 결과 플래그(재발화 방지 + 슬롯 완료 표시)
+
+
+def _op_set_grid_color(ag):
+    """grid.color 슬롯 설정 DSL (apply body). ^color-hyp(표현식)을 읽어 grid_color 슬롯으로 물질화."""
+    sid = ag.stack[-1].id
+    expr = next((v for (i, a, v) in ag.wm if i == sid and a == "color-hyp"), "unknown")
+    ag.wm.add(sid, "slot-grid_color", expr)
+    ag.wm.add(sid, "color-set", "yes")
+
+
 # operator body(RHS 함수) = production 으로 못 하는 원자연산만:
 #   observe = to_json 로드 · compare = kg_compare · select = 다음 대상 고르기(§1-3 탐색의 자리).
-#   hypothesize = object mapping → program 합성·검증(시뮬레이션 조립; 모듈 DSL make_grid/coloring).
+#   hypothesize = 슬롯(size·color·contents) 예측 open. 기본 DSL 3종 = set_grid_size·set_grid_color·coloring.
 # 제어(무엇을 언제)는 전부 propose/apply 규칙 + WM 플래그로. solve 는 미구현(ONC=하강),
 # submit 은 apply-only(답은 output-link 에).
 OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select,
-                   "hypothesize": _op_hypothesize, "coloring": _op_coloring, "verify": _op_verify}
+                   "hypothesize": _op_hypothesize, "coloring": _op_coloring, "verify": _op_verify,
+                   "set_grid_size": _op_set_grid_size, "set_grid_color": _op_set_grid_color}
 
 
 # ---------------------------------------------------------------------------
@@ -856,7 +1074,8 @@ PRODUCTIONS = [
     # hypothesize = 시뮬레이션 open — body: 시뮬 grid=G0 + 대응→xform 후보(속성별 COMM/DIFF) 노출. 1회.
     _propose_named("propose*hypothesize", "hypothesize",
                    [Cond("<s>", "to-hypothesize", "yes"), Cond("<s>", "compared", "yes"),
-                    Cond("<s>", "hyp-open", "<o>", negated=True)]),
+                    Cond("<s>", "hyp-open", "<o>", negated=True),
+                    Cond("<s>", "answer-ready", "<ar>", negated=True)]),  # 이미 답 남(예:상수출력)→hypothesize 생략
     Production("apply*hypothesize",
                [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "hypothesize")],
                [Action("<s>", "hyp-open", "yes")]),
@@ -867,6 +1086,19 @@ PRODUCTIONS = [
     Production("apply*coloring",
                [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "coloring")],
                [Action("<s>", "color-step", "yes")]),      # body 가 시뮬 recolor + applied 표시
+    # set_grid_size / set_grid_color = 기본 DSL 3종의 나머지 둘(coloring 과 대등). hypothesize 가
+    #   ^set-size / ^set-color 를 세우면 발화해 body 가 ^size-hyp / ^color-hyp(표현식)을 grid_size /
+    #   grid_color 슬롯으로 물질화. 지금은 그 플래그를 아무도 안 세우므로 **휴면**(회귀 0) — hypothesize 재작성 때 활성화.
+    _propose_named("propose*set_grid_size", "set_grid_size",
+                   [Cond("<s>", "set-size", "yes"), Cond("<s>", "size-set", "<x>", negated=True)]),
+    Production("apply*set_grid_size",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "set_grid_size")],
+               [Action("<s>", "size-step", "yes")]),        # body 가 grid_size 슬롯 물질화 + ^size-set
+    _propose_named("propose*set_grid_color", "set_grid_color",
+                   [Cond("<s>", "set-color", "yes"), Cond("<s>", "color-set", "<x>", negated=True)]),
+    Production("apply*set_grid_color",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "set_grid_color")],
+               [Action("<s>", "grid-color-step", "yes")]),  # body 가 grid_color 슬롯 물질화 + ^color-set
     # verify = 시뮬 grid 를 train output 과 대조(원자) → hypothesized yes/failed.
     _propose_named("propose*verify", "verify",
                    [Cond("<s>", "colored-all", "yes"), Cond("<s>", "hypothesized", "<h>", negated=True)]),
@@ -961,6 +1193,9 @@ OP_DOCS = {
     "select": "arg-선택 substate 안의 operator. observe/compare 가 arg 없이 걸린 impasse 를 푼다 — superstate 의 다음 대상을 preference(순서상 첫 미완료=a안)로 골라 super ^cursor/^cmp-active 세팅 → impasse 해소·pop. §1-3 탐색 자리",
     "submit": "predict 가 output-link 에 얹은 답 제출 → 채점 → ^done",
     "solve": "미구현 operator (apply·body 없음). goal 있고 이 레벨에서 답 못 냄 → 변화 없음 → operator no-change impasse → 한 계층 하강. (bootstrap: TASK 관측 후 PAIR 로)",
+    "coloring": "기본 DSL(contents 슬롯). color DIFF ∧ coord COMM xform 을 frozen coloring 으로 시뮬 grid 에 하나씩 칠함(object·pixel level). program 의 grid_contents 를 채운다",
+    "set_grid_size": "기본 DSL(grid_size 슬롯). hypothesize 의 ^size-hyp(표현식) 을 grid_size 슬롯으로 물질화. 가설 없으면 unknown(=현재 정보로 못 정함 → 하강). ^set-size 로 발화",
+    "set_grid_color": "기본 DSL(grid_color 슬롯). hypothesize 의 ^color-hyp(표현식) 을 grid_color 슬롯으로 물질화. 가설 없으면 unknown. ^set-color 로 발화",
 }
 
 

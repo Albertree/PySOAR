@@ -70,8 +70,14 @@ def _task_section(tid, task):
     d0, d1 = (len(g0raw), len(g0raw[0])), (len(g1raw), len(g1raw[0]))
     hdr = f"<h2>{tid} <span class=dim>P0.G0 {d0[0]}×{d0[1]} ↔ P0.G1 {d1[0]}×{d1[1]}</span></h2>"
     if d0 != d1:
+        from arc.focus_solver import _size_expr_search
+        rule, _tried, _trials = _size_expr_search(task["train"])   # GRID hypothesize 와 동일한 크기식 탐색
+        sr = (f" GRID hypothesize 크기식 도출: <b>H1={rule['H']}, W1={rule['W']}</b> — "
+              f"단 그 크기의 <b>contents 생성엔 resize DSL 필요</b>(미구현)."
+              if rule.get("H") and rule.get("W")
+              else " GRID hypothesize: 출력크기를 입력크기 식으로 도출 실패(미결).")
         note = ("<div class=note>G0·G1 <b>크기가 달라</b> 같은좌표 pixel 비교가 성립하지 않는다 "
-                "(크기변화 — 셀 단위 재채색으로 변환 불가). object/pixel 재채색 대상 아님.</div>")
+                "(크기변화 — 셀 단위 재채색으로 변환 불가). object/pixel 재채색 대상 아님." + sr + "</div>")
         return (f"<section>{hdr}<div class=row>"
                 f"<div class=gcol><span class=glbl>G0</span>{_grid(g0raw)}</div>"
                 f"<div class=gcol><span class=glbl>G1</span>{_grid(g1raw)}</div></div>{note}</section>")

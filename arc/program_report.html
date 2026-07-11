@@ -16,6 +16,8 @@ button{background:#238636;color:#fff;border:0;border-radius:6px;padding:8px 16px
 button:hover{background:#2ea043}
 .verdict{font-weight:bold;margin-top:6px} .ok{color:#3fb950} .bad{color:#f85149}
 .none{color:#8b949e;font-style:italic}
+.gverdict{margin-top:8px;color:#d29922} .ghrow{margin-top:3px;color:#adbac7;font-size:12px}
+.ghrow b{color:#539bf5}
 </style>
 <h1>ARBOR — hypothesize 가 합성한 실행가능 프로그램 (level-1)</h1>
 <p class=lead>규칙기반 coloring 이 써 낸 flat Python. <b>▶ 실행</b> = DSL(apply_DSL/coloring)을 JS 로
@@ -26,8 +28,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -66,8 +66,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -106,8 +104,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -146,8 +142,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -186,8 +180,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -226,8 +218,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -260,14 +250,12 @@ tfg0 = input_grid
 tfg1 = apply_DSL(tfg0, coloring, P0.coord, 0)
 tfg2 = apply_DSL(tfg1, coloring, P1.coord, 2)
 output_grid = tfg2
-</pre><div class=gcol><span class=glbl>input_grid</span><div id='ineasy000h'></div><button onclick="run('easy000h')">▶ 실행</button><span class=glbl>output (실행 결과)</span><div id='outeasy000h'></div><div class=verdict id='veasy000h'></div></div><div class=gcol><span class=glbl>expected P0.G1</span><div id='expeasy000h'></div></div></div></section><section><h2>easy000i</h2><div class=none>재채색 program 없음 — GRID 상수해(출력 불변) 또는 크기변화(G0·G1 크기 다름) 라 셀 단위 재채색으로 변환 불가</div></section><section><h2>made000a</h2><div class=none>재채색 program 없음 — GRID 상수해(출력 불변) 또는 크기변화(G0·G1 크기 다름) 라 셀 단위 재채색으로 변환 불가</div></section><section><h2>made000b ✓ <span class=bp>PIXEL recolor</span></h2><div class=row><pre id='progmade000b'># --- DSL (ARC-TBD level-1) ---
+</pre><div class=gcol><span class=glbl>input_grid</span><div id='ineasy000h'></div><button onclick="run('easy000h')">▶ 실행</button><span class=glbl>output (실행 결과)</span><div id='outeasy000h'></div><div class=verdict id='veasy000h'></div></div><div class=gcol><span class=glbl>expected P0.G1</span><div id='expeasy000h'></div></div></div></section><section><h2>easy000i</h2><div class=none>재채색 program 없음 — GRID 상수해(출력 불변) 또는 크기변화(G0·G1 크기 다름) 라 셀 단위 재채색으로 변환 불가</div><div class=gverdict>GRID hypothesize 판정: GRID 예측 size=const:=5x5 · color=keep:출력=입력 → 미결=[&#x27;contents&#x27;] 하강</div><div class=ghrow><b>color</b>: 결론 [keep] 출력=입력</div><div class=ghrow><b>contents</b>: 미결(셀단위 — object/pixel 로 하강)</div><div class=ghrow><b>size</b>: 결론 [const] =5x5</div></section><section><h2>made000a</h2><div class=none>재채색 program 없음 — GRID 상수해(출력 불변) 또는 크기변화(G0·G1 크기 다름) 라 셀 단위 재채색으로 변환 불가</div><div class=gverdict>GRID hypothesize 판정: GRID 예측 size=const:=1x1 · color=미결 → 미결=[&#x27;color&#x27;, &#x27;contents&#x27;] 하강</div><div class=ghrow><b>color</b>: 미결 — object/pixel property 의존 → 하강</div><div class=ghrow><b>contents</b>: 미결(셀단위 — object/pixel 로 하강)</div><div class=ghrow><b>size</b>: 결론 [const] =1x1</div></section><section><h2>made000b ✓ <span class=bp>PIXEL recolor</span></h2><div class=row><pre id='progmade000b'># --- DSL (ARC-TBD level-1) ---
 def coloring(grid, cells, color):
     g = [row[:] for row in grid]
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -318,8 +306,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -362,8 +348,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -414,8 +398,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -464,8 +446,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -506,8 +486,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -558,8 +536,6 @@ def coloring(grid, cells, color):
     for (r, c) in cells:
         g[r][c] = color
     return g
-def make_grid(height, width, fill):
-    return [[fill] * width for _ in range(height)]
 def apply_DSL(grid, func, *args):
     return func(grid, *args)
 def obj(coord, color):                       # object: 좌표(셀)·색 — .coord/.color 로 참조
@@ -600,7 +576,6 @@ const D={"easy000a": {"input": [[0, 0, 0, 0, 0, 0], [0, 2, 0, 0, 0, 0], [0, 0, 0
 function gridHTML(g){if(!g)return'';let h='<table class=g>';for(const row of g){h+='<tr>';
  for(const v of row){h+='<td style="background:'+(PAL[v]||'#D6FFFF')+'"></td>';}h+='</tr>';}return h+'</table>';}
 function coloring(grid,cells,color){let g=grid.map(r=>r.slice());for(const [r,c] of cells){if(g[r]&&g[r][c]!==undefined)g[r][c]=color;}return g;}
-function make_grid(h,w,fill){return Array.from({length:h},()=>Array(w).fill(fill));}
 function apply_DSL(grid,func){const args=Array.prototype.slice.call(arguments,2);return func.apply(null,[grid].concat(args));}
 function obj(coord,color){return {coord:coord,color:color};}
 function objects_of(grid){let seen=new Set(),objs=[];
