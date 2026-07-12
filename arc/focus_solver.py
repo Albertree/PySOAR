@@ -212,6 +212,17 @@ def _compare2(r0, r1):
     return {"id": {"id1": r0.get("id"), "id2": r1.get("id")}, "result": _agree(r0["result"], r1["result"])}
 
 
+def _compare(a, b):
+    """**단일 compare 진입점** (사용자 결정 2026-07-13): 들어온 인자 타입을 보고 자동분기.
+      · 노드 × 노드          → property 비교(1차, ARCKG kg_compare: id·type·score·category + comp1/comp2 값).
+      · 관계결과 × 관계결과    → agreement 비교(2차+, _compare2: 통일 nested·score·잎 comp1/comp2=1차 verdict).
+    관계결과 = {"result": …} 를 가진 dict. 관계의 관계…(n차)도 이 분기로 재귀 처리된다."""
+    from ARCKG.comparison import compare as _kg
+    if isinstance(a, dict) and "result" in a and isinstance(b, dict) and "result" in b:
+        return _compare2(a, b)
+    return _kg(a, b)
+
+
 def _store_relation(ag, receipt, anchor=None):
     """ARCKG compare() 의 comparison receipt(dict)를 relation edge 로 WM 에 적재한다
     (harness §0.5: relation = compare 결과 = edge). receipt 전체가 하나의 relation node:
@@ -459,7 +470,7 @@ def _compare_pixels(ag, sid, c, g0, g1, kg_compare, nodes, idx):
 
 def _do_compare_kind(ag, sid, c, kind):
     """cmp 마커 c 의 kind·arg(WM 에 선언적으로 있음)를 읽어 그 한 비교를 실행 (원자연산)."""
-    from ARCKG.comparison import compare as kg_compare
+    kg_compare = _compare              # 단일 진입점(노드→property·관계→agreement 자동분기)
     idx = ag.kg["idx"]; nodes = idx["nodes"]
     if kind == "peers":
         _compare_peers(ag, sid, _wm_vals(ag, c, "member"))
@@ -527,7 +538,7 @@ def _cross_grids(ag, sid, which, pairs, kg_compare, nodes, idx):
     if which == "change":
         w = ag.kg.get("within_edge", {})
         if p0 in w and p1 in w:
-            rel = _compare2(w[p0], w[p1])          # 2차 = 개선 format (nested·score·verdict만·둘다DIFF=COMM)
+            rel = kg_compare(w[p0], w[p1])         # 관계×관계 → _compare 가 agreement(2차)로 자동분기
             _store_relation(ag, rel)
             ag.kg.setdefault("cross", {})["change"] = rel
         return
@@ -546,7 +557,7 @@ def _compare_peers(ag, sid, group):
     **각 pair 쌍(P0-P1·P0-Pa·P1-Pa)의 비교결과는 relation edge 로도 WM 에 남긴다** — grid/object
     비교와 동일 관례(§2-2·§2-5). LCA=TASK 아래 E_P0-P1 … 로 cascade (사용자 교정 2026-07-11:
     peers 비교가 결과를 relation 으로 안 남겨서 E_P0-P1 등이 WM 에 안 보이던 문제)."""
-    from ARCKG.comparison import compare as kg_compare
+    kg_compare = _compare              # 단일 진입점(노드→property·관계→agreement 자동분기)
     from itertools import combinations
     idx = ag.kg["idx"]
     for a, b in combinations(sorted(group), 2):              # 모든 pair 쌍 → relation edge
@@ -643,7 +654,7 @@ def _fg_correspondence(ag, gid0, gid1, g0grid, g1grid):
     '객체=한 색'이라는 원칙). 닫힌 내부영역=구멍(단색 색0)도 정당한 재채색 대상이 된다. 각 대응쌍의
     속성별 COMM/DIFF 도 반환 — 어떤 DSL 을 쓸지 **규칙이 판단**할 근거. 반환 = [(g0obj, g1obj, category)].
     (kg_compare 는 원자연산; 대응·COMM/DIFF 는 데이터, 조립·arg결정은 이후 **규칙**이 한다.)"""
-    from ARCKG.comparison import compare as kg_compare
+    kg_compare = _compare              # 단일 진입점(노드→property·관계→agreement 자동분기)
     idx = ag.kg["idx"]; nodes = idx["nodes"]
 
     def _mono(o, grid):     # object 셀이 격자에서 실제로 한 색인가 — 비단색(격자/복합 노드)은 배제
