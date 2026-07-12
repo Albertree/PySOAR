@@ -708,6 +708,95 @@ def _size_expr_search(train):
     return rule, tried, trials
 
 
+def _size_apply(train, paG0):
+    """전 train 일관 크기식(H0,W0+연산자+상수 brute-force)을 찾아 **Pa.G0 에 적용**한 예측크기.
+    반환 = (desc, (H,W)) or (None, None). (§4-1 generate-and-test — 후보식은 _size_expr_search 가 노출.)"""
+    dims = [((len(e["input"]), len(e["input"][0])), (len(e["output"]), len(e["output"][0]))) for e in train]
+    ops = [("-", lambda x, k: x - k), ("+", lambda x, k: x + k),
+           ("*", lambda x, k: x * k), ("//", lambda x, k: x // k if k else 0)]
+
+    def find(ti, own):
+        cands = [("H0", lambda H, W: H), ("W0", lambda H, W: W)]
+        for nm, fn in list(cands):
+            for k in (1, 2, 3):
+                for osym, ofn in ops:
+                    cands.append((f"{nm}{osym}{k}", lambda H, W, fn=fn, ofn=ofn, k=k: ofn(fn(H, W), k)))
+        cands.sort(key=lambda d: not d[0].startswith(own))
+        for desc, fn in cands:
+            if all(fn(i[0], i[1]) == o[ti] for i, o in dims):
+                return desc, fn
+        return None, None
+    dh, fh = find(0, "H0")
+    dw, fw = find(1, "W0")
+    if fh and fw and not (dh == "H0" and dw == "W0"):     # keep 과 같으면 별도 취급
+        H, W = len(paG0), len(paG0[0])
+        return f"H1={dh},W1={dw}", (fh(H, W), fw(H, W))
+    return None, None
+
+
+def _grid_decide(train, paG0):
+    """확정 의사결정 절차(사용자 2026-07-13). 속성별 타입으로 후보 생성 → 전 train 검증 → **Pa.G0 적용**
+    → 예측 수렴검사. 반환 {prop: {type, within, cands:[(kind,pred,ok)], decision, value}}.
+      · size = NUMBER: KEEP·CONST·MAP(크기식 brute-force)
+      · color = SET   : KEEP·CONST·SET-MAP(추가/삭제)·MAP(전역재채색)
+      · contents=CLASS: 항등·상수출력·전역remap 이면 DECIDE, 아니면 DESCEND (equality 뿐)."""
+    def sz(g):
+        return (len(g), len(g[0]))
+    ins = [e["input"] for e in train]
+    outs = [e["output"] for e in train]
+    pairs = list(zip(ins, outs))
+    out = {}
+
+    # ── size (NUMBER) ──
+    cs, preds = [], set()
+    keep = all(sz(i) == sz(o) for i, o in pairs)
+    if keep:
+        cs.append(("KEEP", sz(paG0), True)); preds.add(sz(paG0))
+    if all(sz(o) == sz(outs[0]) for o in outs):
+        cs.append(("CONST", sz(outs[0]), True)); preds.add(sz(outs[0]))
+    desc, val = _size_apply(train, paG0)
+    if desc:
+        cs.append((f"MAP[{desc}]", val, True)); preds.add(val)
+    out["size"] = {"type": "NUMBER", "within": [sz(i) == sz(o) for i, o in pairs],
+                   "cands": cs, "decision": _dec(preds), "value": (next(iter(preds)) if len(preds) == 1 else None)}
+
+    # ── color (SET) ──
+    ci = [_colorset(i) for i in ins]
+    co = [_colorset(o) for o in outs]
+    cp, preds = [], set()
+    pa = _colorset(paG0)
+    if all(a == b for a, b in zip(ci, co)):
+        cp.append(("KEEP", pa, True)); preds.add(pa)
+    if all(x == co[0] for x in co):
+        cp.append(("CONST", co[0], True)); preds.add(co[0])
+    add0, rem0 = co[0] - ci[0], ci[0] - co[0]
+    if (add0 or rem0) and all((a - rem0) | add0 == b for a, b in zip(ci, co)):
+        cp.append((f"SET-MAP(-{sorted(rem0)}+{sorted(add0)})", (pa - rem0) | add0, True)); preds.add((pa - rem0) | add0)
+    gm = _color_map_search(train)
+    if gm and any(k != v for k, v in gm.items()):
+        pc = frozenset(gm.get(v, v) for v in pa)
+        cp.append(("MAP", pc, True)); preds.add(pc)
+    out["color"] = {"type": "SET", "within": [a == b for a, b in zip(ci, co)],
+                    "cands": cp, "decision": _dec(preds), "value": (next(iter(preds)) if len(preds) == 1 else None),
+                    "map": gm if (gm and any(k != v for k, v in gm.items())) else None}
+
+    # ── contents (CLASS) ──
+    kk, val, note = [], None, "DESCEND"
+    if all(i == o for i, o in pairs):
+        val, note = paG0, "항등"; kk.append(("KEEP", "항등", True))
+    elif all(o == outs[0] for o in outs):
+        val, note = outs[0], "상수출력"; kk.append(("CONST", "상수출력", True))
+    elif gm and any(k != v for k, v in gm.items()) and all(sz(i) == sz(o) for i, o in pairs):
+        val, note = [[gm.get(v, v) for v in row] for row in paG0], "전역remap"; kk.append(("MAP", "전역remap", True))
+    out["contents"] = {"type": "CLASS", "within": [i == o for i, o in pairs], "cands": kk,
+                       "decision": "DECIDE" if val is not None else "DESCEND", "value": val, "note": note}
+    return out
+
+
+def _dec(preds):
+    return "DESCEND" if len(preds) == 0 else ("DECIDE" if len(preds) == 1 else "AMBIGUOUS")
+
+
 def _color_map_search(train):
     """전 train pair 를 셀 단위로 훑어 **입력색→출력색 전역 함수**를 도출(크기 COMM 인 pair 만).
     한 입력색이 두 출력색으로 가면(=전역 함수 아님, 객체·위치 의존) None. 일관하면 그 map 반환."""
@@ -807,72 +896,60 @@ def _op_hypothesize(ag):
     g0grid = [list(r) for r in ag.task["train"][0]["input"]]
     g1grid = [list(r) for r in ag.task["train"][0]["output"]]
     if ag.wm.contains(sid, "level", "GRID"):
-        # ── GRID hypothesize (사용자 2026-07-11): object/pixel 이 contents 가설을 세우듯, GRID 는
-        #    **grid.size·grid.color 가설**을 GRID 비교 관계로부터 생성·검증한다. 절차 시나리오가 아니라
-        #    속성마다 `_grid_property_hypotheses` 로 후보(keep/const/transform)를 만들어 train 대조로
-        #    채택/기각(§2-2 근거=COMM/DIFF · §4-1 generate-and-test). 관계가 가설을 *고르고*, 검증이 *결정*.
-        #      · size/color 중 하나라도 결론 못 냄 → 그 속성은 object/pixel property 의존 → 하강.
-        #      · contents 는 GRID 표면 독립 도출 불가 — size·color 규칙이 train 을 재현해야만 '설명'된다.
-        #        (size COMM + 전역색맵 재현) → GRID 종결(program+답). 아니면 contents 미결 → 하강.
+        # ── GRID hypothesize = **확정 의사결정 절차**(사용자 2026-07-13). 열린 시점의 관계로 각 속성
+        #    (size:NUMBER, color:SET, contents:CLASS)의 가설후보를 생성 → 전 train 검증 → **Pa.G0 적용**
+        #    → 예측 수렴검사 → DECIDE/AMBIGUOUS/DESCEND. 가설공간을 WM 에 **H 노드**로 물질화(후보·판정
+        #    가시 = §1-5 탐색보임). DECIDE 된 슬롯은 program.property 로, 미결(DESCEND/AMBIGUOUS)이면 하강.
         train = ag.task["train"]
-        within = ag.kg.get("within_edge", {}).get(p0.node_id) or {}
-        wcat = within.get("result", {}).get("category", {})
-        ocat = (ag.kg.get("cross", {}).get("output") or {}).get("result", {}).get("category", {})
-        concl, chosen = {}, {}
-        for prop in ("size", "color"):                              # grid.size·grid.color 가설 생성·검증
-            hid = f"{sid}.gh.{prop}"
-            wt, ot = wcat.get(prop, {}).get("type", "?"), ocat.get(prop, {}).get("type", "?")
-            ag.wm.add(sid, "grid-hyp", hid); ag.wm.add(hid, "prop", prop)
-            ag.wm.add(hid, "within", wt); ag.wm.add(hid, "cross-out", ot)   # 어떤 관계가 가설을 시사했나
-            cands = _grid_property_hypotheses(prop, train, wt, ot)
-            log = ag.kg.setdefault("hyp_trials", [])                # **전체 시도표는 WM 아닌 kg 리스트로**(용량안전)
-            for cand in cands:                                      # 생성·기각 후보 전부 노출(object/pixel 와 동형)
-                ag.wm.add(hid, "cand", f"{cand['kind']}:{cand['pred']}:{'✓' if cand['ok'] else '✗'}")  # WM=요약만
-                # kg 로그 = 후보 1행 (표/CSV 용). 관계가 시사한 가설(kind)과 채택여부.
-                log.append({"task": ag.task_id, "level": "GRID", "target": prop, "kind": cand["kind"],
-                            "candidate": cand["pred"], "verdict": "pass" if cand["ok"] else "fail",
-                            "per_pair": None})
-                if prop == "size" and cand["kind"] == "transform":     # 크기식 brute-force = 후보별 per-pair 테스트
-                    for ax in ("H", "W"):
-                        for desc, ok in cand.get("tried", {}).get(ax, [])[:6]:
-                            ag.wm.add(hid, "tried", f"{ax}1={desc}:{'✓' if ok else '✗'}")  # WM=앞 6개만
-                        for tr in cand.get("trials", {}).get(ax, []):   # kg=전체 (생성→즉시 테스트→결과)
-                            log.append({"task": ag.task_id, "level": "GRID", "target": "size",
-                                        "kind": f"transform·{ax}", "candidate": tr["candidate"],
-                                        "verdict": "pass" if tr["verdict"] else "fail",
-                                        "per_pair": tr["per_pair"]})
-            win = next((c for c in cands if c["ok"]), None)
-            if win:
-                ag.wm.add(hid, "status", f"결론 [{win['kind']}] {win['pred']}")
-                concl[prop] = f"{win['kind']}:{win['pred']}"; chosen[prop] = win
+        paG0 = ag.task["test"][0]["input"]
+        dec = _grid_decide(train, paG0)
+        hsp = f"{sid}.H"                                              # 이 시점 가설공간(H*)
+        ag.wm.add(sid, "hyp-space", hsp)
+        miss, slotval = [], {}
+        for prop in ("size", "color", "contents"):
+            d = dec[prop]
+            hid = f"{hsp}.{prop}"
+            ag.wm.add(hsp, "slot", hid); ag.wm.add(hid, "prop", prop); ag.wm.add(hid, "type", d["type"])
+            ag.wm.add(hid, "within", "/".join("COMM" if v else "DIFF" for v in d["within"]))
+            for kind, pred, ok in d["cands"]:                        # 생성·검증된 후보(생존만 담김) 노출
+                ag.wm.add(hid, "cand", f"{kind}→{pred}")
+            if prop == "size" and any(v is False for v in d["within"]):   # NUMBER-DIFF brute-force 흔적
+                _, tried, _tr = _size_expr_search(train)
+                for ax in ("H", "W"):
+                    for desc, ok in tried[ax][:6]:
+                        ag.wm.add(hid, "tried", f"{ax}1={desc}:{'✓' if ok else '✗'}")
+            ag.wm.add(hid, "decision", d["decision"])
+            if d["decision"] == "DECIDE":
+                ag.wm.add(hid, "value", str(d["value"]))
+                slotval[prop] = d
             else:
-                ag.wm.add(hid, "status", "미결 — object/pixel property 의존 → 하강")
-        # contents: size·color 규칙이 train 을 재현하면 '설명', 아니면 미결.
-        chid = f"{sid}.gh.contents"; ag.wm.add(sid, "grid-hyp", chid); ag.wm.add(chid, "prop", "contents")
-        ag.wm.add(chid, "within", wcat.get("contents", {}).get("type", "?"))
-        cmap = (chosen.get("color") or {}).get("map")
-        size_keep = (chosen.get("size") or {}).get("kind") == "keep"
-        if size_keep and cmap and [[cmap.get(v, v) for v in r] for r in g0grid] == g1grid:
-            # 크기 유지 + 전역색맵이 train 재현 → GRID 에서 종결(전역 recolor program + 테스트 답)
+                miss.append(prop)                                     # AMBIGUOUS·DESCEND = 미결 → 하강
+        # size/color DECIDE 예측을 슬롯 값으로 직접 남긴다(가시). set_grid_* operator 활성화(배선)는
+        # 다음 증분 — 지금 set-size/set-color 를 켜면 solve 와 동시제안돼 operator-tie 나므로 보류.
+        if slotval.get("size"):
+            ag.wm.add(sid, "slot-grid_size", str(slotval["size"]["value"]))
+        if slotval.get("color"):
+            ag.wm.add(sid, "slot-grid_color", str(sorted(slotval["color"]["value"])))
+        # contents 가 GRID 에서 DECIDE(상수출력·전역remap·항등) → program+답으로 종결
+        if slotval.get("contents"):
             ppid = f"{p0.node_id}.property"
+            cv = slotval["contents"]
             if ag.wm.contains(ppid, "program", "{}"):
                 ag.wm.remove(ppid, "program", "{}")
-            ag.wm.add(ppid, "program", _global_recolor_program(g0grid, cmap))
-            ag.wm.add(chid, "status", "설명됨(전역색맵으로 train 재현)")
-            ag.wm.add(sid, "hypothesized", "yes")
-            tin = ag.task["test"][0]["input"]
-            ans = [[cmap.get(v, v) for v in row] for row in tin]
-            ag.kg["answer"] = ans
-            ag.add_output_wme("answer", tuple(tuple(r) for r in ans))
-            ag.wm.add(sid, "answer-ready", "yes"); ag.wm.add(sid, "grid-verdict", "GRID 종결(전역색맵)")
+            cmap = dec["color"].get("map")
+            prog = (_global_recolor_program(g0grid, cmap) if (cv["note"] == "전역remap" and cmap)
+                    else f"output_grid = {'input_grid' if cv['note'] == '항등' else '<상수 출력>'}")
+            ag.wm.add(ppid, "program", prog)
+            ag.kg["answer"] = cv["value"]
+            ag.add_output_wme("answer", tuple(tuple(r) for r in cv["value"]))
+            ag.wm.add(sid, "hypothesized", "yes"); ag.wm.add(sid, "answer-ready", "yes")
+            ag.wm.add(sid, "grid-verdict", f"GRID 종결(contents {cv['note']})")
             return
-        ag.wm.add(chid, "status", "미결(셀단위 — object/pixel 로 하강)")
-        # size/color 를 GRID 에서 결론했으면 그 예측을 남기고, contents(및 미결 속성)만 하강한다.
-        miss = [p for p in ("size", "color") if p not in concl] + ["contents"]
         ag.wm.add(sid, "grid-verdict",
-                  f"GRID 예측 size={concl.get('size', '미결')} · color={concl.get('color', '미결')} → 미결={miss} 하강")
-        gid = f"{sid}.goal"                                          # 하강 goal (predict 대신 여기서)
-        ag.wm.add(sid, "goal", gid); ag.wm.add(gid, "produce", ",".join(miss))
+                  f"size={dec['size']['decision']} color={dec['color']['decision']} "
+                  f"contents={dec['contents']['decision']} → 미결={miss} 하강")
+        gid = f"{sid}.goal"
+        ag.wm.add(sid, "goal", gid); ag.wm.add(gid, "produce", ",".join(miss) or "contents")
         return
     if ag.wm.contains(sid, "level", "PIXEL"):
         # PIXEL 가설 = **잔여(residual) 처리**: 상위(object) substate 가 재채색한 sim·program 을 이어받아,
