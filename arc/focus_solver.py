@@ -905,19 +905,30 @@ def _op_hypothesize(ag):
         dec = _grid_decide(train, paG0)
         hsp = f"{sid}.H"                                              # 이 시점 가설공간(H*)
         ag.wm.add(sid, "hyp-space", hsp)
-        miss, slotval = [], {}
+        miss, slotval, hn = [], {}, [0]                              # hn = H1,H2… 가설 번호 카운터
         for prop in ("size", "color", "contents"):
             d = dec[prop]
-            hid = f"{hsp}.{prop}"
+            hid = f"{hsp}.slot:{prop}"                                # 속성 슬롯 노드(타입·within·decision)
             ag.wm.add(hsp, "slot", hid); ag.wm.add(hid, "prop", prop); ag.wm.add(hid, "type", d["type"])
             ag.wm.add(hid, "within", "/".join("COMM" if v else "DIFF" for v in d["within"]))
-            for kind, pred, ok in d["cands"]:                        # 생성·검증된 후보(생존만 담김) 노출
-                ag.wm.add(hid, "cand", f"{kind}→{pred}")
-            if prop == "size" and any(v is False for v in d["within"]):   # NUMBER-DIFF brute-force 흔적
+            # 생성되는 것 = 가설(program). 각 후보를 **H1, H2… 번호 가설**로 물질화(가설공간의 원소).
+            for kind, pred, ok in d["cands"]:
+                hn[0] += 1
+                h = f"{hsp}.H{hn[0]}"
+                ag.wm.add(hsp, "hypothesis", h)                      # (H* ^hypothesis H*.Hk)
+                ag.wm.add(h, "slot", prop); ag.wm.add(h, "type", d["type"])
+                ag.wm.add(h, "rule", kind); ag.wm.add(h, "predict", str(pred))   # 규칙 → Pa.G1.prop 예측
+                ag.wm.add(h, "verdict", "survive" if ok else "reject")
+            if prop == "size" and any(v is False for v in d["within"]):   # NUMBER-DIFF brute-force = 기각 가설도 가시
                 _, tried, _tr = _size_expr_search(train)
                 for ax in ("H", "W"):
-                    for desc, ok in tried[ax][:6]:
-                        ag.wm.add(hid, "tried", f"{ax}1={desc}:{'✓' if ok else '✗'}")
+                    for desc, okk in tried[ax][:6]:
+                        if not okk:
+                            hn[0] += 1
+                            h = f"{hsp}.H{hn[0]}"
+                            ag.wm.add(hsp, "hypothesis", h)
+                            ag.wm.add(h, "slot", "size"); ag.wm.add(h, "rule", f"MAP[{ax}1={desc}]")
+                            ag.wm.add(h, "verdict", "reject")        # brute-force 기각 후보(탐색 보임 §1-5)
             ag.wm.add(hid, "decision", d["decision"])
             if d["decision"] == "DECIDE":
                 ag.wm.add(hid, "value", str(d["value"]))
