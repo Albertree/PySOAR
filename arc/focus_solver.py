@@ -924,12 +924,16 @@ def _op_hypothesize(ag):
                 slotval[prop] = d
             else:
                 miss.append(prop)                                     # AMBIGUOUS·DESCEND = 미결 → 하강
-        # size/color DECIDE 예측을 슬롯 값으로 직접 남긴다(가시). set_grid_* operator 활성화(배선)는
-        # 다음 증분 — 지금 set-size/set-color 를 켜면 solve 와 동시제안돼 operator-tie 나므로 보류.
+        # DECIDE size/color → set_grid_* operator 로 슬롯 물질화. **순차**(size→color→하강)로 tie 회피:
+        # set_grid_size 가 size-ready 세우면 set_grid_color 가, 둘 다 ready 면 solve*grid 가 발화.
         if slotval.get("size"):
-            ag.wm.add(sid, "slot-grid_size", str(slotval["size"]["value"]))
+            ag.wm.add(sid, "size-hyp", str(slotval["size"]["value"])); ag.wm.add(sid, "set-size", "yes")
+        else:
+            ag.wm.add(sid, "size-ready", "yes")                  # 미결(요청 안 함) = 통과
         if slotval.get("color"):
-            ag.wm.add(sid, "slot-grid_color", str(sorted(slotval["color"]["value"])))
+            ag.wm.add(sid, "color-hyp", str(sorted(slotval["color"]["value"]))); ag.wm.add(sid, "set-color", "yes")
+        else:
+            ag.wm.add(sid, "color-ready", "yes")
         # contents 가 GRID 에서 DECIDE(상수출력·전역remap·항등) → program+답으로 종결
         if slotval.get("contents"):
             ppid = f"{p0.node_id}.property"
@@ -948,8 +952,9 @@ def _op_hypothesize(ag):
         ag.wm.add(sid, "grid-verdict",
                   f"size={dec['size']['decision']} color={dec['color']['decision']} "
                   f"contents={dec['contents']['decision']} → 미결={miss} 하강")
-        gid = f"{sid}.goal"
-        ag.wm.add(sid, "goal", gid); ag.wm.add(gid, "produce", ",".join(miss) or "contents")
+        gid = f"{sid}.goal"                                      # GRID 하강 = grid-descend (goal 아님 —
+        ag.wm.add(sid, "grid-descend", gid)                      #   set_grid 순차 뒤 solve*grid 가 발화)
+        ag.wm.add(gid, "produce", ",".join(miss) or "contents")
         return
     if ag.wm.contains(sid, "level", "PIXEL"):
         # PIXEL 가설 = **잔여(residual) 처리**: 상위(object) substate 가 재채색한 sim·program 을 이어받아,
@@ -1089,19 +1094,20 @@ def _op_verify(ag):
 #      (sid ^set-color yes)  + (sid ^color-hyp <expr|unknown>)   → set_grid_color→ (sid ^slot-grid_color <expr>)
 #    지금은 어떤 규칙도 set-size/set-color 를 세우지 않으므로 **휴면**(회귀 0). hypothesize 손볼 때 활성화.
 def _op_set_grid_size(ag):
-    """grid.size 슬롯 설정 DSL (apply body). ^size-hyp(표현식)을 읽어 grid_size 슬롯으로 물질화."""
+    """grid.size 슬롯 설정 DSL (apply body). ^size-hyp(예측값)을 읽어 grid_size 슬롯으로 물질화.
+    ^size-ready 로 다음 단계(set_grid_color)를 순차 발화(operator-tie 회피)."""
     sid = ag.stack[-1].id
     expr = next((v for (i, a, v) in ag.wm if i == sid and a == "size-hyp"), "unknown")
-    ag.wm.add(sid, "slot-grid_size", expr)          # program 의 grid_size 슬롯(표현식 or 'unknown')
-    ag.wm.add(sid, "size-set", "yes")               # 결과 플래그(재발화 방지 + 슬롯 완료 표시)
+    ag.wm.add(sid, "slot-grid_size", expr)          # program 의 grid_size 슬롯
+    ag.wm.add(sid, "size-set", "yes"); ag.wm.add(sid, "size-ready", "yes")
 
 
 def _op_set_grid_color(ag):
-    """grid.color 슬롯 설정 DSL (apply body). ^color-hyp(표현식)을 읽어 grid_color 슬롯으로 물질화."""
+    """grid.color 슬롯 설정 DSL (apply body). ^color-hyp(예측값)을 읽어 grid_color 슬롯으로 물질화."""
     sid = ag.stack[-1].id
     expr = next((v for (i, a, v) in ag.wm if i == sid and a == "color-hyp"), "unknown")
     ag.wm.add(sid, "slot-grid_color", expr)
-    ag.wm.add(sid, "color-set", "yes")
+    ag.wm.add(sid, "color-set", "yes"); ag.wm.add(sid, "color-ready", "yes")
 
 
 # operator body(RHS 함수) = production 으로 못 하는 원자연산만:
@@ -1212,7 +1218,8 @@ PRODUCTIONS = [
                [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "set_grid_size")],
                [Action("<s>", "size-step", "yes")]),        # body 가 grid_size 슬롯 물질화 + ^size-set
     _propose_named("propose*set_grid_color", "set_grid_color",
-                   [Cond("<s>", "set-color", "yes"), Cond("<s>", "color-set", "<x>", negated=True)]),
+                   [Cond("<s>", "set-color", "yes"), Cond("<s>", "color-set", "<x>", negated=True),
+                    Cond("<s>", "size-ready", "yes")]),    # size 뒤 순차(operator-tie 회피)
     Production("apply*set_grid_color",
                [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "set_grid_color")],
                [Action("<s>", "grid-color-step", "yes")]),  # body 가 grid_color 슬롯 물질화 + ^color-set
@@ -1232,6 +1239,12 @@ PRODUCTIONS = [
     _propose_named("propose*solve*fallback", "solve",
                    [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
                     Cond("<s>", "compared", "yes"), Cond("<s>", "answer-ready", "<a>", negated=True)]),
+    # GRID hypothesize 뒤 하강: set_grid_size/color 가 순차로 슬롯 물질화(size-ready·color-ready) 완료된
+    #   **뒤에만** solve → 하강 (set_grid operator 와 동시제안 tie 회피). goal 대신 grid-descend 사용.
+    _propose_named("propose*solve*grid", "solve",
+                   [Cond("<s>", "grid-descend", "<g>"), Cond("<g>", "produce", "<p>"),
+                    Cond("<s>", "size-ready", "yes"), Cond("<s>", "color-ready", "yes"),
+                    Cond("<s>", "answer-ready", "<a>", negated=True)]),
     # OBJECT hypothesize 실패 → solve(미구현) → ONC → _do_descend 가 GRID.pixels 로 하강(PIXEL).
     _propose_named("propose*solve*pixel", "solve",
                    [Cond("<s>", "hypothesized", "failed"), Cond("<s>", "pixel-open", "<p>", negated=True)]),
