@@ -183,6 +183,35 @@ def _store_receipt(ag, host_id, attr, val):
         ag.wm.add(host_id, attr, val)
 
 
+def _agree(a, b):
+    """2차 개선(사용자 결정 2026-07-12): 두 1차 결과 노드를 **property tree 로 정렬**해 재귀 비교.
+    **모든 노드가 {type, score, category} 로 통일**(구조 일관) — comp1/comp2 값은 안 넣음:
+      · 내부노드(category 보유) → 자식별 _agree; score = 일치자식/전체, type = 전부일치면 COMM.
+      · 잎(하위 없음, 예 contents) → 그 자체가 한 단위 비교 → **score 1/1(일치)·0/1(불일치)**, category={}.
+        (둘 다 DIFF 도 일치=COMM = agreement.)"""
+    ca, cb = a.get("category"), b.get("category")
+    if isinstance(ca, dict) and isinstance(cb, dict):
+        cat = {}
+        for k in sorted(set(ca) | set(cb), key=str):
+            cat[k] = (_agree(ca[k], cb[k]) if (k in ca and k in cb)
+                      else {"type": "DIFF", "score": "0/1",
+                            "comp1": ca.get(k, {}).get("type"), "comp2": cb.get(k, {}).get("type"),
+                            "category": {}})
+        comm = sum(1 for v in cat.values() if v["type"] == "COMM")
+        tot = len(cat) or 1
+        return {"type": "COMM" if comm == tot else "DIFF", "score": f"{comm}/{tot}", "category": cat}
+    va, vb = a.get("type"), b.get("type")                          # 두 1차 verdict (COMM/DIFF)
+    t = "COMM" if va == vb else "DIFF"
+    return {"type": t, "score": "1/1" if t == "COMM" else "0/1",   # 잎: comp1/comp2 = 1차 verdict
+            "comp1": va, "comp2": vb, "category": {}}               #   → COMM-COMM vs DIFF-DIFF 구분 보존
+
+
+def _compare2(r0, r1):
+    """2차(relation vs relation) 비교 = property-tree 정렬 + agreement + category별 score. id 는 nested 유지.
+    현행 kg_compare(receipt,receipt)가 값까지 끌어와 {type,score,category} 봉투를 씌우던 것을 대체."""
+    return {"id": {"id1": r0.get("id"), "id2": r1.get("id")}, "result": _agree(r0["result"], r1["result"])}
+
+
 def _store_relation(ag, receipt, anchor=None):
     """ARCKG compare() 의 comparison receipt(dict)를 relation edge 로 WM 에 적재한다
     (harness §0.5: relation = compare 결과 = edge). receipt 전체가 하나의 relation node:
@@ -498,7 +527,7 @@ def _cross_grids(ag, sid, which, pairs, kg_compare, nodes, idx):
     if which == "change":
         w = ag.kg.get("within_edge", {})
         if p0 in w and p1 in w:
-            rel = kg_compare(w[p0], w[p1])
+            rel = _compare2(w[p0], w[p1])          # 2차 = 개선 format (nested·score·verdict만·둘다DIFF=COMM)
             _store_relation(ag, rel)
             ag.kg.setdefault("cross", {})["change"] = rel
         return

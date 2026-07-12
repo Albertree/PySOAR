@@ -23,19 +23,23 @@ LEVELS = ["GRID", "OBJECT", "PIXEL"]
 
 
 def _agree(a, b):
-    """2차 개선 규칙: 두 1차 결과 노드를 property tree 로 정렬해 재귀 비교.
-    - 내부노드(category 보유): 자식별 _agree → category, **score = 일치자식/전체**, type = 전부일치면 COMM.
-    - 잎(값 노드): 두 1차 verdict 가 같으면 COMM (**둘 다 DIFF 도 COMM = agreement**). comp1/comp2 안 넣음."""
+    """2차 개선: 두 1차 결과 노드를 property tree 로 정렬해 재귀 비교. **모든 노드 {type,score,category} 통일.**
+    - 내부노드: 자식별 _agree → category, score = 일치자식/전체, type = 전부일치면 COMM.
+    - 잎(하위 없음, 예 contents): 한 단위 비교 → **score 1/1·0/1**, category={}. (둘 다 DIFF도 일치=COMM.)"""
     ca, cb = a.get("category"), b.get("category")
     if isinstance(ca, dict) and isinstance(cb, dict):
-        keys = sorted(set(ca) | set(cb), key=str)
         cat = {}
-        for k in keys:
-            cat[k] = _agree(ca[k], cb[k]) if (k in ca and k in cb) else {"type": "DIFF"}
+        for k in sorted(set(ca) | set(cb), key=str):
+            cat[k] = (_agree(ca[k], cb[k]) if (k in ca and k in cb)
+                      else {"type": "DIFF", "score": "0/1",
+                            "comp1": ca.get(k, {}).get("type"), "comp2": cb.get(k, {}).get("type"),
+                            "category": {}})
         comm = sum(1 for v in cat.values() if v["type"] == "COMM")
         tot = len(cat) or 1
         return {"type": "COMM" if comm == tot else "DIFF", "score": f"{comm}/{tot}", "category": cat}
-    return {"type": "COMM" if a.get("type") == b.get("type") else "DIFF"}
+    va, vb = a.get("type"), b.get("type")                          # 잎: comp1/comp2 = 두 1차 verdict
+    t = "COMM" if va == vb else "DIFF"
+    return {"type": t, "score": "1/1" if t == "COMM" else "0/1", "comp1": va, "comp2": vb, "category": {}}
 
 
 def _second(r0, r1):
