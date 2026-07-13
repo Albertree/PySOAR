@@ -881,6 +881,73 @@ def _grid_property_hypotheses(prop, train, within_t, xout_t):
     return cands
 
 
+def _op_synthesize(ag):
+    """**H-space 안의 DSL operator** — 가설을 조합·검증(SOAR 사이클로 이 공간에서 실행). `_grid_decide`
+    로 속성별 후보 생성→train 검증→Pa.G0 적용→수렴검사. **H1,H2… 가설**을 이 공간(h)에 물질화하고,
+    DECIDE 결과를 **부모(계층 substate)** 슬롯으로 올린 뒤 hspace-done 표시(→ fine_trace 가 공간 제거)."""
+    h = ag.stack[-1].id
+    parent = next((v for (i, a, v) in ag.wm if i == h and a == "superstate"), None)
+    train = ag.task["train"]
+    paG0 = ag.task["test"][0]["input"]
+    root = ag.kg["arckg_root"]; p0 = root.example_pairs[0]
+    g0grid = [list(r) for r in train[0]["input"]]
+    dec = _grid_decide(train, paG0)
+    miss, slotval, hn = [], {}, [0]
+    for prop in ("size", "color", "contents"):
+        d = dec[prop]
+        hid = f"{h}.slot:{prop}"
+        ag.wm.add(h, "slot", hid); ag.wm.add(hid, "prop", prop); ag.wm.add(hid, "type", d["type"])
+        ag.wm.add(hid, "within", "/".join("COMM" if v else "DIFF" for v in d["within"]))
+        for kind, pred, ok in d["cands"]:                            # 생성된 가설 = H1,H2… (이 공간의 원소)
+            hn[0] += 1
+            hh = f"{h}.H{hn[0]}"
+            ag.wm.add(h, "hypothesis", hh)
+            ag.wm.add(hh, "slot", prop); ag.wm.add(hh, "type", d["type"])
+            ag.wm.add(hh, "rule", kind); ag.wm.add(hh, "predict", str(pred))
+            ag.wm.add(hh, "verdict", "survive" if ok else "reject")
+        if prop == "size" and any(v is False for v in d["within"]):   # NUMBER-DIFF brute-force 기각 가설도
+            _, tried, _tr = _size_expr_search(train)
+            for ax in ("H", "W"):
+                for desc, okk in tried[ax][:6]:
+                    if not okk:
+                        hn[0] += 1
+                        hh = f"{h}.H{hn[0]}"
+                        ag.wm.add(h, "hypothesis", hh); ag.wm.add(hh, "slot", "size")
+                        ag.wm.add(hh, "rule", f"MAP[{ax}1={desc}]"); ag.wm.add(hh, "verdict", "reject")
+        ag.wm.add(hid, "decision", d["decision"])
+        if d["decision"] == "DECIDE":
+            ag.wm.add(hid, "value", str(d["value"])); slotval[prop] = d
+        else:
+            miss.append(prop)
+    # DECIDE size/color → **부모** 슬롯 트리거(순차: size→color→하강; H-space pop 후 부모에서 실행).
+    if slotval.get("size"):
+        ag.wm.add(parent, "size-hyp", str(slotval["size"]["value"])); ag.wm.add(parent, "set-size", "yes")
+    else:
+        ag.wm.add(parent, "size-ready", "yes")
+    if slotval.get("color"):
+        ag.wm.add(parent, "color-hyp", str(sorted(slotval["color"]["value"]))); ag.wm.add(parent, "set-color", "yes")
+    else:
+        ag.wm.add(parent, "color-ready", "yes")
+    if slotval.get("contents"):                                       # contents DECIDE → 부모에서 GRID 종결
+        ppid = f"{p0.node_id}.property"; cv = slotval["contents"]
+        if ag.wm.contains(ppid, "program", "{}"):
+            ag.wm.remove(ppid, "program", "{}")
+        cmap = dec["color"].get("map")
+        prog = (_global_recolor_program(g0grid, cmap) if (cv["note"] == "전역remap" and cmap)
+                else f"output_grid = {'input_grid' if cv['note'] == '항등' else '<상수 출력>'}")
+        ag.wm.add(ppid, "program", prog)
+        ag.kg["answer"] = cv["value"]; ag.add_output_wme("answer", tuple(tuple(r) for r in cv["value"]))
+        ag.wm.add(parent, "hypothesized", "yes"); ag.wm.add(parent, "answer-ready", "yes")
+        ag.wm.add(parent, "grid-verdict", f"GRID 종결(contents {cv['note']})")
+    else:
+        ag.wm.add(parent, "grid-verdict",
+                  f"size={dec['size']['decision']} color={dec['color']['decision']} "
+                  f"contents={dec['contents']['decision']} → 미결={miss} 하강")
+        gid = f"{parent}.goal"
+        ag.wm.add(parent, "grid-descend", gid); ag.wm.add(gid, "produce", ",".join(miss) or "contents")
+    ag.wm.add(h, "synthesized", "yes"); ag.wm.add(h, "hspace-done", "yes")   # 이 공간 종료 → 부모 복귀
+
+
 def _op_hypothesize(ag):
     """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). object mapping 대응을 얻어,
     각 대응쌍을 **변환 후보(xform)** 로 WM 에 노출한다 — 속성별 COMM/DIFF 를 그대로 실어(규칙이
@@ -896,76 +963,9 @@ def _op_hypothesize(ag):
     g0grid = [list(r) for r in ag.task["train"][0]["input"]]
     g1grid = [list(r) for r in ag.task["train"][0]["output"]]
     if ag.wm.contains(sid, "level", "GRID"):
-        # ── GRID hypothesize = **확정 의사결정 절차**(사용자 2026-07-13). 열린 시점의 관계로 각 속성
-        #    (size:NUMBER, color:SET, contents:CLASS)의 가설후보를 생성 → 전 train 검증 → **Pa.G0 적용**
-        #    → 예측 수렴검사 → DECIDE/AMBIGUOUS/DESCEND. 가설공간을 WM 에 **H 노드**로 물질화(후보·판정
-        #    가시 = §1-5 탐색보임). DECIDE 된 슬롯은 program.property 로, 미결(DESCEND/AMBIGUOUS)이면 하강.
-        train = ag.task["train"]
-        paG0 = ag.task["test"][0]["input"]
-        dec = _grid_decide(train, paG0)
-        hsp = f"{sid}.H"                                              # 이 시점 가설공간(H*)
-        ag.wm.add(sid, "hyp-space", hsp)
-        miss, slotval, hn = [], {}, [0]                              # hn = H1,H2… 가설 번호 카운터
-        for prop in ("size", "color", "contents"):
-            d = dec[prop]
-            hid = f"{hsp}.slot:{prop}"                                # 속성 슬롯 노드(타입·within·decision)
-            ag.wm.add(hsp, "slot", hid); ag.wm.add(hid, "prop", prop); ag.wm.add(hid, "type", d["type"])
-            ag.wm.add(hid, "within", "/".join("COMM" if v else "DIFF" for v in d["within"]))
-            # 생성되는 것 = 가설(program). 각 후보를 **H1, H2… 번호 가설**로 물질화(가설공간의 원소).
-            for kind, pred, ok in d["cands"]:
-                hn[0] += 1
-                h = f"{hsp}.H{hn[0]}"
-                ag.wm.add(hsp, "hypothesis", h)                      # (H* ^hypothesis H*.Hk)
-                ag.wm.add(h, "slot", prop); ag.wm.add(h, "type", d["type"])
-                ag.wm.add(h, "rule", kind); ag.wm.add(h, "predict", str(pred))   # 규칙 → Pa.G1.prop 예측
-                ag.wm.add(h, "verdict", "survive" if ok else "reject")
-            if prop == "size" and any(v is False for v in d["within"]):   # NUMBER-DIFF brute-force = 기각 가설도 가시
-                _, tried, _tr = _size_expr_search(train)
-                for ax in ("H", "W"):
-                    for desc, okk in tried[ax][:6]:
-                        if not okk:
-                            hn[0] += 1
-                            h = f"{hsp}.H{hn[0]}"
-                            ag.wm.add(hsp, "hypothesis", h)
-                            ag.wm.add(h, "slot", "size"); ag.wm.add(h, "rule", f"MAP[{ax}1={desc}]")
-                            ag.wm.add(h, "verdict", "reject")        # brute-force 기각 후보(탐색 보임 §1-5)
-            ag.wm.add(hid, "decision", d["decision"])
-            if d["decision"] == "DECIDE":
-                ag.wm.add(hid, "value", str(d["value"]))
-                slotval[prop] = d
-            else:
-                miss.append(prop)                                     # AMBIGUOUS·DESCEND = 미결 → 하강
-        # DECIDE size/color → set_grid_* operator 로 슬롯 물질화. **순차**(size→color→하강)로 tie 회피:
-        # set_grid_size 가 size-ready 세우면 set_grid_color 가, 둘 다 ready 면 solve*grid 가 발화.
-        if slotval.get("size"):
-            ag.wm.add(sid, "size-hyp", str(slotval["size"]["value"])); ag.wm.add(sid, "set-size", "yes")
-        else:
-            ag.wm.add(sid, "size-ready", "yes")                  # 미결(요청 안 함) = 통과
-        if slotval.get("color"):
-            ag.wm.add(sid, "color-hyp", str(sorted(slotval["color"]["value"]))); ag.wm.add(sid, "set-color", "yes")
-        else:
-            ag.wm.add(sid, "color-ready", "yes")
-        # contents 가 GRID 에서 DECIDE(상수출력·전역remap·항등) → program+답으로 종결
-        if slotval.get("contents"):
-            ppid = f"{p0.node_id}.property"
-            cv = slotval["contents"]
-            if ag.wm.contains(ppid, "program", "{}"):
-                ag.wm.remove(ppid, "program", "{}")
-            cmap = dec["color"].get("map")
-            prog = (_global_recolor_program(g0grid, cmap) if (cv["note"] == "전역remap" and cmap)
-                    else f"output_grid = {'input_grid' if cv['note'] == '항등' else '<상수 출력>'}")
-            ag.wm.add(ppid, "program", prog)
-            ag.kg["answer"] = cv["value"]
-            ag.add_output_wme("answer", tuple(tuple(r) for r in cv["value"]))
-            ag.wm.add(sid, "hypothesized", "yes"); ag.wm.add(sid, "answer-ready", "yes")
-            ag.wm.add(sid, "grid-verdict", f"GRID 종결(contents {cv['note']})")
-            return
-        ag.wm.add(sid, "grid-verdict",
-                  f"size={dec['size']['decision']} color={dec['color']['decision']} "
-                  f"contents={dec['contents']['decision']} → 미결={miss} 하강")
-        gid = f"{sid}.goal"                                      # GRID 하강 = grid-descend (goal 아님 —
-        ag.wm.add(sid, "grid-descend", gid)                      #   set_grid 순차 뒤 solve*grid 가 발화)
-        ag.wm.add(gid, "produce", ",".join(miss) or "contents")
+        # ── GRID hypothesize = **별도 가설공간(H-space) 열기**. 실제 가설 조합·검증은 그 공간 안에서
+        #    `synthesize` DSL operator 가 SOAR 사이클로 수행(사용자 2026-07-13). 여기선 공간만 연다.
+        ag.create_hspace(ag.stack[-1], "GRID")
         return
     if ag.wm.contains(sid, "level", "PIXEL"):
         # PIXEL 가설 = **잔여(residual) 처리**: 상위(object) substate 가 재채색한 sim·program 을 이어받아,
@@ -1128,7 +1128,8 @@ def _op_set_grid_color(ag):
 # submit 은 apply-only(답은 output-link 에).
 OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select,
                    "hypothesize": _op_hypothesize, "coloring": _op_coloring, "verify": _op_verify,
-                   "set_grid_size": _op_set_grid_size, "set_grid_color": _op_set_grid_color}
+                   "set_grid_size": _op_set_grid_size, "set_grid_color": _op_set_grid_color,
+                   "synthesize": _op_synthesize}   # H-space 안에서 도는 가설 조합·검증 DSL
 
 
 # ---------------------------------------------------------------------------
@@ -1213,6 +1214,14 @@ PRODUCTIONS = [
     Production("apply*hypothesize",
                [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "hypothesize")],
                [Action("<s>", "hyp-open", "yes")]),
+    # synthesize = **H-space 전용** DSL — 가설공간 안에서만 발화(^type hypothesis-space). 가설을 조합·
+    #   검증(body=_grid_decide)해 H1,H2… 물질화 + 부모 슬롯 세팅 + hspace-done. (SOAR 사이클로 이 공간 실행.)
+    _propose_named("propose*synthesize", "synthesize",
+                   [Cond("<s>", "type", "hypothesis-space"), Cond("<s>", "synthesize", "yes"),
+                    Cond("<s>", "synthesized", "<x>", negated=True)]),
+    Production("apply*synthesize",
+               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "synthesize")],
+               [Action("<s>", "synth-step", "yes")]),
     # coloring DSL = **규칙기반**: color DIFF ∧ coordinate COMM 인 xform 이 있으면 propose →
     #   apply(body=frozen coloring)가 그 object.coordinate 를 g1color 로 시뮬 grid 에 칠함. 하나씩(multi-cycle).
     _propose_named("propose*coloring", "coloring",     # 단일 marker → 한 번만 propose(TIE 방지)

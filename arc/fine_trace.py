@@ -287,6 +287,15 @@ class _Tracer:
             self.cycle += 1
             # INPUT (every cycle; injects the task on cycle 1, no-op after)
             self._emit_input()
+            # H-space(가설공간)가 synthesize 를 마쳤으면(hspace-done) 제거하고 부모로 복귀.
+            top = self.ag.stack[-1]
+            if self.ag.wm.contains(top.id, "hspace-done", "yes"):
+                self.emit("decide", "substate",
+                          f"hypothesis-space {top.id} 완료(가설 확정) → 제거, 부모 복귀",
+                          highlight=[f"({top.id} ^hspace-done yes)"])
+                self.ag.remove_substates_below(max(len(self.ag.stack) - 2, 0))
+                self._emit_output()
+                continue
             # PROPOSE -- elaborate(); candidate ^operator +'s are materialised in
             # WM by _sync_candidates() as part of each firing (see elaborate).
             self.emit("propose", "phase", f"cycle {self.cycle} — PROPOSE (elaborate)")

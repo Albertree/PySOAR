@@ -89,6 +89,7 @@ class Agent:
         self.elaborator = Elaborator(productions)
         self.stack: list[Goal] = []
         self._next = 2  # S2, S3, ...
+        self._hnext = 1  # H1, H2, ... (hypothesis space — 일반 substate 와 구분되는 별도 공간)
         self.learn = learn
         self.chunks: list[Production] = []
         self._chunk_sigs: set = set()
@@ -217,6 +218,22 @@ class Agent:
         if items:
             self.wm.add(sid, "item-count", len(items))
         sub = Goal(sid, level, impasse=imp, attribute=attribute)
+        self.stack.append(sub)
+        return sub
+
+    def create_hspace(self, parent: Goal, for_level: str) -> Goal:
+        """**가설공간(H-space)** 생성 — 일반 substate(impasse) 와 구분되는 별도 공간. id 는 H1,H2,…
+        기본 WME 도 다르다(impasse/choices 없음): hypothesize logic 이 가설을 조합·검증하는 scratch.
+        실제 ARCKG WM 은 건드리지 않는다 — 이 공간 안에서만 synthesize DSL operator 가 돈다."""
+        hid = f"H{self._hnext}"
+        self._hnext += 1
+        level = parent.level + 1
+        self.wm.mark_goal(hid, level)
+        self.wm.add(hid, "type", "hypothesis-space")   # ← 일반 state('state')와 다른 표기
+        self.wm.add(hid, "superstate", parent.id)
+        self.wm.add(hid, "for", for_level)             # 어느 계층의 가설을 세우나 (GRID/OBJECT/PIXEL)
+        self.wm.add(hid, "synthesize", "yes")          # synthesize operator 발화 씨앗
+        sub = Goal(hid, level, impasse=None, attribute="hypothesis")
         self.stack.append(sub)
         return sub
 
