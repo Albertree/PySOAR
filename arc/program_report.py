@@ -177,7 +177,7 @@ for(const id in D){{const t=D[id];
  const ig=document.getElementById('in'+id);if(ig)ig.innerHTML=gridHTML(t.input);
  const eg=document.getElementById('exp'+id);if(eg)eg.innerHTML=gridHTML(t.output);}}
 </script>"""
-    with open(OUT, "w") as f:
+    with open(OUT, "w", encoding="utf-8") as f:
         f.write(doc)
     return OUT
 

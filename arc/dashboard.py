@@ -675,7 +675,7 @@ def main():
     limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
     tasks = [task_data(tid, load_task(p)) for tid, p in list_tasks(ds, limit)]
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8") as f:   # HTML 템플릿 non-ASCII → Windows(cp949) 크래시 방지
         f.write(build(ds, tasks))
     solved = sum(1 for t in tasks if t["correct_attempt"] is not None)
     print(f"wrote {out}  ({len(tasks)} tasks, {solved} solved)")

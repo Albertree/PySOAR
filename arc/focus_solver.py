@@ -1030,11 +1030,7 @@ def _op_coloring(ag):
     g1color 로 시뮬 grid 에 칠한다(procedural_memory.coloring, frozen). '무엇을/언제'는 **규칙**
     (propose*coloring: color DIFF ∧ coord COMM 인 xform 이 있을 때)이 정한다. 하나 칠하고 applied
     표시 → 남은 게 없으면 colored-all(→ verify)."""
-    import sys
-    _arc = os.path.expanduser("~/Desktop/ARC-solver")
-    if _arc not in sys.path:
-        sys.path.insert(0, _arc)
-    from procedural_memory.DSL.transformation import coloring
+    from arc.dsl import coloring   # 복구된 frozen primitive: dsl.py 가 sys.path + split-module fallback 처리
     sid = ag.stack[-1].id
     pend = _recolor_pending(ag, sid)
     if not pend:
@@ -1430,35 +1426,61 @@ def _rules_manifest():
             for p in PRODUCTIONS]
 
 
+def _run_with_timeout(fn, timeout_s):
+    """fn() 을 **태스크당 타임아웃**으로 실행. Unix 는 SIGALRM(기존 동작 그대로), SIGALRM 이
+    없는 플랫폼(Windows)은 워커 스레드 + join 타임아웃으로 대체한다. 초과 시 TimeoutError,
+    fn 자체 예외는 호출자에게 그대로 재전파(호출자의 예외 격리가 계속 적용되도록)."""
+    import signal
+    if hasattr(signal, "SIGALRM"):
+        class _TO(Exception):
+            pass
+        def _h(sig, frm):
+            raise _TO()
+        old = signal.signal(signal.SIGALRM, _h)
+        try:
+            signal.alarm(int(timeout_s))
+            return fn()
+        except _TO:
+            raise TimeoutError(f"timeout>{timeout_s}s")
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+    # Windows / SIGALRM 없음: 데몬 워커 스레드로 소프트 타임아웃. 파이썬 스레드는 강제
+    # 종료가 불가하므로 초과 시 스레드는 백그라운드로 흘려보내고(데몬) 호출자만 복귀한다.
+    import threading
+    box = {}
+    def _worker():
+        try:
+            box["result"] = fn()
+        except BaseException as e:                       # noqa: BLE001 (호출자 스레드로 전파)
+            box["error"] = e
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        raise TimeoutError(f"timeout>{timeout_s}s")
+    if "error" in box:
+        raise box["error"]
+    return box.get("result")
+
+
 def _safe_dash_data(task, tid, timeout_s=180):   # 제출 예산과 동일한 문제당 3분
     """_dash_data 를 **태스크당 타임아웃 + 예외 격리**로 감싼다. 일반 ARC-AGI 태스크는 솔버가
     가정한 구조(2 train + 1 test 등)와 달라 크래시하거나 오래 걸릴 수 있으므로, 한 태스크가
     전체 생성을 죽이지 않게 한다. 실패/초과 시 빈 이벤트 stub + ^error 필드 → 대시보드는 그
     태스크를 '무진행(n_steps=0)'으로 표시한다 (다양성 관찰이 목적이라 실패도 하나의 데이터)."""
-    import signal
-    class _TO(Exception):
-        pass
-    def _h(sig, frm):
-        raise _TO()
     stub = {"id": tid, "events": [], "wm_states": [],
             "grids": {"train": task.get("train", []),
                       "test": [{"input": tp["input"]} for tp in task.get("test", [])]},
             "candidates": [], "correct_attempt": None, "n_steps": 0, "error": None}
-    old = signal.signal(signal.SIGALRM, _h)
     try:
-        signal.alarm(timeout_s)
-        d = _dash_data(task, tid)
-        signal.alarm(0)
-        return d
-    except _TO:
+        return _run_with_timeout(lambda: _dash_data(task, tid), timeout_s)
+    except TimeoutError:
         stub["error"] = f"timeout>{timeout_s}s"
         return stub
     except Exception as e:                               # noqa: BLE001 (관찰용, 어떤 실패든 stub)
         stub["error"] = f"{type(e).__name__}: {str(e)[:120]}"
         return stub
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old)
 
 
 def make_dashboard(tasks, dataset="focus (slice 1)"):
@@ -1475,7 +1497,7 @@ def make_dashboard(tasks, dataset="focus (slice 1)"):
     data = {"dataset": dataset, "tasks": dash,
             "rules": _rules_manifest(), "op_docs": OP_DOCS}
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_dashboard.html")
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8") as f:   # _HTML 템플릿에 한글/≈ 등 non-ASCII → Windows(cp949) 기본 인코딩이면 크래시
         f.write(_HTML.replace("__DATA__", json.dumps(data)))
     return out
 

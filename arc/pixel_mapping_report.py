@@ -144,7 +144,7 @@ def build():
            f"color <b>COMM/DIFF</b> 만 — <b>뺄셈·delta·크기비교 없음</b>. 빨강 테두리 = 색이 바뀐 셀(color DIFF) "
            f"= pixel 수준 변환 스펙. object mapping 이 대응을 못 찾은 태스크를 GRID 아래 pixel 로 바로 본다.</p>"
            f"{sections}")
-    with open(OUT, "w") as f:
+    with open(OUT, "w", encoding="utf-8") as f:
         f.write(doc)
     return OUT
 

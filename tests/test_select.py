@@ -52,8 +52,8 @@ class TestSelect(unittest.TestCase):
         # every system change is its own step: phases, rule fire/retract, and
         # individual WME adds are separate events.
         from arc.fine_trace import fine_trace
-        import os as _os
-        easy = _os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a/easy000a.json")
+        from arc.dataset import list_tasks
+        easy = dict(list_tasks("easy_a"))["easy000a"]   # resolves ARC-solver + SOAR-ARC-test
         ev = fine_trace(json.load(open(easy)))
         kinds = {e["kind"] for e in ev}
         self.assertIn("phase", kinds)
@@ -73,8 +73,8 @@ class TestSelect(unittest.TestCase):
     def test_dashboard_data_well_formed(self):
         # the dashboard embeds task data with no leftover injection sentinel
         from arc.dashboard import task_data, build
-        import os as _os
-        easy = _os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a/easy000a.json")
+        from arc.dataset import list_tasks
+        easy = dict(list_tasks("easy_a"))["easy000a"]   # resolves ARC-solver + SOAR-ARC-test
         td = task_data("easy000a", json.load(open(easy)))
         html = build("easy_a", [td])
         self.assertNotIn("__DATA__", html)         # sentinel replaced

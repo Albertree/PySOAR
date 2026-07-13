@@ -56,7 +56,7 @@ def _pp_str(per_pair):
 def build():
     rows = _collect()
     # ── CSV (평면 원자료) ─────────────────────────────────────────────
-    with open(OUT_CSV, "w", newline="") as f:
+    with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["task", "level", "target", "kind", "candidate", "verdict", "per_pair"])
         for r in rows:
@@ -96,7 +96,7 @@ def build():
 로 즉시 테스트</b>한 결과. 초록=통과, 회색=기각. 전체 원자료는 <code>hypothesis_trials.csv</code>.
 (수식 brute-force: H1=H0*2 같은 후보가 생성 즉시 각 pair 에서 기대치와 대조돼 살아남거나 버려진다.)</p>
 {''.join(sections)}"""
-    with open(OUT_HTML, "w") as f:
+    with open(OUT_HTML, "w", encoding="utf-8") as f:
         f.write(doc)
     return OUT_HTML, OUT_CSV
 

@@ -11,13 +11,29 @@ import json
 import os
 
 _ROOT = os.path.expanduser("~/Desktop/ARC-solver/data")
+# ARC-solver/data lacks some datasets on this machine (e.g. ARC_easy_a, the 9
+# single-pixel headline set) -- they live in the SOAR-ARC-test sibling repo, same
+# split as the frozen DSL (see arc/dsl.py). Resolve each dataset against both
+# roots, ARC-solver first.
+_ROOTS = [_ROOT, os.path.expanduser("~/Desktop/SOAR-ARC-test/data")]
+
+
+def _resolve(*parts):
+    """First existing <root>/<*parts> across the sibling data roots; falls back
+    to the primary root (may be empty) so `available()` still reports 0 honestly."""
+    for root in _ROOTS:
+        p = os.path.join(root, *parts)
+        if os.path.isdir(p):
+            return p
+    return os.path.join(_ROOT, *parts)
+
 
 DATASETS = {
-    "easy_a": os.path.join(_ROOT, "ARC_easy_a"),          # 9  single-pixel
-    "easy":   os.path.join(_ROOT, "ARC_easy"),            # 16 single-pixel
-    "human":  os.path.join(_ROOT, "ARC_human"),           # 8
-    "agi":    os.path.join(_ROOT, "ARC_AGI", "training"),       # full ARC-AGI-1 train
-    "agi2":   os.path.join(_ROOT, "ARC_AGI_v2", "training"),    # full ARC-AGI-2 train
+    "easy_a": _resolve("ARC_easy_a"),               # 9  single-pixel (SOAR-ARC-test)
+    "easy":   _resolve("ARC_easy"),                 # 16 single-pixel (ARC-solver)
+    "human":  _resolve("ARC_human"),                # 8  (missing on this machine)
+    "agi":    _resolve("ARC_AGI", "training"),      # full ARC-AGI-1 train (ARC-solver)
+    "agi2":   _resolve("ARC_AGI_v2", "training"),   # full ARC-AGI-2 train (ARC-solver)
 }
 
 

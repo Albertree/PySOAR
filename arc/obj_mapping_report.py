@@ -243,7 +243,7 @@ def build():
            f"ARCKG compare 로 <b>9속성</b> 비교한 N/{N}. {N}/{N} = 제자리 불변. "
            f"시각화는 <b>contents(색배열)</b>만; 빈칸=투명. 매트릭스 셀에 <b>호버</b>하면 "
            f"두 object 의 contents 와 comparison receipt dict 가 뜬다.</p>{body}")
-    with open(OUT, "w") as f:
+    with open(OUT, "w", encoding="utf-8") as f:
         f.write(doc)
     return OUT
 

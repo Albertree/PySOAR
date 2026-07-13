@@ -24,7 +24,29 @@ _ARC = os.path.expanduser("~/Desktop/ARC-solver")
 if _ARC not in sys.path:
     sys.path.insert(0, _ARC)
 
-from procedural_memory.DSL.transformation import make_grid, coloring  # noqa: E402  frozen 2
+# The frozen DSL (make_grid, coloring) is NOT in the ARC-solver copy on this
+# machine -- its procedural_memory/ is empty. The two primitives live in the
+# SOAR-ARC-test sibling repo (procedural_memory/DSL/). Append (never insert at
+# front) so ARC-solver keeps priority for ARCKG -- SOAR-ARC-test ships its own
+# ARCKG too and must not shadow the one PySOAR was validated against.
+_SOAR_ARC_TEST = os.path.expanduser("~/Desktop/SOAR-ARC-test")
+if _SOAR_ARC_TEST not in sys.path:
+    sys.path.append(_SOAR_ARC_TEST)
+
+try:  # faithful to the author's intent: a consolidated `transformation` module
+    # (assumed to already speak PySOAR's make_grid(size, fill) convention).
+    from procedural_memory.DSL.transformation import make_grid, coloring  # noqa: E402  frozen 2
+except ModuleNotFoundError:  # SOAR-ARC-test keeps the two primitives split
+    from procedural_memory.DSL.make_grid import make_grid as _frozen_make_grid  # noqa: E402
+    from procedural_memory.DSL.coloring import coloring    # noqa: E402  frozen 2 (matches)
+
+    # The SOAR-ARC-test primitive is make_grid(height, width, color); PySOAR calls
+    # it with its own frozen-2 convention make_grid(size, fill) where size is a
+    # dict {"height": H, "width": W} (see build_answer/build_from_hypothesis, which
+    # index size["height"]/size["width"]) and fill is the background colour. Adapt
+    # only make_grid -- coloring's (grid, selection, color) already matches.
+    def make_grid(size, fill=0):  # noqa: E402  frozen 2 (calling-convention adapter)
+        return _frozen_make_grid(size["height"], size["width"], fill)
 
 
 # -- context: the input-side facts an expression may reference -----------------

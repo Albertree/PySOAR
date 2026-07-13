@@ -231,5 +231,6 @@ def main(data_dir):
 
 
 if __name__ == "__main__":
-    default = os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a")
+    from arc.dataset import DATASETS   # multi-root resolve: ARC_easy_a lives in SOAR-ARC-test here
+    default = DATASETS["easy_a"]
     main(sys.argv[1] if len(sys.argv) > 1 else default)
