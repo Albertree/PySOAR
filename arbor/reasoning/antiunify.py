@@ -16,6 +16,11 @@ import re
 
 _DEF = re.compile(r"^\s*(\w+)\s*=\s*in_px\[(\d+)\]\s*$")
 _STEP = re.compile(r"apply_DSL\([^,]+,\s*coloring,\s*(\w+)\.coord,\s*(\d+)\)")
+# blob(=object-level) 프로그램: compress 가 쓰는 형식. 셀 묶음 하나를 한 색으로 칠한다.
+#   B0 = [7, 8, 13, 14]                          (연결 덩어리 = 픽셀 인덱스 집합)
+#   apply_DSL(tfg0, coloring, B0, 3)             (.coord 없음 → 픽셀 형식과 구분)
+_BLOB_DEF = re.compile(r"^\s*(\w+)\s*=\s*\[([\d,\s]*)\]\s*$")
+_BLOB_STEP = re.compile(r"apply_DSL\([^,]+,\s*coloring,\s*(\w+),\s*(\d+)\)")
 
 
 def parse_program(code: str):
@@ -51,17 +56,54 @@ def _align(ref, ops):
     return best
 
 
+def _is_blob_program(code):
+    return bool(code) and any(_BLOB_DEF.match(ln) for ln in code.splitlines())
+
+
+def _parse_blob_program(code):
+    """blob 프로그램 → ops=[(cells=frozenset(idx), color)] (step 순서). 파싱 불가면 None."""
+    if not code or code.strip() in ("{}", ""):
+        return None
+    sets, ops = {}, []
+    for ln in code.splitlines():
+        m = _BLOB_DEF.match(ln)
+        if m:
+            sets[m.group(1)] = frozenset(int(x) for x in m.group(2).split(",") if x.strip())
+            continue
+        m = _BLOB_STEP.search(ln)
+        if m and m.group(1) in sets:
+            ops.append((sets[m.group(1)], int(m.group(2))))
+    if not ops:
+        return None
+    return ops
+
+
+def compressible(programs):
+    """pixel 프로그램들이 **op 수 불일치**로 anti-unify 불가한가 (= compress 로 덩어리화하면 도움).
+    같은 색 픽셀들이 객체 크기만큼 늘어난 케이스(이동 등)를 잡는다. blob 형식이면 이미 압축됨→False."""
+    ps = [parse_program(p) for p in programs if not _is_blob_program(p)]
+    ps = [p for p in ps if p]
+    if len(ps) < 2:
+        return False
+    return len({len(p) for p in ps}) > 1        # op 수가 서로 다름
+
+
 def antiunify(programs):
     """per-pair program 문자열들 → (skeleton, slots).
-    skeleton={'ops':[(idx|None, color|None)]}; slots={name:{kind:'src'|'color', pos, values:[per-pair]}}.
-    정렬 후 위치별 COMM=상수, DIFF=변수. 파싱/구조 불일치 시 (None, None)."""
+    pixel: skeleton={'ops':[(idx|None,color|None)]}; blob: skeleton={'kind':'blob','ops':[(cells|None,color|None)]}.
+    slots={name:{kind:'src'|'color'|'cellset', pos, values}}. 위치별 COMM=상수, DIFF=변수. 불가 시 (None,None)."""
+    if all(_is_blob_program(p) for p in programs if p and p != "{}"):
+        blobs = [_parse_blob_program(p) for p in programs]
+        blobs = [b for b in blobs if b]
+        if len(blobs) >= 2:
+            return _antiunify_blobs(blobs)
     progs = [parse_program(p) for p in programs]
     progs = [p for p in progs if p]
     if len(progs) < 2:
         return None, None
     n = len(progs[0])
     if any(len(p) != n for p in progs):
-        return None, None                       # 연산 수 다르면 이 골격으론 불가
+        return None, None                       # 연산 수 다르면 이 골격으론 불가 (→ compress 후보)
     ref = progs[0]
     aligned = [ref] + [_align(ref, p) for p in progs[1:]]
     ops, slots = [], {}
@@ -76,6 +118,42 @@ def antiunify(programs):
             slots[f"?color{i}"] = {"kind": "color", "pos": i, "values": cols}
         ops.append((sk_idx, sk_col))
     return {"ops": ops}, slots
+
+
+def _align_blobs(ref, ops):
+    """blob ops 를 ref 에 **색 COMM 최대화** 순열로 정렬(셀집합은 pair 마다 다르니 색으로 대응). ≤6 전수."""
+    n = len(ref)
+    if n > 6 or len(ops) != n:
+        return ops
+    best, bestscore = ops, -1
+    for perm in itertools.permutations(ops):
+        score = sum((perm[i][1] == ref[i][1]) + (perm[i][0] == ref[i][0]) for i in range(n))
+        if score > bestscore:
+            bestscore, best = score, list(perm)
+    return best
+
+
+def _antiunify_blobs(blobs):
+    """blob 프로그램들(ops=[(cells,color)]) → (skeleton{'kind':'blob'}, slots). 위치별 COMM=상수, DIFF=slot.
+    cellset DIFF → cellset slot(값=pair 별 셀집합; resolve 가 input object 유래 식으로 재표현 = P5 다음단계)."""
+    n = len(blobs[0])
+    if any(len(b) != n for b in blobs):
+        return None, None
+    ref = blobs[0]
+    aligned = [ref] + [_align_blobs(ref, b) for b in blobs[1:]]
+    ops, slots = [], {}
+    for i in range(n):
+        cellsets = [a[i][0] for a in aligned]
+        cols = [a[i][1] for a in aligned]
+        sk_cells = cellsets[0] if len({tuple(sorted(c)) for c in cellsets}) == 1 else None
+        sk_col = cols[0] if len(set(cols)) == 1 else None
+        if sk_cells is None:
+            slots[f"?cells{i}"] = {"kind": "cellset", "pos": i,
+                                   "values": [sorted(c) for c in cellsets]}
+        if sk_col is None:
+            slots[f"?color{i}"] = {"kind": "color", "pos": i, "values": cols}
+        ops.append((sorted(sk_cells) if sk_cells is not None else None, sk_col))
+    return {"kind": "blob", "ops": ops}, slots
 
 
 # ── resolve: 변수 slot → G0 유래 표현식 (generate → train 적용 → 대조 → 생존) ──────
@@ -226,6 +304,9 @@ def resolve_slot(slot, train):
     N = len(vals)
     if N != len(train):
         return [], [("<len-mismatch>", False)]
+    if slot["kind"] == "cellset":
+        # blob(객체 셀집합) slot 의 P5 재표현(input object → 이동/우하단 탐색)은 다음 체크포인트.
+        return [], [("<cellset resolve 미구현 — 다음 단계>", False)]
     comps = [_components(e["input"]) for e in train]
     sels = _selectors(comps)
     tried, survivors = [], []
@@ -301,6 +382,20 @@ def solution_candidates(sol, limit=3):
 def execute_solution(skeleton, slots, choice, grid_in):
     """skeleton + slot별 선택 fn → grid_in 실행 → 답 격자."""
     H, W = len(grid_in), len(grid_in[0])
+    if skeleton.get("kind") == "blob":                    # 덩어리(객체) 단위: 각 셀에 단일셀 coloring 조합
+        cell_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "cellset"}
+        col_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "color"}
+        grid = [list(r) for r in grid_in]
+        for i, (cells, col) in enumerate(skeleton["ops"]):
+            cs = cells if cells is not None else choice[cell_at[i]](grid_in)
+            c = col if col is not None else choice[col_at[i]](grid_in)
+            if cs is None:
+                continue
+            for ix in cs:
+                r, cc = ix // W, ix % W
+                if 0 <= r < H and 0 <= cc < W:
+                    grid[r][cc] = c
+        return grid
     src_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "src"}
     col_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "color"}
     grid = [list(r) for r in grid_in]
@@ -319,6 +414,16 @@ def render_skeleton(skeleton, slots) -> str:
     """골격+변수 → TASK.solution 문자열(대시보드·저장)."""
     if not skeleton:
         return "{}"
+    if skeleton.get("kind") == "blob":                    # 덩어리(객체) 단위 program
+        cell_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "cellset"}
+        col_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "color"}
+        lines = ["tfg0 = input_grid"]
+        for i, (cells, col) in enumerate(skeleton["ops"]):
+            cs = str(cells) if cells is not None else cell_at[i]
+            c = str(col) if col is not None else col_at[i]
+            lines.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {cs}, {c})  # 객체 덩어리")
+        lines.append(f"output_grid = tfg{len(skeleton['ops'])}")
+        return "\n".join(lines)
     src_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "src"}
     col_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "color"}
     lines = ["in_px = pixels_of(input_grid)"]

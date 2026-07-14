@@ -1,0 +1,31 @@
+{
+  "operator": "compress",
+  "doc": "pixel pair.program 을 seed+인접성장으로 연결 덩어리(blob)=object-level op 으로 축약. generalize 가 op수 불일치로 막혀 needs-compress 를 세우면 발화 → 축약 후 generalize 재발화.",
+  "propose": [
+    {
+      "name": "propose*compress",
+      "order": 29,
+      "conditions": [
+        {"id": "<s>", "attr": "needs-compress", "value": "yes", "negated": false},
+        {"id": "<s>", "attr": "compressed", "value": "<c>", "negated": true}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "pref": "+", "referent": null},
+        {"id": "<o>", "attr": "name", "value": "compress", "pref": "+", "referent": null}
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*compress",
+      "order": 30,
+      "conditions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "negated": false},
+        {"id": "<o>", "attr": "name", "value": "compress", "negated": false}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "compress-step", "value": "yes", "pref": "+", "referent": null}
+      ]
+    }
+  ]
+}

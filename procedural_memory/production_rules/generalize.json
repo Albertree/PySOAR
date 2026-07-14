@@ -8,6 +8,7 @@
       "conditions": [
         {"id": "<s>", "attr": "programs-ready", "value": "yes", "negated": false},
         {"id": "<s>", "attr": "generalized", "value": "<g>", "negated": true},
+        {"id": "<s>", "attr": "needs-compress", "value": "<nc>", "negated": true},
         {"id": "<s>", "attr": "answer-ready", "value": "<ar>", "negated": true}
       ],
       "actions": [
