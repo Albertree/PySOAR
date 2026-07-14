@@ -1541,7 +1541,7 @@ def _load_made_and_real():
         p = os.path.join(here, "data", "made", f"{tid}.json")
         if os.path.exists(p):
             tasks.append((tid, load_task(p)))
-    real = glob.glob(os.path.expanduser("~/Desktop/ARC-solver/data/**/08ed6ac7.json"), recursive=True)
+    real = glob.glob(os.path.join(os.path.dirname(here), "data", "**", "08ed6ac7.json"), recursive=True)
     if real:
         tasks.append(("08ed6ac7", load_task(real[0])))
     etid, epath = list_tasks("easy_a")[0]
@@ -1566,7 +1566,7 @@ def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, includ
             p = os.path.join(here, "data", "made", f"{tid}.json")
             if os.path.exists(p):
                 tasks.append((tid, load_task(p)))
-    agi_root = os.path.expanduser("~/Desktop/ARC-solver/data/ARC_AGI")
+    agi_root = os.path.join(os.path.dirname(here), "data", "ARC_AGI")   # vendored (was ~/Desktop/ARC-solver)
     if agi_ids:                                                              # 명시 id 셋
         for tid in agi_ids:
             hits = glob.glob(os.path.join(agi_root, "**", f"{tid}.json"), recursive=True)

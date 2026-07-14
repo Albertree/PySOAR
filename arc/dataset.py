@@ -10,7 +10,9 @@ import glob
 import json
 import os
 
-_ROOT = os.path.expanduser("~/Desktop/ARC-solver/data")
+# vendored into the repo (self-contained; raw task JSON only). was
+# ~/Desktop/ARC-solver/data — external hook removed so the repo runs standalone.
+_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
 DATASETS = {
     "easy_a": os.path.join(_ROOT, "ARC_easy_a"),          # 9  single-pixel
