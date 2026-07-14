@@ -160,9 +160,6 @@ def _op_aggregate(ag):
 def focus_detail(kg, op):
     if op == "compose" and kg.get("compose"):            # anti-unify compose: 실행된 답 격자
         return {"kind": "compose", "answer": kg["compose"]["answer"]}
-    if op in ("find", "hypothesize", "predict", "evaluate", "verify", "compose", "submit"):
-        from arbor.reasoning.solve_ops import solve_detail
-        return solve_detail(kg, op)
     if op == "observe":
         return {"kind": "observe", "note": "focus 노드 property + 자식 존재 적재"}
     if op == "compare":

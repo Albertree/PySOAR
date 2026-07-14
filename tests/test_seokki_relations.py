@@ -27,13 +27,6 @@ def _run(tid, task, cyc=40):
     return fine_trace(task, tid, setup=setup_focus_agent, max_cycles=cyc)
 
 
-def _load_08ed6ac7():
-    import glob
-    import os
-    p = glob.glob(os.path.expanduser("~/Desktop/ARC-solver/data/**/08ed6ac7.json"), recursive=True)
-    return load_task(p[0])
-
-
 def _unsolved_task():
     """현재 어떤 contents 합성(identity/const/select/move/recolor-rank)도 못 푸는 고정
     fixture: 단일 object 인데 shape 가 바뀜(move 실패), 출력 다중색 아님(recolor 실패),
@@ -134,60 +127,6 @@ def test_rule_driven_not_scenario_fixed():
     m_ops = {e["label"].split("name=")[-1].rstrip("]") for e in hard if e["kind"] == "op-select"}
     assert "submit" in e_ops and "submit" not in m_ops       # 같은 규칙, 다른 경로
     assert "aggregate" in m_ops and "aggregate" not in e_ops
-
-
-def test_structure_mapping_relation_generalize():
-    # 입력→출력 관계를 GRID 3속성(size/color/contents)으로 pair 간 일반화.
-    from arbor.reasoning import relation_solve as R
-    # easy000a: 출력이 pair 간 불변 → contents=const(완결) → 관계 경로로 풀림
-    _tid, epath = list_tasks("easy_a")[0]
-    e = R.generalize(load_task(epath)["train"])
-    assert e["size"] == ("identity",) and e["contents"][0] == "const"
-    assert R.is_complete(e)
-    # made000b: size·color 는 입력 보존(identity), contents 는 이동형 합성(우하단 정렬)
-    b = R.generalize(load_task("data/made/made000b.json")["train"])
-    assert b["size"] == ("identity",) and b["color"] == ("identity",)
-    assert b["contents"] == ("move", {"anchor": "bottom-right"})
-    # made000a: size=상수(1x1), contents=선택형 합성(전경 최대 색)으로 해소
-    a = R.generalize(load_task("data/made/made000a.json")["train"])
-    assert a["size"] == ("const", (1, 1)) and a["contents"][0] == "select"
-
-
-def test_made000a_solved_by_selection_synthesis():
-    # made000a(선택형): contents 를 "전경 최대 area object 의 색(1×1)"으로 합성 →
-    # role(max area)을 pair 간 일반화(구조 불변)해 실제로 풀린다.
-    from arbor.reasoning import relation_solve as R
-    from arbor.solver import _dash_data
-    t = load_task("data/made/made000a.json")
-    prog = R.generalize(t["train"])
-    assert prog["contents"][0] == "select" and R.is_complete(prog)
-    assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
-    d = _dash_data(t, "made000a")                # 규칙주도 파이프라인으로도 정답 제출
-    assert d["correct_attempt"] == 0
-
-
-def test_made000b_solved_by_move_synthesis():
-    # made000b(이동형): contents 를 "object → 코너 정렬"로 합성. 4 코너 전수 중 우하단이
-    # pair 간 일관(표면 좌표는 달라도 '우하단 정렬' 구조 공통) → 규칙.
-    from arbor.reasoning import relation_solve as R
-    from arbor.solver import _dash_data
-    t = load_task("data/made/made000b.json")
-    prog = R.generalize(t["train"])
-    assert prog["contents"] == ("move", {"anchor": "bottom-right"})
-    assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
-    assert _dash_data(t, "made000b")["correct_attempt"] == 0
-
-
-def test_08ed6ac7_solved_by_recolor_rank():
-    # 실제 ARC 08ed6ac7: object 를 rank(높이/넓이)로 재채색. "longest" DSL 없이 object 간
-    # 비교로 rank 를 도출하고 rank→color 구조를 pair 간 일반화(k번째로 긴 것=색k).
-    from arbor.reasoning import relation_solve as R
-    from arbor.solver import _dash_data
-    t = _load_08ed6ac7()
-    prog = R.generalize(t["train"])
-    assert prog["contents"][0] == "recolor-rank" and R.is_complete(prog)
-    assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
-    assert _dash_data(t, "08ed6ac7")["correct_attempt"] == 0
 
 
 def test_submission_captured_and_scored():

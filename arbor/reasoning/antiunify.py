@@ -79,100 +79,202 @@ def antiunify(programs):
 
 
 # ── resolve: 변수 slot → G0 유래 표현식 (generate → train 적용 → 대조 → 생존) ──────
-def _fg_index(grid):
-    for r, row in enumerate(grid):
-        for c, v in enumerate(row):
-            if v:
-                return r * len(row) + c
-    return None
+# 배경(색0) 을 특권화하지 않는다(§no-arbitrary-filters·사용자 2026-07-15): "전경" 개념 없이 grid 의
+# 4-연결 동색 성분(objects_of 와 동일 알고리즘)을 전부 뽑고, **기하 선택자**(면적 순위 — 색이 아니라
+# 기하, train 이 채택)로 소스 객체를 고른 뒤 그 객체의 {r0,c0,h,w,anchor}+grid{H,W}+상수로 좌표식을
+# **자유조합 brute-force**(±/*//·좌결합 ≤2연산) 로 만든다. H-h·W-w·H-1·(0,0) 이 전부 이 문법에서
+# 창발한다(손열거 코너·fg_index·color_of_fg 제거). 배경색은 오직 ARCKG 생성에서만 count 로 라벨링.
+
+def _components(grid):
+    """grid 의 4-연결 동색 성분 전부 = [(cells, color)] (색0 도 하나의 색; objects_of 와 동일)."""
+    H, W = len(grid), len(grid[0])
+    seen, objs = set(), []
+    for r in range(H):
+        for c in range(W):
+            if (r, c) in seen:
+                continue
+            col, stack, cells = grid[r][c], [(r, c)], []
+            while stack:
+                y, x = stack.pop()
+                if (y, x) in seen or not (0 <= y < H and 0 <= x < W) or grid[y][x] != col:
+                    continue
+                seen.add((y, x)); cells.append((y, x))
+                stack += [(y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)]
+            objs.append((sorted(cells), col))
+    return objs
 
 
-def _fg_color(grid):
-    for row in grid:
-        for v in row:
-            if v:
-                return v
-    return None
+def _obj_atoms(cells, grid):
+    """소스 객체 → 좌표식 원자: bbox(r0,c0,h,w) + anchor(scan 순 첫 셀 ar,ac) + grid(H,W) + 상수 0..5."""
+    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+    r0, c0, r1, c1 = min(rs), min(cs), max(rs), max(cs)
+    ar, ac = cells[0]
+    d = {"H": len(grid), "W": len(grid[0]), "r0": r0, "c0": c0,
+         "h": r1 - r0 + 1, "w": c1 - c0 + 1, "ar": ar, "ac": ac}
+    d.update({str(k): k for k in range(6)})
+    return d
 
 
-def _fg_coord(grid):
-    for r, row in enumerate(grid):
-        for c, v in enumerate(row):
-            if v:
-                return (r, c)
-    return None
+_ATOM_NAMES = ["H", "W", "r0", "c0", "h", "w", "ar", "ac", "0", "1", "2", "3", "4", "5"]
+_EXPR_OPS = [("+", lambda a, b: a + b), ("-", lambda a, b: a - b),
+             ("*", lambda a, b: a * b), ("//", lambda a, b: (a // b) if b else None)]
 
 
-def _axis_cands(kind):
-    """한 축(row 'r' / col 'c')의 후보식: {const, base, base±d, H-1/W-1}. (§4-1 좌표식 탐색.)
-    fn(r0, c0, H, W) -> 좌표 성분."""
-    base = (lambda r0, c0, H, W: r0) if kind == "r" else (lambda r0, c0, H, W: c0)
-    bn = "r0" if kind == "r" else "c0"
-    cands = [(f"const {k}", (lambda r0, c0, H, W, k=k: k)) for k in range(0, 10)]
-    cands.append((bn, base))
-    for d in (1, 2, 3):
-        cands.append((f"{bn}+{d}", lambda r0, c0, H, W, d=d, b=base: b(r0, c0, H, W) + d))
-        cands.append((f"{bn}-{d}", lambda r0, c0, H, W, d=d, b=base: b(r0, c0, H, W) - d))
-    cands.append(("H-1" if kind == "r" else "W-1",
-                  (lambda r0, c0, H, W: H - 1) if kind == "r" else (lambda r0, c0, H, W: W - 1)))
-    return cands
+def _gen_exprs(names, max_ops=2):
+    """원자 names 에서 이항연산 ≤max_ops 회(좌결합)로 만들 수 있는 표현식 전부. [(설명, fn(atoms), 깊이)]."""
+    base = [(n, (lambda d, n=n: d[n]), 0) for n in names]
+    exprs = list(base)
+    frontier = list(base)
+    for _ in range(max_ops):
+        nxt = []
+        for en, ef, ed in frontier:
+            for an, af, _ad in base:
+                for osym, ofn in _EXPR_OPS:
+                    def fn(d, ef=ef, af=af, ofn=ofn):
+                        x = ef(d)
+                        if x is None:
+                            return None
+                        y = af(d)
+                        if y is None:
+                            return None
+                        return ofn(x, y)
+                    nxt.append((f"{en}{osym}{an}", fn, ed + 1))
+        exprs.extend(nxt)
+        frontier = nxt
+    return exprs
 
 
-def _coord_index_fn(rf, cf):
-    """(row식, col식) → fn(grid): grid 의 fg 좌표·dims 로 픽셀 인덱스(row*W+col) 계산."""
+_COORD_TEMPLATES = _gen_exprs(_ATOM_NAMES, max_ops=2)   # ≈4.5만 후보식(원자 14 × ≤2연산)
+_MATCH_CAP = 8   # 축별 생존식 상한(단순식 우선). 넘으면 tried 에 절단 기록(§no-silent-caps).
+
+
+def _selectors(comps_list):
+    """bg-free 기하 소스-객체 선택자: 면적 순위(최소·최대·2번째). 색이 아니라 면적(=기하)으로 고른다.
+    반환 = [(name, fn(comps)->cells|None)]. train 전 pair 에서 결정적(같은 순위)."""
+    def by_rank(j, rev):
+        def pick(comps):
+            if j >= len(comps):
+                return None
+            return sorted(comps, key=lambda cc: (len(cc[0]), cc[0][0]),
+                          reverse=rev)[j][0]
+        return pick
+    return [("min_area", by_rank(0, False)), ("max_area", by_rank(0, True)),
+            ("min_area#2", by_rank(1, False)), ("max_area#2", by_rank(1, True))]
+
+
+def _color_of_sel(sfn):
     def fn(g):
-        fc = _fg_coord(g)
-        if fc is None:
+        cells = sfn(_components(g))
+        if cells is None:
             return None
-        r0, c0 = fc
-        H, W = len(g), len(g[0])
-        return rf(r0, c0, H, W) * W + cf(r0, c0, H, W)
+        r, c = cells[0]
+        return g[r][c]
     return fn
 
 
+def _coord_index_fn(sfn, rf, cf):
+    """(선택자, row식, col식) → fn(grid): 선택 객체 원자로 픽셀 인덱스(row*W+col)."""
+    def fn(g):
+        cells = sfn(_components(g))
+        if cells is None:
+            return None
+        a = _obj_atoms(cells, g)
+        r, c = rf(a), cf(a)
+        if r is None or c is None:
+            return None
+        return r * len(g[0]) + c
+    return fn
+
+
+_ATOM_RE = re.compile(r"r0|c0|ar|ac|H|W|h|w")
+_POS = ({"r0", "ar"}, {"c0", "ac"})   # 축별 객체-위치 원자(행/열)
+
+
+def _axis_tier(name, axis):
+    """좌표식의 일반성 tier(낮을수록 우선): 0=객체위치(r0/c0/ar/ac) · 1=객체크기(h,w) · 2=격자(H,W) ·
+    3=상수전용. 객체-상대 식이 격자-상대·상수보다 일반화가 좋다(같은 train 값이라도 test 로 잘 옮겨감).
+    단 진짜 corner(H-h) 는 r0-식이 train 에 안 맞아 탈락하므로 tier 우선이 corner 탐색을 막지 않는다."""
+    toks = _ATOM_RE.findall(name)
+    if not toks:
+        return 3
+    t = 0
+    for a in toks:
+        if a in _POS[axis]:
+            t = max(t, 0)
+        elif a in ("h", "w"):
+            t = max(t, 1)
+        else:                                           # H,W 또는 반대축 위치원자
+            t = max(t, 2)
+    return t
+
+
+def _axis_matches(atoms, targets, axis):
+    """전 pair 에서 targets[i][axis] 를 맞추는 좌표식들(일반성 tier·단순성 우선 ≤_MATCH_CAP). (이름, fn, 깊이, 절단수).
+    (전부 생성·검증한 뒤 '먼저 제출할 순서'만 정한다 — 탐색은 그대로, §1-3.)"""
+    n = len(targets)
+    hits = [(en, ef, ed) for en, ef, ed in _COORD_TEMPLATES
+            if all(ef(atoms[i]) == targets[i][axis] for i in range(n))]
+    hits.sort(key=lambda t: (_axis_tier(t[0], axis), t[2], len(t[0])))
+    trunc = max(0, len(hits) - _MATCH_CAP)
+    return [(en, ef, ed) for en, ef, ed in hits[:_MATCH_CAP]], trunc
+
+
 def resolve_slot(slot, train):
-    """slot(kind='src'|'color') → (survivors=[(name, fn)], tried=[(name, ok)]).
-    src(픽셀 인덱스): fg_index 또는 좌표식(row*W+col) 탐색. color: color_of_fg. train 으로만 검증(§P5)."""
+    """slot(kind='src'|'color') → (survivors=[(name, fn(grid))], tried=[(name, ok)]).
+    소스 객체는 기하 선택자로(배경 가정 없이), 값은 좌표식/객체색 자유조합 탐색. train 으로만 검증(§P5)."""
     vals = slot["values"]
     N = len(vals)
+    if N != len(train):
+        return [], [("<len-mismatch>", False)]
+    comps = [_components(e["input"]) for e in train]
+    sels = _selectors(comps)
+    tried, survivors = [], []
+
     if slot["kind"] == "color":
-        cands = [("color_of_fg", _fg_color)]
-        cands += [(f"const {k}", (lambda g, k=k: k)) for k in sorted(set(vals))]
-        tried, survivors = [], []
-        for name, fn in cands:
-            ok = N == len(train) and all(fn(train[i]["input"]) == vals[i] for i in range(N))
-            tried.append((name, ok))
+        for k in sorted(set(vals)):                       # 상수색 후보
+            ok = all(v == k for v in vals)
+            tried.append((f"const {k}", ok))
             if ok:
-                survivors.append((name, fn))
+                survivors.append((f"const {k}", (lambda g, k=k: k)))
+        for sname, sfn in sels:                           # 선택자-객체의 색(color_of_fg 의 bg-free 대체)
+            picks = [sfn(comps[i]) for i in range(N)]
+            if any(p is None for p in picks):
+                tried.append((f"color@{sname}", False)); continue
+            cols = [train[i]["input"][picks[i][0][0]][picks[i][0][1]] for i in range(N)]
+            ok = cols == list(vals)
+            tried.append((f"color@{sname}", ok))
+            if ok:
+                survivors.append((f"color@{sname}", _color_of_sel(sfn)))
         return survivors, tried
 
-    # --- src / 픽셀 인덱스 slot ---
-    tried, survivors = [], []
-    ok = N == len(train) and all(_fg_index(train[i]["input"]) == vals[i] for i in range(N))
-    tried.append(("fg_index", ok))
-    if ok:
-        survivors.append(("fg_index", _fg_index))
-    # 좌표 분해 후 축별 표현식 탐색 (상대이동·코너 등; §4-1 손계산 금지)
-    per = []
-    for i in range(N):
-        g = train[i]["input"]
-        fc = _fg_coord(g)
-        if fc is None:
-            per = None
-            break
-        r0, c0 = fc
-        H, W = len(g), len(g[0])
-        per.append((r0, c0, H, W, vals[i] // W, vals[i] % W))
-    if per:
-        for rn, rf in _axis_cands("r"):
-            if not all(rf(p[0], p[1], p[2], p[3]) == p[4] for p in per):
-                continue
-            for cn, cf in _axis_cands("c"):
-                if not all(cf(p[0], p[1], p[2], p[3]) == p[5] for p in per):
-                    continue
-                name = f"({rn},{cn})"
-                survivors.append((name, _coord_index_fn(rf, cf)))
-                tried.append((name, True))
+    # --- src / 픽셀 인덱스 slot: 선택자 × 좌표식 자유조합 ---
+    targets = [(vals[i] // len(train[i]["input"][0]), vals[i] % len(train[i]["input"][0]))
+               for i in range(N)]
+    keyed = []                                         # (정렬키, name, fn) — 최선 조합이 앞
+    for si, (sname, sfn) in enumerate(sels):
+        atoms, ok_sel = [], True
+        for i in range(N):
+            cells = sfn(comps[i])
+            if cells is None:
+                ok_sel = False; break
+            atoms.append(_obj_atoms(cells, train[i]["input"]))
+        if not ok_sel:
+            continue
+        r_hits, r_tr = _axis_matches(atoms, targets, 0)
+        c_hits, c_tr = _axis_matches(atoms, targets, 1)
+        if r_tr or c_tr:
+            tried.append((f"<{sname}: {r_tr}+{c_tr}개 우선순위 밖 절단>", True))
+        for rn, rf, rd in r_hits:
+            for cn, cf, cd in c_hits:
+                name = f"({rn},{cn})@{sname}"
+                key = (_axis_tier(rn, 0) + _axis_tier(cn, 1), rd + cd, si, len(name))
+                keyed.append((key, name, _coord_index_fn(sfn, rf, cf)))
+    keyed.sort(key=lambda t: t[0])                     # 일반적·단순·min_area 우선 → product 첫 후보=최선
+    for _k, name, fn in keyed[:_MATCH_CAP]:
+        survivors.append((name, fn))
+        tried.append((name, True))
+    if not survivors:
+        tried.append(("<no coord expr>", False))
     return survivors, tried
 
 
