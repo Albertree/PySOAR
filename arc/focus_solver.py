@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pysoar import Agent, Cond, Action, Production          # noqa: E402
 from arc.expr_solver import build_arckg, _load_value, _tup   # noqa: E402 (reuse, read-only)
+from procedural_memory.operators import OPERATOR_BODIES  # 분리된 operator bodies
 
 # --- P2c: 아래 지원계층 함수들은 arbor/ 로 분리됨 (re-export 허브) ---
 from arbor.perception.nav import (index_arckg, _cursor, _focus_group, _siblings, _receipt_leaves, _lca, _short, _edge_name, _load_props)
@@ -89,346 +90,31 @@ from arbor.perception.perception import (_obj_cc, objects_of, _fg_correspondence
 # ---------------------------------------------------------------------------
 
 
-def _op_observe(ag):
-    """관측 커서 ^focus 가 가리키는 **단 하나**의 노드를 관측한다 (형제 곁다리 로드 없음 — 사용자
-    교정: 관측된 것끼리만 compare 대상). 그 뒤 커서를 같은 계층(^level)의 다음 미관측 노드로
-    옮긴다(하나하나 훑기). 계층 전부 관측되면 ^observed + 비교 agenda 를 짠다(compare 가 소비)."""
-    idx, sid = ag.kg["idx"], ag.stack[-1].id
-    f = _cursor(ag)
-    if f is None:
-        return                                  # arg(대상) 미정 → 변화 없음 → ONC impasse → arg-선택 substate
-    node, lvl = idx["nodes"][f], idx["level"][f]
-    if lvl == "pixel":
-        # PIXEL 은 색+좌표뿐이고 hypothesize 가 grid 를 직접 읽으므로 **픽셀 property 를 WM 에 안 올린다**.
-        # 성능: 큰 격자(예 196 픽셀)를 커서로 하나씩 훑으면 WM 폭증+naive rematch 로 매우 느려짐 →
-        # focus 픽셀 전부를 한 번에 seen 표시(bulk)해 관측을 O(1) 로. (개별 관측 정보는 어차피 안 씀.)
-        for p in _focus_group(ag, sid):
-            ag.wm.add(p, "seen", "yes")
-        return
-    _load_props(ag, f, node, lvl)               # ^property = {type + to_json + 아티팩트 슬롯}
-    for edge, c in idx["edges"][f]:
-        ag.wm.add(f, edge, c)                   # 자식 존재(ref) — edge(구조)는 property 밖 그대로
     # ^seen 표시 + cursor 소비는 apply*observe 규칙이 (body 뒤 settle 에서).
 
 
-def _imbalance_goal(group, props, key):
-    """A FLAT presence-dict property (value -> bool), e.g. roles={input:T, output:F},
-    where ONE member differs from the majority -> that member is incomplete; return
-    what it is missing. Non-flat / non-bool dicts (nested grid props) -> skip (None)."""
-    dicts = [props[m][key] for m in group]
-    if not all(isinstance(d, dict) and all(isinstance(v, bool) for v in d.values())
-               for d in dicts):
-        return None
-    sigs = {m: tuple(sorted(props[m][key].items())) for m in group}
-    cnt = Counter(sigs.values())
-    if len(cnt) < 2:
-        return None
-    majority = dict(cnt.most_common(1)[0][0])
-    for m in group:
-        if sigs[m] != cnt.most_common(1)[0][0]:
-            mind = props[m][key]
-            missing = [sk for sk, sv in majority.items() if sv and not mind.get(sk)]
-            return {"minority": m, "missing": missing[0] if missing else "?"}
-    return None
-
-
-def _build_agenda(ag, sid, group):
-    """관측 끝난 계층의 비교 목록을 **WM 에 선언적으로** 깐다 (Python 리스트 아님 — 프로세스가
-    고정 스크립트가 아니라 *규칙이 소비하는 WM 구조*가 되도록). 각 비교 = (S ^cmp <cid>) 마커 +
-    (<cid> ^kind ..)(^order i)[+ arg WME]. (S ^cmp-active <첫>) = 커서. compare 규칙이 하나씩 소비.
-    무엇을 비교할지는 ARCKG level 구조로 지각(perception): peers / within / cross / predict.
-      PAIR : peers — 관측된 pair 들 비교 → 불균형(결핍 역할) 발견
-      GRID : 훈련 pair 별 within(G0↔G1) → cross(입력·변화·출력 삼중쌍) → predict
-      OBJECT: 각 train pair 의 G0-objects ↔ G1-objects 대응(match, score 순위)."""
-    idx = ag.kg["idx"]; lvls, par = idx["level"], idx["parent"]
-    kind = lvls[group[0]] if group else None
-    specs = []                                          # (cid, kind, order)
-    if kind == "pair" and len(group) >= 2:
-        cid = f"{sid}.cmp:peers"
-        for m in group:
-            ag.wm.add(cid, "member", m)                 # arg: 비교할 pair 들 (WM 에 선언적)
-        specs.append((cid, "peers", 0))
-    elif kind == "grid":
-        bypair = {}
-        for g in group:
-            bypair.setdefault(par[g], []).append(g)
-        train = sorted(p for p, gs in bypair.items() if len(gs) >= 2)   # G0·G1 다 있는 훈련 pair
-        order = 0
-        for p in train:
-            g0, g1 = sorted(bypair[p])
-            cid = f"{sid}.cmp:within.{p.split('.')[-1]}"
-            ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1); ag.wm.add(cid, "pair", p)
-            specs.append((cid, "within", order)); order += 1
-        if len(train) >= 2:
-            for which in ("input", "change", "output"):
-                cid = f"{sid}.cmp:cross.{which}"
-                ag.wm.add(cid, "which", which)
-                for p in train:
-                    ag.wm.add(cid, "pair", p)
-                specs.append((cid, "cross", order)); order += 1
-        specs.append((f"{sid}.cmp:predict", "predict", order))
-        if train:
-            ag.wm.add(sid, "to-hypothesize", "yes")         # within/cross 비교 끝나면 GRID hypothesize 발화
-
-    elif kind == "object":
-        # OBJECT: G0→G1 transformation 은 **한 PAIR 안**에서 찾는다 (사용자 교정 2026-07-10).
-        # inter-PAIR object 비교(P1·P2 의 G0×G1 매칭)는 **하지 않는다** — 변환은 P0 하나에서
-        # 도출하고, 다른 pair 는 나중에 그 변환을 *선택적으로 적용·검증*(부하 O(n²)→피함).
-        # 그래서 여기선 **첫 train pair 한 개**의 G0-objs ↔ G1-objs 대응만 만든다.
-        bygrid, bypair = {}, {}
-        for o in group:
-            bygrid.setdefault(par[o], []).append(o)             # object → 그 grid
-        for g in bygrid:
-            bypair.setdefault(par[g], []).append(g)             # grid → 그 pair
-        train = sorted(pp for pp, gs in bypair.items() if len(gs) >= 2)   # G0·G1 다 있는 pair
-        if train:
-            p = train[0]                                        # 첫 PAIR 만 (다음 PAIR 로 안 넘어감)
-            g0, g1 = sorted(bypair[p])
-            cid = f"{sid}.cmp:match.{p.split('.')[-1]}"
-            ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1); ag.wm.add(cid, "pair", p)
-            specs.append((cid, "match", 0))
-            ag.wm.add(sid, "to-hypothesize", "yes")             # match 끝나면 hypothesize 발화(OBJECT 만)
-    elif kind == "pixel":
-        # PIXEL: GRID.pixels 를 G0·G1 로 나눠 **G0-pixels ↔ G1-pixels 교차 비교**(cross-grid 우선 —
-        # grid 내부 pixel 끼리보다). object match 와 동형, 단위만 pixel. 같은 좌표끼리 kg_compare →
-        # color/coord COMM/DIFF 만(**delta·크기비교 없음**; 좌표차 표현은 별도 단계). (사용자 2026-07-10)
-        bygrid = {}
-        for px in group:
-            bygrid.setdefault(par[px], []).append(px)           # pixel → 그 GRID
-        grids = sorted(bygrid)                                   # [G0, G1] (같은 pair)
-        if len(grids) >= 2:
-            g0, g1 = grids[0], grids[1]
-            cid = f"{sid}.cmp:pxmatch"
-            ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1)
-            specs.append((cid, "pxmatch", 0))
-            ag.wm.add(sid, "to-hypothesize", "yes")             # pxmatch 끝나면 hypothesize(PIXEL) 발화
-    for cid, k, order in specs:
-        ag.wm.add(sid, "cmp", cid)                       # 계층 아래 비교 목록(선언적)
-        ag.wm.add(cid, "kind", k)
-        ag.wm.add(cid, "order", str(order))
-    if specs:
-        ag.wm.add(sid, "to-compare", "yes")     # compare(arg 없이) 제안 → SELECT 가 cmp-active 세움
-    else:
-        ag.wm.add(sid, "compared", "yes")       # 비교 없음(object/단일) → 하강/정지
-
-
-def _op_compare(ag):
-    """^cmp-active 가 가리키는 비교 하나를 수행(원자연산: kg_compare / imbalance / predict — array
-    비교는 production 으로 못 하니 body 가 그 원자연산만). ^done 은 apply*compare 규칙이. 다음
-    비교 선택(커서 이동)은 **select operator** 가 한다 (arg 결정 분리, 사용자 요청)."""
-    sid = ag.stack[-1].id
-    c = next((v for (i, a, v) in ag.wm if i == sid and a == "cmp-active"), None)
-    if c is None:
-        return
-    kind = next((v for (i, a, v) in ag.wm if i == c and a == "kind"), None)
-    _do_compare_kind(ag, sid, c, kind)
-
-
-def _op_select(ag):
-    """**arg-선택 substate 의 operator.** observe/compare 가 arg 없이 propose 되어 걸린 impasse 를
-    푼다 — superstate 의 다음 관측/비교 대상을 preference(순서상 **첫 미완료** = a안)로 골라 super 의
-    ^cursor / ^cmp-active 를 세운다. 그러면 super 의 observe/compare 가 그 arg 로 apply 가능해져
-    impasse 가 해소되고 substate 는 pop 된다(fine_trace). §1-3 의 '후보 탐색'은 이 body 에 얹을 자리.
-      select-for observe: 다음 미관측 focus → super ^cursor. 없으면 super ^observed + 비교 agenda.
-      select-for compare: 다음 미완료 cmp → super ^cmp-active. 없으면 super ^compared."""
-    sid = ag.stack[-1].id                                        # 현재 = arg-선택 substate
-    sup = next((v for (i, a, v) in ag.wm if i == sid and a == "superstate"), None)
-    idx = ag.kg.get("idx") if getattr(ag, "kg", None) else None
-    # 무엇을 고를지는 **WM 상태에서 추론**한다 (select-for 값에 의존하지 않음, 사용자 요청):
-    #   미관측 focus 노드가 있으면 → 관측 대상(super ^cursor). 관측이 다 끝났으면(없으면) → observed 전환
-    #   후, 미완료 cmp 를 비교 대상(super ^cmp-active), 그것도 없으면 compared. (관측이 비교보다 먼저 오므로
-    #   'unseen 유무 → observed → cmp' 우선순위가 기존 select-for observe/compare 분기를 그대로 재현.)
-    unseen = sorted(n for n in _focus_group(ag, sup) if not ag.wm.contains(n, "seen", "yes"))
-    if unseen:                                                   # (A) 관측 대상: 소속 순서(노드 id 정렬)로 첫 미관측
-        target = unseen[0]
-        ag.wm.add(sup, "cursor", target)                        # super 커서 = 첫 미관측(정렬순 = 부모별 묶임)
-        # (B) 상위 level cursor 유지: 관측 대상의 부모를 그 부모를 ^focus 로 가진 goal 의 ^cursor 로 세워
-        #     하강해도 소속 path 가 상위 level 에 남게 한다.
-        par = idx["parent"].get(target) if idx else None
-        pgoal = next((i for (i, a, v) in ag.wm if a == "focus" and v == par), None) if par else None
-        if pgoal is not None:
-            for (i, a, v) in list(ag.wm):
-                if i == pgoal and a == "cursor":
-                    ag.wm.remove(i, a, v)
-            ag.wm.add(pgoal, "cursor", par)
-    elif not ag.wm.contains(sup, "observed", "yes"):            # 다 관측 → 비교 국면 전환
-        ag.wm.add(sup, "observed", "yes")
-        _build_agenda(ag, sup, _focus_group(ag, sup))            # (sup ^cmp ..) + ^to-compare
-    else:                                                        # 관측 끝 → 비교 대상: 미완료 cmp 중 첫(order)
-        pend = [(int(next(v for (i2, a2, v) in ag.wm if i2 == cid and a2 == "order")), cid)
-                for (i, a, cid) in ag.wm if i == sup and a == "cmp"
-                and not ag.wm.contains(cid, "done", "yes")]
-        if pend:
-            pend.sort(); ag.wm.add(sup, "cmp-active", pend[0][1])
-        else:
-            ag.wm.add(sup, "compared", "yes")
-    ag.wm.add(sid, "selected", "yes")                            # 이 substate 는 대상 정함 → retract → pop
-
-
-def _wm_vals(ag, cid, attr):
-    return [v for (i, a, v) in ag.wm if i == cid and a == attr]
-
-
-def _compare_pixels(ag, sid, c, g0, g1, kg_compare, nodes, idx):
-    """PIXEL: G0-pixels ↔ G1-pixels 를 **같은 좌표끼리** 교차 비교(cross-grid 우선). 각 쌍 kg_compare →
-    color/coord COMM/DIFF. **뺄셈·delta·크기비교 없음**(동등성만) — 좌표차/이동량 표현은 별도 단계.
-    변화 셀(color DIFF)만 relation(receipt)으로 저장 = pixel 수준 변환 스펙(어느 셀이 어떻게 바뀌나)."""
-    def _rc(p):
-        j = nodes[p].to_json()["coordinate"]
-        return (j["row_index"], j["col_index"])
-    px1 = {_rc(p): p for p in idx.get("pixels", {}).get(g1, [])}
-    for p0 in sorted(idx.get("pixels", {}).get(g0, [])):
-        p1 = px1.get(_rc(p0))
-        if p1 is None:
-            continue
-        rel = kg_compare(nodes[p0], nodes[p1])
-        if rel["result"].get("category", {}).get("color", {}).get("type") == "DIFF":   # 색 바뀐 셀만 relation
-            # anchor 없이 — pixel id(T..P0.G0.X21, T..P0.G1.X21)의 LCA=T..P0(pair) 아래 E_G0X21-G1X21 로
-            # 저장(object relation 과 동일 관례). cmp 마커(S..cmp:pxmatch)를 앵커로 쓰면 S1 밑 잘못된 위치가 됨.
-            _store_relation(ag, {"id": {"id1": p0, "id2": p1}, "result": rel["result"]})
-
-
-def _do_compare_kind(ag, sid, c, kind):
-    """cmp 마커 c 의 kind·arg(WM 에 선언적으로 있음)를 읽어 그 한 비교를 실행 (원자연산)."""
-    kg_compare = _compare              # 단일 진입점(노드→property·관계→agreement 자동분기)
-    idx = ag.kg["idx"]; nodes = idx["nodes"]
-    if kind == "peers":
-        _compare_peers(ag, sid, _wm_vals(ag, c, "member"))
-    elif kind == "within":                                          # 한 pair G0↔G1 = 1차 변화
-        g0, g1, p = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0], _wm_vals(ag, c, "pair")[0]
-        rel = kg_compare(nodes[g0], nodes[g1])
-        _store_relation(ag, rel)                                   # (p ^relation p.E_G0-G1) + cascade
-        ag.kg.setdefault("within_edge", {})[p] = rel               # cross-change 에서 재사용(kg dict)
-    elif kind == "cross":
-        which = _wm_vals(ag, c, "which")[0]
-        _cross_grids(ag, sid, which, sorted(_wm_vals(ag, c, "pair")), kg_compare, nodes, idx)
-    elif kind == "match":                                           # OBJECT: G0-objs ↔ G1-objs 대응
-        g0, g1, p = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0], _wm_vals(ag, c, "pair")[0]
-        _compare_objects(ag, sid, c, g0, g1, p, kg_compare, nodes, idx)
-    elif kind == "pxmatch":                                         # PIXEL: G0-pixels ↔ G1-pixels 교차
-        g0, g1 = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0]
-        _compare_pixels(ag, sid, c, g0, g1, kg_compare, nodes, idx)
-    elif kind == "predict":
-        _predict_test_output(ag, sid)
 
 
 
 
-def _compare_objects(ag, sid, c, g0, g1, pair, kg_compare, nodes, idx, topk=None):
-    """한 train pair 의 **G0-objects × G1-objects 전부**를 kg_compare 해 유사도(score=COMM/전체)로
-    내림차순 순위. 높은 순위 = GRID 간 대응(correspondence) 후보 — '어느 object 가 어느 것이 됐나'.
-    (하드코딩 매칭 아님 — score 는 compare 결과에서, 순위는 그 정렬일 뿐, §1-5.)
-
-    크기 관리(§2-5 는 가시성, 하지만 N×M full cascade 는 큰 격자에서 폭발):
-      · 랭킹은 **상위 topk 만** (c ^match <mid>) 로 노출 + 총 비교 수(^n-compared) 로그.
-      · full relation edge(무엇이 COMM/DIFF = per-object 변환 스펙)는 **G0-object 당 최선 대응 1개만**
-        저장(N 개, N×M 아님) — 이게 hypothesize 가 쓸 변환 근거."""
-    g0objs, g1objs = idx["children"].get(g0, []), idx["children"].get(g1, [])
-    scored = []
-    for a in g0objs:
-        for b in g1objs:
-            rel = kg_compare(nodes[a], nodes[b])
-            n, tot = _score_frac(rel["result"].get("score", "0/1"))
-            scored.append((n / tot, n, tot, a, b, rel))
-    scored.sort(key=lambda t: (-t[0], t[3], t[4]))                # 유사도 ↓, 결정적 tiebreak
-    # **대응 결과 = relation** 으로만 WM 에 남긴다 (LCA=pair 아래 E_G0O2-G1O0, S1 의 ARCKG 처럼 깔끔).
-    # 전체 N×M 순위(옛 m0..mN 후보 무더기)는 WM 에 안 쏟는다 — 그건 중간 탐색값이라 kg dict 에만 두고,
-    # 필요하면 대시보드가 참조한다. hypothesize 는 대응을 _fg_correspondence 로 재계산하므로 무영향.
-    best = {}                                                      # G0-object 당 최선 대응
-    for (sim, n, tot, a, b, rel) in scored:
-        best.setdefault(a, rel)
-    for rel in best.values():
-        _store_relation(ag, rel)                                  # (pair ^relation pair.E_G0O2-G1O0) + cascade
-    ag.wm.add(c, "n-compared", str(len(scored)))                  # 총 비교 수 하나(로그) — 개별 순위는 WM 밖
-    ag.kg.setdefault("obj_match", {})[pair] = [(a, b, n, tot) for (sim, n, tot, a, b, rel) in scored]
 
 
-def _cross_grids(ag, sid, which, pairs, kg_compare, nodes, idx):
-    """두 훈련 pair 를 GRID 레벨에서 비교(structure mapping) — which: input(G0↔G0)·
-    output(G1↔G1)·change((G0-G1)↔(G0-G1) 2차). LCA=TASK 아래 저장. property별 COMM/DIFF 를
-    kg['cross'][which] 에 남겨 predict 가 이용."""
-    p0, p1 = sorted(pairs)[:2]
-    if which == "change":
-        w = ag.kg.get("within_edge", {})
-        if p0 in w and p1 in w:
-            rel = kg_compare(w[p0], w[p1])         # 관계×관계 → _compare 가 agreement(2차)로 자동분기
-            _store_relation(ag, rel)
-            ag.kg.setdefault("cross", {})["change"] = rel
-        return
-    e0, e1 = dict(idx["edges"][p0]), dict(idx["edges"][p1])
-    g0, g1 = e0.get(which), e1.get(which)
-    if g0 and g1:
-        rel = kg_compare(nodes[g0], nodes[g1])
-        _store_relation(ag, rel)
-        ag.kg.setdefault("cross", {})[which] = rel
-        ag.wm.add(sid, f"{which}-fixed", "yes" if rel["result"]["type"] == "COMM" else "no")
 
 
-def _compare_peers(ag, sid, group):
-    """관측된 형제(pair)들의 property 비교 → COMM/DIFF. 불균형(다수는 있는 역할을 소수 하나가
-    결핍; 예: Pa 에 output 없음)이면 goal 발견 = (node=결핍노드, produce=결핍역할).
-    **각 pair 쌍(P0-P1·P0-Pa·P1-Pa)의 비교결과는 relation edge 로도 WM 에 남긴다** — grid/object
-    비교와 동일 관례(§2-2·§2-5). LCA=TASK 아래 E_P0-P1 … 로 cascade (사용자 교정 2026-07-11:
-    peers 비교가 결과를 relation 으로 안 남겨서 E_P0-P1 등이 WM 에 안 보이던 문제)."""
-    kg_compare = _compare              # 단일 진입점(노드→property·관계→agreement 자동분기)
-    from itertools import combinations
-    idx = ag.kg["idx"]
-    for a, b in combinations(sorted(group), 2):              # 모든 pair 쌍 → relation edge
-        _store_relation(ag, kg_compare(idx["nodes"][a], idx["nodes"][b]))
-    props = {m: idx["nodes"][m].to_json() for m in group}
-    keys = sorted(set.intersection(*[set(p.keys()) for p in props.values()]))
-    diff, imbal = [], None
-    for k in keys:
-        vals = [props[m][k] for m in group]
-        if all(v == vals[0] for v in vals):
-            ag.wm.add(sid, "comm", k)
-        else:
-            ag.wm.add(sid, "diff", k); diff.append(k)
-            if imbal is None and len(group) >= 3 and isinstance(vals[0], dict):
-                imbal = _imbalance_goal(group, props, k)
-    if diff:
-        gid = f"{sid}.goal"
-        ag.wm.add(sid, "goal", gid)
-        if imbal:
-            ag.wm.add(gid, "node", imbal["minority"])               # e.g. Pa
-            ag.wm.add(gid, "produce", imbal["missing"])             # e.g. output
-        else:
-            ag.wm.add(gid, "produce", ",".join(diff))
 
 
-def _predict_test_output(ag, sid):
-    """cross-pair 결과로 테스트 출력 Pa.G1 의 GRID 3속성(size·color·contents)을 채운다:
-      - 출력끼리(G1↔G1) 전체 COMM → 출력 상수 → Pa.G1 = 관측된 훈련 출력 → 제출 준비.
-      - 아니면 속성별(size·color): 출력끼리 그 속성 COMM 이면 그대로 / within 변화가 pair 간
-        일관(2차 COMM)이면 그 공통변화 적용. contents 는 DIFF=범주형이라 표면비교로 못 얻어 제외.
-      - 3속성 다 정해지면 ^answer-ready, 아니면 goal(produce 미결) → solve*fallback → object 하강."""
-    root = ag.kg["arckg_root"]
-    cross = ag.kg.get("cross", {})
-    out_rel = cross.get("output")
-    # ① 출력 상수? (두 훈련 출력이 표면 동일 → 테스트 출력도 그 상수)
-    if out_rel is not None and out_rel["result"]["type"] == "COMM":
-        ans = ag.task["train"][0]["output"]
-        ag.kg["answer"] = ans
-        ag.add_output_wme("answer", tuple(tuple(r) for r in ans))
-        ag.wm.add(sid, "answer-ready", "yes")
-        ag.wm.add(sid, "predict", "output=상수(불변) → Pa.G1 = 훈련 출력")
-        pid = f"{root.node_id}.property"                      # 아티팩트 슬롯은 이제 property 아래
-        ag.wm.remove(pid, "solution", "{}")                   # 빈 슬롯 → 채운 값으로
-        ag.wm.add(pid, "solution", "output=상수(불변)")
-        return
-    # ② 속성별 도출 (size·color; contents 제외)
-    out_cat = (out_rel or {}).get("result", {}).get("category", {})
-    chg_cat = (cross.get("change") or {}).get("result", {}).get("category", {})
-    got = {}
-    for prop in ("size", "color"):
-        if out_cat.get(prop, {}).get("type") == "COMM":
-            got[prop] = "출력끼리 COMM → 그대로"
-        elif chg_cat.get(prop, {}).get("type") == "COMM":
-            got[prop] = "변화 일관 → 공통변화 적용"
-        if prop in got:
-            ag.wm.add(sid, f"predict-{prop}", got[prop])
-    missing = [p for p in ("size", "color", "contents") if p not in got]   # contents 는 항상 미결
-    ag.wm.add(sid, "predict", f"채움={list(got)} · 미결={missing}")
+
+
+
+
+
+
+
+
+
+
+
+
     # 하강 goal 은 여기서 세우지 않는다 — GRID hypothesize 가 within(G0→G1) 변환을 속성별로 결론지으려
     # 시도한 뒤, 못 내면 그때 goal(produce=미결)을 세운다 (predict↔hypothesize 가 동시에 solve 를
     # 제안해 operator-tie 나는 것 방지; 하강 여부는 hypothesize 의 판정이 주도, 사용자 교정 2026-07-11).
@@ -458,219 +144,18 @@ def _predict_test_output(ag, sid):
 
 
 
-def _op_synthesize(ag):
-    """**H-space 안의 DSL operator** — 가설을 조합·검증(SOAR 사이클로 이 공간에서 실행). `_grid_decide`
-    로 속성별 후보 생성→train 검증→Pa.G0 적용→수렴검사. **H1,H2… 가설**을 이 공간(h)에 물질화하고,
-    DECIDE 결과를 **부모(계층 substate)** 슬롯으로 올린 뒤 hspace-done 표시(→ fine_trace 가 공간 제거)."""
-    h = ag.stack[-1].id
-    parent = next((v for (i, a, v) in ag.wm if i == h and a == "superstate"), None)
-    train = ag.task["train"]
-    paG0 = ag.task["test"][0]["input"]
-    root = ag.kg["arckg_root"]; p0 = root.example_pairs[0]
-    g0grid = [list(r) for r in train[0]["input"]]
-    dec = _grid_decide(train, paG0)
-    miss, slotval, hn = [], {}, [0]
-    for prop in ("size", "color", "contents"):
-        d = dec[prop]
-        hid = f"{h}.slot:{prop}"
-        ag.wm.add(h, "slot", hid); ag.wm.add(hid, "prop", prop); ag.wm.add(hid, "type", d["type"])
-        ag.wm.add(hid, "within", "/".join("COMM" if v else "DIFF" for v in d["within"]))
-        for kind, pred, ok in d["cands"]:                            # 생성된 가설 = H1,H2… (이 공간의 원소)
-            hn[0] += 1
-            hh = f"{h}.H{hn[0]}"
-            ag.wm.add(h, "hypothesis", hh)
-            ag.wm.add(hh, "slot", prop); ag.wm.add(hh, "type", d["type"])
-            ag.wm.add(hh, "rule", kind); ag.wm.add(hh, "predict", str(pred))
-            ag.wm.add(hh, "verdict", "survive" if ok else "reject")
-        if prop == "size" and any(v is False for v in d["within"]):   # NUMBER-DIFF brute-force 기각 가설도
-            _, tried, _tr = _size_expr_search(train)
-            for ax in ("H", "W"):
-                for desc, okk in tried[ax][:6]:
-                    if not okk:
-                        hn[0] += 1
-                        hh = f"{h}.H{hn[0]}"
-                        ag.wm.add(h, "hypothesis", hh); ag.wm.add(hh, "slot", "size")
-                        ag.wm.add(hh, "rule", f"MAP[{ax}1={desc}]"); ag.wm.add(hh, "verdict", "reject")
-        ag.wm.add(hid, "decision", d["decision"])
-        if d["decision"] == "DECIDE":
-            ag.wm.add(hid, "value", str(d["value"])); slotval[prop] = d
-        else:
-            miss.append(prop)
-    # DECIDE size/color → **부모** 슬롯 트리거(순차: size→color→하강; H-space pop 후 부모에서 실행).
-    if slotval.get("size"):
-        ag.wm.add(parent, "size-hyp", str(slotval["size"]["value"])); ag.wm.add(parent, "set-size", "yes")
-    else:
-        ag.wm.add(parent, "size-ready", "yes")
-    if slotval.get("color"):
-        ag.wm.add(parent, "color-hyp", str(sorted(slotval["color"]["value"]))); ag.wm.add(parent, "set-color", "yes")
-    else:
-        ag.wm.add(parent, "color-ready", "yes")
-    if slotval.get("contents"):                                       # contents DECIDE → 부모에서 GRID 종결
-        ppid = f"{p0.node_id}.property"; cv = slotval["contents"]
-        if ag.wm.contains(ppid, "program", "{}"):
-            ag.wm.remove(ppid, "program", "{}")
-        cmap = dec["color"].get("map")
-        prog = (_global_recolor_program(g0grid, cmap) if (cv["note"] == "전역remap" and cmap)
-                else f"output_grid = {'input_grid' if cv['note'] == '항등' else '<상수 출력>'}")
-        ag.wm.add(ppid, "program", prog)
-        ag.kg["answer"] = cv["value"]; ag.add_output_wme("answer", tuple(tuple(r) for r in cv["value"]))
-        ag.wm.add(parent, "hypothesized", "yes"); ag.wm.add(parent, "answer-ready", "yes")
-        ag.wm.add(parent, "grid-verdict", f"GRID 종결(contents {cv['note']})")
-    else:
-        ag.wm.add(parent, "grid-verdict",
-                  f"size={dec['size']['decision']} color={dec['color']['decision']} "
-                  f"contents={dec['contents']['decision']} → 미결={miss} 하강")
-        gid = f"{parent}.goal"
-        ag.wm.add(parent, "grid-descend", gid); ag.wm.add(gid, "produce", ",".join(miss) or "contents")
-    ag.wm.add(h, "synthesized", "yes"); ag.wm.add(h, "hspace-done", "yes")   # 이 공간 종료 → 부모 복귀
-
-
-def _op_hypothesize(ag):
-    """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). object mapping 대응을 얻어,
-    각 대응쌍을 **변환 후보(xform)** 로 WM 에 노출한다 — 속성별 COMM/DIFF 를 그대로 실어(규칙이
-    'color DIFF ∧ coordinate COMM → coloring' 을 판단). 시뮬 grid 를 G0(input)로 초기화.
-    조립은 이후 coloring operator(규칙 propose/apply)가, 검증은 verify operator 가 한다.
-    (여기 body 는 '지각'만 — 대응/COMM-DIFF 노출 + 시뮬 초기화. 조립 로직은 Python 아님·규칙.)"""
-    idx, sid = ag.kg["idx"], ag.stack[-1].id
-    root = ag.kg["arckg_root"]
-    p0 = root.example_pairs[0]
-    gid0, gid1 = p0.input_grid.node_id, p0.output_grid.node_id
-    ag.wm.add(sid, "sim-pair", p0.node_id)
-
-    g0grid = [list(r) for r in ag.task["train"][0]["input"]]
-    g1grid = [list(r) for r in ag.task["train"][0]["output"]]
-    if ag.wm.contains(sid, "level", "GRID"):
-        # ── GRID hypothesize = **별도 가설공간(H-space) 열기**. 실제 가설 조합·검증은 그 공간 안에서
-        #    `synthesize` DSL operator 가 SOAR 사이클로 수행(사용자 2026-07-13). 여기선 공간만 연다.
-        ag.create_hspace(ag.stack[-1], "GRID")
-        return
-    if ag.wm.contains(sid, "level", "PIXEL"):
-        # PIXEL 가설 = **잔여(residual) 처리**: 상위(object) substate 가 재채색한 sim·program 을 이어받아,
-        # object 로 못 맞춘 셀(그 sim 이 아직 G1 과 다른 셀)만 pixel 로 재채색해 **object 가설에 덧붙인다**.
-        # object 로 완결된 문제(845·868·08ed)는 애초에 PIXEL 로 안 내려온다(object verify 통과). object 가
-        # 일부만 처리한 문제(예: 009d5c81)는 그 sim 에서 이어받아 잔여만 pixel 이 마감한다.
-        sup = ag.stack[-2].id if len(ag.stack) >= 2 else None
-        base_sim = next((v for (i, a, v) in ag.wm if i == sup and a == "sim"), None) if sup else None
-        base_prog = next((v for (i, a, v) in ag.wm if i == sup and a == "program-code"), None) if sup else None
-        sim0 = [list(r) for r in base_sim] if base_sim else [list(r) for r in g0grid]  # object 재채색 후 상태
-        ag.wm.add(sid, "sim", _tup(sim0))                       # pixel sim = object 재채색 결과에서 이어감
-        if base_prog:
-            ag.wm.add(sid, "base-program", base_prog)           # 덧붙일 object 가설(program)
-        # 잔여: object 재채색 후에도 G1 과 다른 셀만. object xform 과 같은 WME 형태(diff=color·comm=coordinate·
-        # g0cells·g1color, +px)라 아래 coloring/verify 규칙을 그대로 탄다. g0idx=r*W+c=pixels_of(input)[i].
-        # 같은 크기일 때만 셀 단위 재채색 가능(크기변화 → xform 없이 verify 실패 = 정직).
-        H0, W0, H1, W1 = len(sim0), len(sim0[0]), len(g1grid), len(g1grid[0])
-        W = W0; order = 0
-        for r in range(H0 if (H0, W0) == (H1, W1) else 0):
-            for c in range(W):
-                if sim0[r][c] != g1grid[r][c]:                  # 잔여 변화 셀 = color DIFF ∧ coord COMM
-                    xid = f"{sid}.xform.{order}"
-                    ag.wm.add(sid, "xform", xid); ag.wm.add(xid, "px", "yes")
-                    ag.wm.add(xid, "order", str(order))
-                    ag.wm.add(xid, "diff", "color"); ag.wm.add(xid, "comm", "coordinate")
-                    ag.wm.add(xid, "g0cells", _tup([[r, c]]))    # 단일 셀 (pixel)
-                    ag.wm.add(xid, "g1color", str(g1grid[r][c]))  # 그 셀의 출력 색
-                    ag.wm.add(xid, "g0idx", str(r * W + c))       # pixels_of(input)[i]
-                    order += 1
-    else:
-        ag.wm.add(sid, "sim", _tup(g0grid))                     # OBJECT: 시뮬 grid = G0
-        # OBJECT 가설: object mapping 대응 → xform (objects_of[i] 참조). in_idx/out_idx 는 program 참조용.
-        in_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(g0grid))}   # program 의 in_objs[i]
-        order = 0
-        for a, b, cat in _fg_correspondence(ag, gid0, gid1, g0grid, g1grid):   # 대응쌍 → 변환 후보 노출
-            xid = f"{sid}.xform.{order}"
-            ag.wm.add(sid, "xform", xid); ag.wm.add(xid, "order", str(order))
-            for prop, v in cat.items():                            # 속성별 COMM/DIFF (규칙이 매칭)
-                t = v.get("type") if isinstance(v, dict) else v
-                if t in ("COMM", "DIFF"):
-                    ag.wm.add(xid, t.lower(), prop)                # (xid ^diff color)(xid ^comm coordinate)…
-            (g0cells, _), (_, g1color) = _obj_cc(idx["nodes"][a]), _obj_cc(idx["nodes"][b])
-            ag.wm.add(xid, "g0cells", _tup([list(c) for c in g0cells]))   # 입력 객체 좌표(색칠 대상)
-            ag.wm.add(xid, "g1color", str(g1color))                       # 출력 객체 색(칠할 색)
-            ag.wm.add(xid, "g0idx", str(in_idx.get(frozenset(g0cells), 0)))    # objects_of(input)[i] 참조
-            order += 1
-    if _recolor_pending(ag, sid):              # 재채색(color DIFF ∧ coord COMM) 후보 있으면
-        ag.wm.add(sid, "has-recolor", "yes")   # coloring 규칙 한 번만 발화(TIE 방지) — body 가 하나씩
-    else:
-        ag.wm.add(sid, "colored-all", "yes")   # 없으면 곧장 verify (시뮬=G0, 대개 실패 → PIXEL)
-
-
-def _recolor_pending(ag, sid):
-    """미적용 recolor xform(color DIFF ∧ coordinate COMM)이 남아 있나 — coloring 규칙의 조건."""
-    return [x for (i, a, x) in ag.wm if i == sid and a == "xform"
-            and ag.wm.contains(x, "diff", "color") and ag.wm.contains(x, "comm", "coordinate")
-            and not ag.wm.contains(x, "applied", "yes")]
-
-
-def _op_coloring(ag):
-    """**coloring DSL operator (apply body = 원자연산만)** — 첫 미적용 recolor xform 의 g0cells 를
-    g1color 로 시뮬 grid 에 칠한다(procedural_memory.coloring, frozen). '무엇을/언제'는 **규칙**
-    (propose*coloring: color DIFF ∧ coord COMM 인 xform 이 있을 때)이 정한다. 하나 칠하고 applied
-    표시 → 남은 게 없으면 colored-all(→ verify)."""
-    from procedural_memory.dsl.transformation import coloring   # vendored
-    sid = ag.stack[-1].id
-    pend = _recolor_pending(ag, sid)
-    if not pend:
-        ag.wm.add(sid, "colored-all", "yes"); return
-    sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
-    grid = [list(r) for r in sim]
-
-    def _wx(xid, attr):
-        return next((v for (i, a, v) in ag.wm if i == xid and a == attr), None)
-    # level-1 형식: 선택은 **objects_of(input)[i].coord**(OBJECT) / **pixels_of(input)[i].coord**(PIXEL) —
-    # 실제 ARCKG 성분/픽셀 참조(provenance), 색은 target literal. PIXEL 이면 셀 단위(pixels_of[i]=r*W+c 번째 셀).
-    order = sorted(pend, key=lambda x: int(_wx(x, "order") or "0"))
-    px = bool(order) and ag.wm.contains(order[0], "px", "yes")
-    base = next((v for (i, a, v) in ag.wm if i == sid and a == "base-program"), None) if px else None
-    src, ref, var = (("in_px = pixels_of(input_grid)", "in_px", "P") if px
-                     else ("in_objs = objects_of(input_grid)", "in_objs", "O"))
-    if base:
-        # PIXEL 잔여를 **object 가설(base)에 덧붙인다**: base 의 output_grid 라인만 떼고 tfg 번호를 이어감.
-        # in_px·P{k} defs 를 base 뒤에 두고(사용 전 정의됨) 잔여 tfg step 을 tfgK 부터 계속.
-        blines = [ln for ln in base.split("\n") if not ln.strip().startswith("output_grid")]
-        base_n = int(base.rsplit("output_grid = tfg", 1)[-1].strip()) if "output_grid = tfg" in base else 0
-        defs, steps = blines + [src], []
-    else:
-        defs, steps, base_n = [src], ["tfg0 = input_grid"], 0
-    for k, xid in enumerate(order):
-        g0c = [tuple(c) for c in (_wx(xid, "g0cells") or ())]; g1col = int(_wx(xid, "g1color") or 0)
-        g0i = int(_wx(xid, "g0idx") or 0)
-        for (r, c) in g0c:                                     # frozen coloring atom 으로 입력셀 → target색
-            if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
-                grid = coloring(grid, (r, c), g1col)
-        ag.wm.add(xid, "applied", "yes")
-        defs.append(f"{var}{k} = {ref}[{g0i}]")               # 입력 성분/픽셀 참조 ([i])
-        steps.append(f"tfg{base_n+k+1} = apply_DSL(tfg{base_n+k}, coloring, {var}{k}.coord, {g1col})")  # .coord → 색
-    steps.append(f"output_grid = tfg{base_n + len(order)}")
-    ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
-    ag.wm.add(sid, "program-code", "\n".join(defs + [""] + steps))
-    ag.wm.add(sid, "colored-all", "yes")                       # recolor 다 적용 → verify
 
 
 
 
 
 
-def _op_verify(ag):
-    """**verify operator (apply body)** — 시뮬 grid 를 train output 과 대조(원자). 같으면
-    (sid ^hypothesized yes) + PAIR.program 채움, 아니면 (sid ^hypothesized failed → main 이 PIXEL 하강).
-    성공 시 **존재하는 모든 PAIR** 에 per-pair program 을 물질화(_materialize_pair_programs, §2-5 반영)."""
-    sid = ag.stack[-1].id
-    sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
-    grid = [list(r) for r in (sim or [])]
-    out = ag.task["train"][0]["output"]
-    pid = next((v for (i, a, v) in ag.wm if i == sid and a == "sim-pair"), None)
-    if grid == [list(r) for r in out]:
-        ag.wm.add(sid, "hypothesized", "yes")
-        code = next((v for (i, a, v) in ag.wm if i == sid and a == "program-code"), "output_grid = input_grid")
-        if pid:
-            ppid = f"{pid}.property"
-            if ag.wm.contains(ppid, "program", "{}"):
-                ag.wm.remove(ppid, "program", "{}")
-            ag.wm.add(ppid, "program", code)               # 실행가능 flat Python (level-1 형식)
-        _materialize_pair_programs(ag)                      # 나머지 PAIR 들도 program 물질화(N개)
-    else:
-        ag.wm.add(sid, "hypothesized", "failed")
+
+
+
+
+
+
 
 
 # ── grid.size / grid.color 를 채우는 두 DSL operator (coloring 과 대등한 기본 DSL 3종의 나머지 둘,
@@ -683,21 +168,8 @@ def _op_verify(ag):
 #      (sid ^set-size yes)   + (sid ^size-hyp  <expr|unknown>)   → set_grid_size → (sid ^slot-grid_size <expr>)
 #      (sid ^set-color yes)  + (sid ^color-hyp <expr|unknown>)   → set_grid_color→ (sid ^slot-grid_color <expr>)
 #    지금은 어떤 규칙도 set-size/set-color 를 세우지 않으므로 **휴면**(회귀 0). hypothesize 손볼 때 활성화.
-def _op_set_grid_size(ag):
-    """grid.size 슬롯 설정 DSL (apply body). ^size-hyp(예측값)을 읽어 grid_size 슬롯으로 물질화.
-    ^size-ready 로 다음 단계(set_grid_color)를 순차 발화(operator-tie 회피)."""
-    sid = ag.stack[-1].id
-    expr = next((v for (i, a, v) in ag.wm if i == sid and a == "size-hyp"), "unknown")
-    ag.wm.add(sid, "slot-grid_size", expr)          # program 의 grid_size 슬롯
-    ag.wm.add(sid, "size-set", "yes"); ag.wm.add(sid, "size-ready", "yes")
 
 
-def _op_set_grid_color(ag):
-    """grid.color 슬롯 설정 DSL (apply body). ^color-hyp(예측값)을 읽어 grid_color 슬롯으로 물질화."""
-    sid = ag.stack[-1].id
-    expr = next((v for (i, a, v) in ag.wm if i == sid and a == "color-hyp"), "unknown")
-    ag.wm.add(sid, "slot-grid_color", expr)
-    ag.wm.add(sid, "color-set", "yes"); ag.wm.add(sid, "color-ready", "yes")
 
 
 # operator body(RHS 함수) = production 으로 못 하는 원자연산만:
@@ -705,10 +177,6 @@ def _op_set_grid_color(ag):
 #   hypothesize = 슬롯(size·color·contents) 예측 open. 기본 DSL 3종 = set_grid_size·set_grid_color·coloring.
 # 제어(무엇을 언제)는 전부 propose/apply 규칙 + WM 플래그로. solve 는 미구현(ONC=하강),
 # submit 은 apply-only(답은 output-link 에).
-OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select,
-                   "hypothesize": _op_hypothesize, "coloring": _op_coloring, "verify": _op_verify,
-                   "set_grid_size": _op_set_grid_size, "set_grid_color": _op_set_grid_color,
-                   "synthesize": _op_synthesize}   # H-space 안에서 도는 가설 조합·검증 DSL
 
 
 # ---------------------------------------------------------------------------
