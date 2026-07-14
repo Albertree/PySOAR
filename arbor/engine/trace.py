@@ -423,6 +423,26 @@ class _Tracer:
             hypname = f"{hyp.get('position', '')} | {hyp.get('color', '')}" if hyp else "—"
         n = len(self.attempts) + 1
         self.attempts.append({"answer": grid, "correct": info["correct"], "hyp": hypname})
+        # ── anti-unification: version space 답들을 채점부에서 순회(3회) ──
+        if S.get("mode") == "antiunify":
+            answers, hyps, idx = S.get("answers", []), S.get("hyps", []), 0
+            verdict = "정답 ✓" if info["correct"] else "오답 ✗"
+            self.emit("output", "feedback", f"제출 #{n}/{self.env._max}: {verdict}"
+                      + ("" if info["correct"] else " → 다음 후보로 재시도"),
+                      highlight=[f"attempt {n}: {'correct' if info['correct'] else 'wrong'}"])
+            while (not info["correct"]) and info["can_retry"] and (idx + 1) < len(answers):
+                idx += 1
+                grid = [list(r) for r in answers[idx]]
+                _r, _c, _d, info = self.env.step(grid)
+                n = len(self.attempts) + 1
+                lbl = hyps[idx]["label"] if idx < len(hyps) else f"solution#{idx + 1}"
+                self.attempts.append({"answer": grid, "correct": info["correct"],
+                                      "hyp": f"solution#{idx + 1} | {lbl}"})
+                verdict = "정답 ✓" if info["correct"] else "오답 ✗"
+                self.emit("output", "feedback", f"제출 #{n}/{self.env._max}: {verdict}"
+                          + ("" if info["correct"] else " → 다음 후보로 재시도"),
+                          highlight=[f"attempt {n}: {'correct' if info['correct'] else 'wrong'}"])
+            return False                                       # 종료(모든 시도 채점 완료)
         has_next = bool(S.get("hyps")) and (S.get("idx", 0) + 1) < len(S["hyps"])
         retry = (not info["correct"]) and info["can_retry"] and has_next
         verdict = "정답 ✓" if info["correct"] else "오답 ✗"
