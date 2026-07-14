@@ -21,11 +21,11 @@ ARCKG_OK = os.path.isdir(os.path.expanduser("~/Desktop/ARC-solver/ARCKG"))
 @unittest.skipUnless(os.path.isdir(DATA) and ARCKG_OK, "dataset/ARCKG not present")
 class TestSoarSolver(unittest.TestCase):
     def _solve(self, name):
-        from arc.soar_solver import solve
+        from legacy.soar_solver import solve
         return solve(json.load(open(os.path.join(DATA, f"{name}.json"))))
 
     def test_solves_all_easy_a(self):
-        from arc.soar_solver import solve
+        from legacy.soar_solver import solve
         failed = []
         for f in sorted(glob.glob(os.path.join(DATA, "*.json"))):
             name = os.path.basename(f).replace(".json", "")

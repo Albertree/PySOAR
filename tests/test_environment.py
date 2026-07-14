@@ -78,7 +78,7 @@ class TestEnvironment(unittest.TestCase):
 @unittest.skipUnless(os.path.isdir(EASY_A) and ARCKG_OK, "data/ARCKG not present")
 class TestEndToEnd(unittest.TestCase):
     def test_run_easy_a_through_environment(self):
-        from arc.run import run
+        from legacy.run import run
         r = run("easy_a", quiet=True)
         self.assertEqual(r["solved"], 9)         # all 9 real single-pixel tasks
         self.assertEqual(r["n"], 9)
@@ -86,7 +86,7 @@ class TestEndToEnd(unittest.TestCase):
     def test_unseen_easy_is_honestly_partial(self):
         # the hypothesis space was tuned on easy_a; on unseen 'easy' it is partial,
         # NOT perfect -- this test pins the HONEST baseline (no overclaiming).
-        from arc.run import run
+        from legacy.run import run
         r = run("easy", quiet=True)
         self.assertLess(r["solved"], r["n"])     # not all solved
         self.assertGreater(r["solved"], 0)       # but some generalize

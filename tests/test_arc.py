@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arc.solve import solve_task  # noqa: E402
+from legacy.solve import solve_task  # noqa: E402
 
 DATA = os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a")
 

@@ -23,7 +23,7 @@ ARCKG_OK = os.path.isdir(os.path.expanduser("~/Desktop/ARC-solver/ARCKG"))
                      "data/ARCKG not present")
 class TestUnified(unittest.TestCase):
     def _solve(self, path):
-        from arc.solver import solve
+        from legacy.solver import solve
         return solve(json.load(open(path)))
 
     def test_one_agent_solves_all(self):

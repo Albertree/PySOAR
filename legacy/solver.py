@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from soar import Agent, Cond, Action, Production  # noqa: E402
 from arc.select_solver import fg_objects, find_criterion, apply_criterion  # noqa: E402
-from arc.soar_solver import _diag_predict  # noqa: E402
+from legacy.soar_solver import _diag_predict  # noqa: E402
 
 
 def _lone_output(out_objs):
