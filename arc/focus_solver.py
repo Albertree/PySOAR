@@ -47,6 +47,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pysoar import Agent, Cond, Action, Production          # noqa: E402
 from arc.expr_solver import build_arckg, _load_value, _tup   # noqa: E402 (reuse, read-only)
 from procedural_memory.operators import OPERATOR_BODIES  # 분리된 operator bodies
+from procedural_memory.loader import PRODUCTIONS, OP_DOCS  # JSON 실물 규칙
 
 # --- P2c: 아래 지원계층 함수들은 arbor/ 로 분리됨 (re-export 허브) ---
 from arbor.perception.nav import (index_arckg, _cursor, _focus_group, _siblings, _receipt_leaves, _lca, _short, _edge_name, _load_props)
@@ -186,140 +187,16 @@ from arbor.perception.perception import (_obj_cc, objects_of, _fg_correspondence
 # STATE-RELATIVE: <s> binds to the current (sub)state (the one holding ^focus). So the
 # SAME rules fire in the top state and in every substate as attention descends -- a
 # substate's focus (one level deeper) gets observed/compared by these same productions.
-def _propose(name, conds):
-    return _propose_named(f"propose*{name}", name, conds)
 
 
-def _propose_named(prod_name, op_name, conds):
-    # same RHS as _propose, but an explicit production name -- lets one operator
-    # (solve) have TWO proposal variants (Soar's role*operator*variant convention).
-    return Production(
-        prod_name, conds,
-        [Action("<s>", "operator", "<o>", "+"),
-         Action("<o>", "name", op_name), Action("<o>", "node", "<f>")])
 
 
-def _apply(name, attr):
-    # writes the result flag ON THE FOCUS NODE the operator targeted (<o> ^node <f>)
-    return Production(
-        f"apply*{name}",
-        [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", name), Cond("<o>", "node", "<f>")],
-        [Action("<f>", attr, "yes")])
 
 
-def _apply_state(name, *acts):
-    # solving-pipeline apply: writes result flag(s) ON THE STATE <s> (the goal-holder),
-    # not the focus node. ``acts`` = (attr, val[, pref]) tuples. Body (SOLVE_BODIES)
-    # runs as this rule fires; the flags here gate the NEXT operator (generate-and-test).
-    return Production(
-        f"apply*{name}",
-        [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", name)],
-        [Action("<s>", a[0], a[1], a[2] if len(a) > 2 else "+") for a in acts])
 
 
-def _propose_nonode(prod_name, op_name, conds):
-    # arg(대상)를 붙이지 않고 operator 제안 (^node 없음). 대상은 arg-선택 substate 의 select 가
-    # super 의 커서로 정한다 — "propose 에 arg 를 박지 않는다"(사용자 요청)의 실체.
-    return Production(prod_name, conds,
-                      [Action("<s>", "operator", "<o>", "+"), Action("<o>", "name", op_name)])
 
 
-PRODUCTIONS = [
-    # ── 관측/비교: arg(대상)를 propose 에 **박지 않는다.** super 에 세워진 ^cursor / ^cmp-active
-    #    (= arg-선택 substate 의 select 가 정해준 것)가 있어야 apply 된다. 없으면 body·apply 규칙
-    #    둘 다 변화 없음 → **ONC impasse → arg-선택 substate** 가 열리고 그 안 select 가 대상을 정함.
-    _propose_nonode("propose*observe", "observe",
-                    [Cond("<s>", "to-observe", "yes"), Cond("<s>", "observed", "<o>", negated=True)]),
-    _propose_nonode("propose*compare", "compare",
-                    [Cond("<s>", "to-compare", "yes"), Cond("<s>", "compared", "<x>", negated=True),
-                     Cond("<s>", "answer-ready", "<ar>", negated=True)]),   # 답 나오면 compare 멈추고 submit
-    # apply: super 커서(^cursor/^cmp-active)로 결과 플래그(^seen/^done) + 커서 **소비**(다음엔 다시 select).
-    Production("apply*observe",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "observe"), Cond("<s>", "cursor", "<f>")],
-               [Action("<f>", "seen", "yes"), Action("<s>", "cursor", "<f>", "-")]),
-    Production("apply*compare",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "compare"), Cond("<s>", "cmp-active", "<f>")],
-               [Action("<f>", "done", "yes"), Action("<s>", "cmp-active", "<f>", "-")]),
-
-    # ── select: arg-선택 substate 안에서 한 번 발화 — body 가 super 커서(^cursor/^cmp-active)를
-    #    세우고 자기 자신에 ^selected 표시. 그러면 -(^selected) 조건이 깨져 retract → substate 는
-    #    더 고를 게 없어 SNC → fine_trace 가 pop → super 의 observe/compare 가 그 arg 로 apply.
-    # 하나의 **일반 select** operator — observe·compare 를 이름으로 구분하지 않는다. arg-선택 substate 면
-    #   (^select-for <아무값>) 발화하고, **무엇을 고를지는 body 가 WM(미관측 focus 유무·observed·cmp 상태)에서
-    #   추론**한다 (사용자 요청 2026-07-10: specific 이름 대신 WM 을 읽어 대상 결정).
-    _propose_nonode("propose*select", "select",
-                    [Cond("<s>", "select-for", "<sf>"), Cond("<s>", "selected", "<x>", negated=True)]),
-
-    # ── hypothesize: OBJECT 레벨 object mapping 이 끝나면(compared) 발화 — object mapping 을
-    #    program(가설)으로 합성·검증(body=시뮬레이션 조립·train 대조). arg-선택 substate 불필요
-    #    (대상 object 는 mapping 에 있음). 통과=hypothesized yes(+PAIR.program), 실패=failed.
-    # hypothesize = 시뮬레이션 open — body: 시뮬 grid=G0 + 대응→xform 후보(속성별 COMM/DIFF) 노출. 1회.
-    _propose_named("propose*hypothesize", "hypothesize",
-                   [Cond("<s>", "to-hypothesize", "yes"), Cond("<s>", "compared", "yes"),
-                    Cond("<s>", "hyp-open", "<o>", negated=True),
-                    Cond("<s>", "answer-ready", "<ar>", negated=True)]),  # 이미 답 남(예:상수출력)→hypothesize 생략
-    Production("apply*hypothesize",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "hypothesize")],
-               [Action("<s>", "hyp-open", "yes")]),
-    # synthesize = **H-space 전용** DSL — 가설공간 안에서만 발화(^type hypothesis-space). 가설을 조합·
-    #   검증(body=_grid_decide)해 H1,H2… 물질화 + 부모 슬롯 세팅 + hspace-done. (SOAR 사이클로 이 공간 실행.)
-    _propose_named("propose*synthesize", "synthesize",
-                   [Cond("<s>", "type", "hypothesis-space"), Cond("<s>", "synthesize", "yes"),
-                    Cond("<s>", "synthesized", "<x>", negated=True)]),
-    Production("apply*synthesize",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "synthesize")],
-               [Action("<s>", "synth-step", "yes")]),
-    # coloring DSL = **규칙기반**: color DIFF ∧ coordinate COMM 인 xform 이 있으면 propose →
-    #   apply(body=frozen coloring)가 그 object.coordinate 를 g1color 로 시뮬 grid 에 칠함. 하나씩(multi-cycle).
-    _propose_named("propose*coloring", "coloring",     # 단일 marker → 한 번만 propose(TIE 방지)
-                   [Cond("<s>", "has-recolor", "yes"), Cond("<s>", "colored-all", "<ca>", negated=True)]),
-    Production("apply*coloring",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "coloring")],
-               [Action("<s>", "color-step", "yes")]),      # body 가 시뮬 recolor + applied 표시
-    # set_grid_size / set_grid_color = 기본 DSL 3종의 나머지 둘(coloring 과 대등). hypothesize 가
-    #   ^set-size / ^set-color 를 세우면 발화해 body 가 ^size-hyp / ^color-hyp(표현식)을 grid_size /
-    #   grid_color 슬롯으로 물질화. 지금은 그 플래그를 아무도 안 세우므로 **휴면**(회귀 0) — hypothesize 재작성 때 활성화.
-    _propose_named("propose*set_grid_size", "set_grid_size",
-                   [Cond("<s>", "set-size", "yes"), Cond("<s>", "size-set", "<x>", negated=True)]),
-    Production("apply*set_grid_size",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "set_grid_size")],
-               [Action("<s>", "size-step", "yes")]),        # body 가 grid_size 슬롯 물질화 + ^size-set
-    _propose_named("propose*set_grid_color", "set_grid_color",
-                   [Cond("<s>", "set-color", "yes"), Cond("<s>", "color-set", "<x>", negated=True),
-                    Cond("<s>", "size-ready", "yes")]),    # size 뒤 순차(operator-tie 회피)
-    Production("apply*set_grid_color",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "set_grid_color")],
-               [Action("<s>", "grid-color-step", "yes")]),  # body 가 grid_color 슬롯 물질화 + ^color-set
-    # verify = 시뮬 grid 를 train output 과 대조(원자) → hypothesized yes/failed.
-    _propose_named("propose*verify", "verify",
-                   [Cond("<s>", "colored-all", "yes"), Cond("<s>", "hypothesized", "<h>", negated=True)]),
-    Production("apply*verify",
-               [Cond("<s>", "operator", "<o>"), Cond("<o>", "name", "verify")],
-               [Action("<s>", "verify-step", "yes")]),          # body 가 ^hypothesized yes/failed 세움
-
-    # submit: predict 가 답을 output-link 에 얹고 ^answer-ready → 제출·채점.
-    _propose("submit", [Cond("<s>", "answer-ready", "yes"), Cond("<s>", "done", "<x>", negated=True)]),
-
-    # solve = 미구현(apply·body 없음) → ONC impasse → 한 ARCKG 계층 하강(fine_trace._do_descend).
-    _propose_named("propose*solve*bootstrap", "solve",
-                   [Cond("<s>", "goal", "solve"), Cond("<s>", "observed", "yes")]),
-    _propose_named("propose*solve*fallback", "solve",
-                   [Cond("<s>", "goal", "<g>"), Cond("<g>", "produce", "<p>"),
-                    Cond("<s>", "compared", "yes"), Cond("<s>", "answer-ready", "<a>", negated=True)]),
-    # GRID hypothesize 뒤 하강: set_grid_size/color 가 순차로 슬롯 물질화(size-ready·color-ready) 완료된
-    #   **뒤에만** solve → 하강 (set_grid operator 와 동시제안 tie 회피). goal 대신 grid-descend 사용.
-    _propose_named("propose*solve*grid", "solve",
-                   [Cond("<s>", "grid-descend", "<g>"), Cond("<g>", "produce", "<p>"),
-                    Cond("<s>", "size-ready", "yes"), Cond("<s>", "color-ready", "yes"),
-                    Cond("<s>", "answer-ready", "<a>", negated=True)]),
-    # OBJECT hypothesize 실패 → solve(미구현) → ONC → _do_descend 가 GRID.pixels 로 하강(PIXEL).
-    _propose_named("propose*solve*pixel", "solve",
-                   [Cond("<s>", "hypothesized", "failed"), Cond("<s>", "pixel-open", "<p>", negated=True)]),
-
-    _apply_state("submit", ("done", "yes")),
-    # select·solve 는 apply 규칙 없음: select body 가 super 커서를 세우는 것(=arg 고르기, §1-3 탐색
-    # 자리)이 곧 적용이고, solve 는 의도적 미구현(=하강).
-]
 
 
 # ---------------------------------------------------------------------------
@@ -384,16 +261,6 @@ def setup_focus_agent(task, tid="0a", record=False):
     return ag
 
 
-OP_DOCS = {
-    "observe": "arg(대상) **없이** propose → ^cursor(=arg-선택 substate 의 select 가 세워줌)가 있을 때만 관측(property→^property)·^seen. 없으면 no-change → ONC impasse → arg-선택 substate",
-    "compare": "arg 없이 propose → ^cmp-active(select 가 세워줌) 있을 때만 그 비교 수행(원자연산 kg_compare). 없으면 impasse. PAIR=peers(불균형→goal), GRID=within×pair→cross(삼중쌍)→predict",
-    "select": "arg-선택 substate 안의 operator. observe/compare 가 arg 없이 걸린 impasse 를 푼다 — superstate 의 다음 대상을 preference(순서상 첫 미완료=a안)로 골라 super ^cursor/^cmp-active 세팅 → impasse 해소·pop. §1-3 탐색 자리",
-    "submit": "predict 가 output-link 에 얹은 답 제출 → 채점 → ^done",
-    "solve": "미구현 operator (apply·body 없음). goal 있고 이 레벨에서 답 못 냄 → 변화 없음 → operator no-change impasse → 한 계층 하강. (bootstrap: TASK 관측 후 PAIR 로)",
-    "coloring": "기본 DSL(contents 슬롯). color DIFF ∧ coord COMM xform 을 frozen coloring 으로 시뮬 grid 에 하나씩 칠함(object·pixel level). program 의 grid_contents 를 채운다",
-    "set_grid_size": "기본 DSL(grid_size 슬롯). hypothesize 의 ^size-hyp(표현식) 을 grid_size 슬롯으로 물질화. 가설 없으면 unknown(=현재 정보로 못 정함 → 하강). ^set-size 로 발화",
-    "set_grid_color": "기본 DSL(grid_color 슬롯). hypothesize 의 ^color-hyp(표현식) 을 grid_color 슬롯으로 물질화. 가설 없으면 unknown. ^set-color 로 발화",
-}
 
 
 # ---------------------------------------------------------------------------

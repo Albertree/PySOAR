@@ -1,0 +1,76 @@
+{
+  "operator": "submit",
+  "doc": "predict 가 output-link 에 얹은 답 제출 → 채점 → ^done",
+  "propose": [
+    {
+      "name": "propose*submit",
+      "order": 17,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "answer-ready",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "done",
+          "value": "<x>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "submit",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "node",
+          "value": "<f>",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*submit",
+      "order": 22,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "negated": false
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "submit",
+          "negated": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "done",
+          "value": "yes",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ]
+}

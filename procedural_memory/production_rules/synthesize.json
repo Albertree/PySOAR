@@ -1,0 +1,82 @@
+{
+  "operator": "synthesize",
+  "doc": "",
+  "propose": [
+    {
+      "name": "propose*synthesize",
+      "order": 7,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "type",
+          "value": "hypothesis-space",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "synthesize",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "synthesized",
+          "value": "<x>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "synthesize",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "node",
+          "value": "<f>",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*synthesize",
+      "order": 8,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "negated": false
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "synthesize",
+          "negated": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "synth-step",
+          "value": "yes",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ]
+}

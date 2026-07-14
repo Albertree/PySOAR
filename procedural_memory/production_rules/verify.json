@@ -1,0 +1,76 @@
+{
+  "operator": "verify",
+  "doc": "",
+  "propose": [
+    {
+      "name": "propose*verify",
+      "order": 15,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "colored-all",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "hypothesized",
+          "value": "<h>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "verify",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "node",
+          "value": "<f>",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*verify",
+      "order": 16,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "negated": false
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "verify",
+          "negated": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "verify-step",
+          "value": "yes",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ]
+}

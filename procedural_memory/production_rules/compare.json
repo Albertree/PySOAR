@@ -1,0 +1,88 @@
+{
+  "operator": "compare",
+  "doc": "arg 없이 propose → ^cmp-active(select 가 세워줌) 있을 때만 그 비교 수행(원자연산 kg_compare). 없으면 impasse. PAIR=peers(불균형→goal), GRID=within×pair→cross(삼중쌍)→predict",
+  "propose": [
+    {
+      "name": "propose*compare",
+      "order": 1,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "to-compare",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "compared",
+          "value": "<x>",
+          "negated": true
+        },
+        {
+          "id": "<s>",
+          "attr": "answer-ready",
+          "value": "<ar>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "compare",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*compare",
+      "order": 3,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "negated": false
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "compare",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "cmp-active",
+          "value": "<f>",
+          "negated": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "<f>",
+          "attr": "done",
+          "value": "yes",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<s>",
+          "attr": "cmp-active",
+          "value": "<f>",
+          "pref": "-",
+          "referent": null
+        }
+      ]
+    }
+  ]
+}

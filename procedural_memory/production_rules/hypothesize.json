@@ -1,0 +1,88 @@
+{
+  "operator": "hypothesize",
+  "doc": "",
+  "propose": [
+    {
+      "name": "propose*hypothesize",
+      "order": 5,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "to-hypothesize",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "compared",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "hyp-open",
+          "value": "<o>",
+          "negated": true
+        },
+        {
+          "id": "<s>",
+          "attr": "answer-ready",
+          "value": "<ar>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "hypothesize",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "node",
+          "value": "<f>",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*hypothesize",
+      "order": 6,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "negated": false
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "hypothesize",
+          "negated": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "hyp-open",
+          "value": "yes",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "operator": "observe",
+  "doc": "arg(대상) **없이** propose → ^cursor(=arg-선택 substate 의 select 가 세워줌)가 있을 때만 관측(property→^property)·^seen. 없으면 no-change → ONC impasse → arg-선택 substate",
+  "propose": [
+    {
+      "name": "propose*observe",
+      "order": 0,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "to-observe",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "observed",
+          "value": "<o>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "observe",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*observe",
+      "order": 2,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "negated": false
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "observe",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "cursor",
+          "value": "<f>",
+          "negated": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "<f>",
+          "attr": "seen",
+          "value": "yes",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<s>",
+          "attr": "cursor",
+          "value": "<f>",
+          "pref": "-",
+          "referent": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "operator": "select",
+  "doc": "arg-선택 substate 안의 operator. observe/compare 가 arg 없이 걸린 impasse 를 푼다 — superstate 의 다음 대상을 preference(순서상 첫 미완료=a안)로 골라 super ^cursor/^cmp-active 세팅 → impasse 해소·pop. §1-3 탐색 자리",
+  "propose": [
+    {
+      "name": "propose*select",
+      "order": 4,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "select-for",
+          "value": "<sf>",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "selected",
+          "value": "<x>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "select",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ],
+  "apply": []
+}

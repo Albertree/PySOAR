@@ -1,0 +1,201 @@
+{
+  "operator": "solve",
+  "doc": "미구현 operator (apply·body 없음). goal 있고 이 레벨에서 답 못 냄 → 변화 없음 → operator no-change impasse → 한 계층 하강. (bootstrap: TASK 관측 후 PAIR 로)",
+  "propose": [
+    {
+      "name": "propose*solve*bootstrap",
+      "order": 18,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "goal",
+          "value": "solve",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "observed",
+          "value": "yes",
+          "negated": false
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "solve",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "node",
+          "value": "<f>",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    },
+    {
+      "name": "propose*solve*fallback",
+      "order": 19,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "goal",
+          "value": "<g>",
+          "negated": false
+        },
+        {
+          "id": "<g>",
+          "attr": "produce",
+          "value": "<p>",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "compared",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "answer-ready",
+          "value": "<a>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "solve",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "node",
+          "value": "<f>",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    },
+    {
+      "name": "propose*solve*grid",
+      "order": 20,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "grid-descend",
+          "value": "<g>",
+          "negated": false
+        },
+        {
+          "id": "<g>",
+          "attr": "produce",
+          "value": "<p>",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "size-ready",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "color-ready",
+          "value": "yes",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "answer-ready",
+          "value": "<a>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "solve",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "node",
+          "value": "<f>",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    },
+    {
+      "name": "propose*solve*pixel",
+      "order": 21,
+      "conditions": [
+        {
+          "id": "<s>",
+          "attr": "hypothesized",
+          "value": "failed",
+          "negated": false
+        },
+        {
+          "id": "<s>",
+          "attr": "pixel-open",
+          "value": "<p>",
+          "negated": true
+        }
+      ],
+      "actions": [
+        {
+          "id": "<s>",
+          "attr": "operator",
+          "value": "<o>",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "name",
+          "value": "solve",
+          "pref": "+",
+          "referent": null
+        },
+        {
+          "id": "<o>",
+          "attr": "node",
+          "value": "<f>",
+          "pref": "+",
+          "referent": null
+        }
+      ]
+    }
+  ],
+  "apply": []
+}
