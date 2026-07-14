@@ -48,6 +48,8 @@ from pysoar import Agent, Cond, Action, Production          # noqa: E402
 from arc.expr_solver import build_arckg, _load_value, _tup   # noqa: E402 (reuse, read-only)
 from procedural_memory.operators import OPERATOR_BODIES  # 분리된 operator bodies
 from procedural_memory.loader import PRODUCTIONS, OP_DOCS  # JSON 실물 규칙
+from arbor.agent.focus import inject_focus, setup_focus_agent
+from arbor.env.survey import _load_made_and_real, _load_survey, SURVEY_AGI
 
 # --- P2c: 아래 지원계층 함수들은 arbor/ 로 분리됨 (re-export 허브) ---
 from arbor.perception.nav import (index_arckg, _cursor, _focus_group, _siblings, _receipt_leaves, _lca, _short, _edge_name, _load_props)
@@ -202,63 +204,8 @@ from arbor.perception.perception import (_obj_cc, objects_of, _fg_correspondence
 # ---------------------------------------------------------------------------
 # input + agent setup (mirrors expr_solver.setup_arc_agent shape so the tracer reuses it)
 # ---------------------------------------------------------------------------
-def inject_focus(ag):
-    """INPUT: separate PERCEPTION from the agent's parsed MODEL (option a).
-
-      input-link (percept):  I2 -^task-> <percept> -^raw-> {json}   [environment-owned, READ-ONLY]
-      state (ARCKG model):   S1 -^arckg-> <root> -^example-> P0 ..  [observe/compare fill this]
-      top goal:              S1 -^goal-> solve                      [drives solve; NO ^focus at top]
-      attention:             S2 -^focus-> P0 ...                    [^focus lives on substates, descends]
-
-    The environment delivers ONLY the raw, unparsed task onto ^io.input-link -- a
-    PERCEPT node (its own id) carrying identity (^type/^name) + the literal ^raw dict.
-    Perception is environment-owned and never mutated by the agent's operators.
-
-    The parsed ARCKG is the agent's OWN structure, anchored on the top STATE via
-    (S1 ^arckg <root>) -- NOT dangling off the input-link. observe/compare augment
-    <root> and its descendants (the model), so a substate whose ^focus points one
-    ARCKG level deeper is reading/extending the SUPERSTATE's shared, S1-anchored
-    model (the SOAR 'substate reads superstate' regime) -- never the raw percept.
-
-    <percept> and <root> are DISTINCT ids on purpose: if they were the same node,
-    observe augmenting the model would still be mutating the input-link's percept.
-    Justification for the two new symbols (per the no-free-symbols rule):
-      ^arckg  -- anchors the agent-built model on its state, so the parse is a
-                 deliberative structure, not part of environment perception.
-      percept -- keeps perception a separate, immutable node the operators only read."""
-    if ag.kg.get("arckg_root") is not None:
-        return
-    root = build_arckg(ag.task_id, ag.task)
-    ag.kg["arckg_root"] = root
-    ag.kg["idx"] = index_arckg(root)
-    rid = root.node_id
-    # (1) raw perception on the input-link -- a PERCEPT node distinct from the ARCKG
-    #     root, so augmenting the model never touches what the environment delivered.
-    pid = f"percept-{rid}"
-    ag.add_input_wme("I2", "task", pid)              # input-link -> percept node
-    ag.add_input_wme(pid, "type", "task")            # identity only
-    ag.add_input_wme(pid, "name", ag.task_id)
-    ag.add_input_wme(pid, "raw", json.dumps(ag.task))  # the literal task dict
-    # (2) the parsed ARCKG root on the STATE + the top GOAL + the attention ^focus on the
-    #     task. Perception-Deliberation-Action: observe (focus-gated) fires FIRST and
-    #     reveals the task's children (the pairs); ONLY THEN does solve fire (it is gated
-    #     on the focus being ^seen -- "look before you attempt", a universal ordering, NOT
-    #     a domain method). solve, being UNIMPLEMENTED, then yields an operator no-change
-    #     impasse and the substate descends one ARCKG level.
-    ag.wm.add("S1", "arckg", rid)                     # ARCKG root lives on the state
-    ag.wm.add("S1", "goal", "solve")                  # TOP GOAL: solve the task (bootstrap, under-specified)
-    ag.wm.add("S1", "level", "TASK")                  # ARCKG 계층명(대문자)
-    ag.wm.add("S1", "focus", rid)                     # 이 계층 노드 그룹 = TASK 하나
-    ag.wm.add("S1", "to-observe", "yes")              # 관측할 게 있음 → observe(arg 없이) 제안 → impasse → select
 
 
-def setup_focus_agent(task, tid="0a", record=False):
-    ag = Agent(PRODUCTIONS, operator_bodies=OPERATOR_BODIES, record=record, io=True)
-    ag.task = task
-    ag.task_id = tid
-    ag.kg = {"_focus": True, "relations": [], "roles": []}     # _focus: dashboard detail 라우팅
-    ag.input_functions.append(inject_focus)
-    return ag
 
 
 
@@ -403,66 +350,11 @@ def make_dashboard(tasks, dataset="focus (slice 1)"):
     return out
 
 
-def _load_made_and_real():
-    """대시보드에 띄울 태스크: 워크스루의 made000a/b + 실제 08ed6ac7 + easy000a."""
-    import glob
-    from arc.dataset import list_tasks, load_task
-    here = os.path.dirname(os.path.abspath(__file__))
-    tasks = []
-    for tid in ("made000a", "made000b"):
-        p = os.path.join(here, "data", "made", f"{tid}.json")
-        if os.path.exists(p):
-            tasks.append((tid, load_task(p)))
-    real = glob.glob(os.path.join(os.path.dirname(here), "data", "**", "08ed6ac7.json"), recursive=True)
-    if real:
-        tasks.append(("08ed6ac7", load_task(real[0])))
-    etid, epath = list_tasks("easy_a")[0]
-    tasks.append((etid, load_task(epath)))
-    return tasks
 
 
-def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, include_made=True):
-    """다양성 관찰용 묶음: easy 9 + made 2 + ARC-AGI 문제.
-    - agi_ids 지정 시: **그 id 들 정확히** 사용(area 필터 무시) — 서브셋 재생성용.
-    - 미지정 시: training 에서 **max(train grid area) ≤ area_cap** (≈≤14x14) 인 것 앞에서 n_agi 개.
-      WM 정렬 병목이 격자크기 비례라 시간/크기 예산 보호. 정렬 결정적 — 재현 가능.
-    목적은 풀이가 아니라 '현재 로직이 낯선 태스크에 어떻게 적용되나' 관찰(harness §2-4)."""
-    import glob
-    from arc.dataset import list_tasks, load_task
-    here = os.path.dirname(os.path.abspath(__file__))
-    tasks = []
-    if include_easy:
-        tasks += [(tid, load_task(p)) for tid, p in list_tasks("easy_a")]     # easy 9
-    if include_made:
-        for tid in ("made000a", "made000b"):                                 # made 2
-            p = os.path.join(here, "data", "made", f"{tid}.json")
-            if os.path.exists(p):
-                tasks.append((tid, load_task(p)))
-    agi_root = os.path.join(os.path.dirname(here), "data", "ARC_AGI")   # vendored (was ~/Desktop/ARC-solver)
-    if agi_ids:                                                              # 명시 id 셋
-        for tid in agi_ids:
-            hits = glob.glob(os.path.join(agi_root, "**", f"{tid}.json"), recursive=True)
-            if hits:
-                tasks.append((tid, load_task(hits[0])))
-        return tasks
-    picked = 0                                                              # 자동 선택
-    for p in sorted(glob.glob(os.path.join(agi_root, "training", "*.json"))):
-        if picked >= n_agi:
-            break
-        t = load_task(p)
-        try:
-            area = max(len(g["input"]) * len(g["input"][0]) for g in t["train"])
-        except Exception:                                                    # noqa: BLE001
-            continue
-        if area > area_cap:
-            continue
-        tasks.append((os.path.splitext(os.path.basename(p))[0], t))
-        picked += 1
-    return tasks
 
 
 # 고정 관찰 세트 (사용자 지정 2026-07-09): easy 9 + made 2 + 실제 ARC-AGI 4 = 15
-SURVEY_AGI = ["08ed6ac7", "0ca9ddb6", "009d5c81", "11852cab", "845d6e51", "868de0fa"]
 
 if __name__ == "__main__":
     # 사용자 지정(2026-07-14): dashboard 에는 **easy 문제만** — per-pair program 이 존재하는 모든
