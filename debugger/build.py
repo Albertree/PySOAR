@@ -150,13 +150,13 @@ def make_dashboard(tasks, dataset="focus (slice 1)"):
 
 
 if __name__ == "__main__":
-    # 사용자 지정(2026-07-14): dashboard 에는 **easy 문제만** — per-pair program 이 존재하는 모든
-    # PAIR 에 물질화되는지(N example pair → N program) easy 이동 태스크로 확인한다.
-    from arbor.env.dataset import list_tasks, load_task
-    # easy000i 는 아직 미해결(다른 이동 패턴) → 대시보드에서 제외(사용자 2026-07-14, 나중에)
-    tasks = [(tid, load_task(p)) for tid, p in list_tasks("easy_a") if tid != "easy000i"]
-    print(f"easy only: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=1000")
-    out = make_dashboard(tasks, dataset="easy_a (single-pixel) — per-pair program ×N")
+    # 사용자 지정(2026-07-14): dashboard = **17-survey** (easy 9 + made 2 + ARC-AGI 6).
+    # 옛 seokki 대시보드(786369f→081463c)의 다양성 관찰 묶음을 복원 — 낯선 태스크에 현재
+    # 로직이 어떻게 적용되나 관찰(harness §2-4). easy000i·미해결·크래시도 하나의 데이터로 남긴다
+    # (_safe_dash_data 가 태스크당 타임아웃+예외 격리). easy 는 survey 안에 그대로 포함.
+    tasks = _load_survey(agi_ids=SURVEY_AGI)                 # 9 + 2 + 6 = 17
+    print(f"survey: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=1000")
+    out = make_dashboard(tasks, dataset="survey 17 = easy 9 + made 2 + ARC-AGI 6")
     sz = os.path.getsize(out) / 1e6
     print(f"wrote {out}  ({sz:.1f} MB)")
     # companion 페이지: per-pair program → anti-unification 3분할 뷰 (nav 링크 대상)
