@@ -42,7 +42,8 @@ def _op_hypothesize(ag):
         # object 로 못 맞춘 셀(그 sim 이 아직 G1 과 다른 셀)만 pixel 로 재채색해 **object 가설에 덧붙인다**.
         # object 로 완결된 문제(845·868·08ed)는 애초에 PIXEL 로 안 내려온다(object verify 통과). object 가
         # 일부만 처리한 문제(예: 009d5c81)는 그 sim 에서 이어받아 잔여만 pixel 이 마감한다.
-        sup = ag.stack[-2].id if len(ag.stack) >= 2 else None
+        # 순회 pair(k>0)는 자기 G0 에서 새로 시작(상위 object sim 이어받지 않음 — 그건 pair0 descent 용).
+        sup = ag.stack[-2].id if (k == 0 and len(ag.stack) >= 2) else None
         base_sim = next((v for (i, a, v) in ag.wm if i == sup and a == "sim"), None) if sup else None
         base_prog = next((v for (i, a, v) in ag.wm if i == sup and a == "program-code"), None) if sup else None
         sim0 = [list(r) for r in base_sim] if base_sim else [list(r) for r in g0grid]  # object 재채색 후 상태
