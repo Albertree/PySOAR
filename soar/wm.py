@@ -19,6 +19,11 @@ from typing import Any, Iterable, Iterator
 Triple = tuple[str, str, Any]
 
 
+def _wm_key(w):
+    """결정적 반복용 정렬 키 (id, attr, value 를 문자열로)."""
+    return (str(w[0]), str(w[1]), str(w[2]))
+
+
 class WorkingMemory:
     def __init__(self) -> None:
         self._wmes: set[Triple] = set()
@@ -56,6 +61,8 @@ class WorkingMemory:
         return (identifier, attr, value) in self._wmes
 
     def matching(self, identifier=None, attr=None, value=None) -> Iterator[Triple]:
+        # 매처(production.py)가 극빈번 호출 → 정렬 없이 빠르게. 매치 '집합'은 순서와 무관하므로
+        # 정렬해도 결정에 영향 없음(비용만↑). '첫 매치' 픽의 결정성은 __iter__(정렬)에서 보장.
         for (i, a, v) in self._wmes:
             if identifier is not None and i != identifier:
                 continue
@@ -66,10 +73,13 @@ class WorkingMemory:
             yield (i, a, v)
 
     def all(self) -> list[Triple]:
-        return sorted(self._wmes, key=lambda w: (str(w[0]), str(w[1]), str(w[2])))
+        return sorted(self._wmes, key=_wm_key)
 
     def __iter__(self) -> Iterator[Triple]:
-        return iter(self._wmes)
+        # 결정적 반복: WM 은 set 이라 반복순서가 PYTHONHASHSEED 에 따라 달라진다. operator body 들이
+        # next((v for ... in wm if ...)) 로 '첫 매치' 를 고르므로(=이 __iter__) 순서가 결과를 바꾼다
+        # → 항상 정렬 반복해 재현성 확보 (all() 과 같은 키).
+        return iter(sorted(self._wmes, key=_wm_key))
 
     def __len__(self) -> int:
         return len(self._wmes)
