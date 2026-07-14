@@ -2,3 +2,9 @@ __pycache__/
 *.py[cod]
 .DS_Store
 .ipynb_checkpoints/
+
+# generated report/dashboard artifacts (regenerable — kept on disk, not tracked)
+arc/*.html
+arc/compare_viz/*.html
+arc/*.csv
+debugger/traces/
