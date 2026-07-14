@@ -3,7 +3,7 @@ production -- LHS conditions, RHS actions, and a simple matcher.
 
 Oracle reference: SoarGroup/Soar `parsing/parser.cpp`, `decision_process/rete.cpp`.
 PySOAR does NOT replicate the Rete network (a caching optimization, not a
-semantics -- see AUDIT.md). At ARC scale a naive matcher producing the same set
+semantics -- see docs/AUDIT.md). At ARC scale a naive matcher producing the same set
 of complete variable bindings is behaviourally identical to quiescence.
 
 Supported in milestone 2:

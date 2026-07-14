@@ -1,12 +1,19 @@
-# PySOAR
+# ARBOR
 
-SOAR 결정 코어의 **충실도 우선(fidelity-first) 파이썬 재구현**.
+**ARBOR** = SOAR 인지 아키텍처 위에서 **ARCKG**(TASK→PAIR→GRID→OBJECT→PIXEL 5계층
+지식그래프)로 ARC 문제를 푸는 symbolic 추론 에이전트. 이 레포는 **self-contained** —
+SOAR 결정 커널(`soar/`, 옛 이름 *PySOAR*), 지각/추론(`arbor/`), 절차·의미 LTM
+(`procedural_memory/`·`semantic_memory/`), 디버거(`debugger/`), 데이터(`data/`)를 한데 둔다.
+
+진입점: `python -m debugger.build` → `arc/focus_dashboard.html` (풀이 과정 시각화).
+행동보존 검증: `PYTHONPATH=. python3 tests/verify_refactor.py`.
+
+## SOAR 커널 (`soar/`)
+
+SOAR 결정 코어의 **충실도 우선(fidelity-first) 파이썬 재구현** (옛 이름 PySOAR).
 C++ 커널(324k LOC, 절반은 안 쓰는 SVS) 1:1 트랜스파일이 아니라, ARBOR가 의존하는
 **결정 사이클 의미론**만 정확히 옮기고, `~/Desktop/Soar`의 C++ 빌드를
 **차등 검증 오라클**로 둔다.
-
-> 이전 구현(`~/Desktop/ARC-solver`, `~/Desktop/SOAR-ARC-test`)은 그대로 보존.
-> PySOAR는 그 둘이 위에 올라탈 검증된 토대를 새로 짠다.
 
 ## 완료된 마일스톤
 
@@ -25,7 +32,7 @@ substate 자동 생성**(`^impasse ^choices ^attribute ^item ^quiescence`) + ONC
 state 조건을 역추적(backtrace)해 변수화 → 새 규칙(청크) 합성. 다음 번 같은 상황은
 impasse 없이 청크가 직접 해결. anti-unification이 들어갈 자리.
 
-→ 감사 결과와 근거는 [`AUDIT.md`](AUDIT.md).
+→ 감사 결과와 근거는 [`docs/AUDIT.md`](docs/AUDIT.md).
 
 ```
 pysoar/
@@ -183,4 +190,4 @@ preference/impasse는 17/17 일치로 확인됨.
 
 다음 마일스톤: **anti-unification 통합** — `chunk.py`의 1:1 정확 변수화를 여러 result
 인스턴스의 *최소 일반 일반화*로 교체 (ARBOR 방향, 오라클 없는 설계 영역).
-[`AUDIT.md`](AUDIT.md) 참고.
+[`docs/AUDIT.md`](docs/AUDIT.md) 참고.

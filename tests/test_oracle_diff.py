@@ -5,7 +5,7 @@ For each preference scenario we assert that PySOAR's IMPASSE TYPE matches what
 SoarGroup/Soar actually decides. Winner identity is also checked except for
 fully-indifferent sets, where Soar's choice depends on internal candidate
 ordering / its (default stochastic) exploration policy -- a documented
-DESIGN-FREE point, see AUDIT.md.
+DESIGN-FREE point, see docs/AUDIT.md.
 
 Skips automatically if ~/Desktop/Soar/out/soar is not built.
 

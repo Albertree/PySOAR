@@ -1,7 +1,8 @@
-# PySOAR — Claude 세션 지침
+# ARBOR — Claude 세션 지침
 
 ## ⚠️ 필수: 매 행동 전 하네스를 읽는다
-`arc/` 의 ARBOR 솔버(focus_solver·thinking_ops·solve_ops·relation_solve·fine_trace·dashboard 등)를
+**ARBOR 솔버**(operator body `procedural_memory/operators/` · 규칙 `procedural_memory/production_rules/` ·
+지각/추론 `arbor/` · 트레이서·대시보드 `debugger/`·`arc/fine_trace.py` · 커널 `soar/`)를
 설계·작성·수정·리팩터하거나 그 트레이스를 해석하기 **직전마다**, 반드시 [ARBOR_HARNESS.md](ARBOR_HARNESS.md)
 를 다시 읽고 그 §7 체크리스트로 스스로를 점검한다.
 
@@ -16,8 +17,11 @@
   anti-unification)** 을 찾는다. relation 은 property COMM/DIFF 일 수도, *sequence of transformation* 일 수도.
 
 ## 프로젝트 맥락
-- PySOAR = C++ Soar 9.6.5 를 차등 오라클로 둔 SOAR 결정 사이클 충실 재구현(`pysoar/`) + 그 위의 ARBOR ARC
-  프로토타입(`arc/`). ARCKG 노드 클래스·`compare()` 는 `~/Desktop/ARC-solver/ARCKG/` 를 직접 재사용한다.
+- ARBOR = ARCKG(TASK→PAIR→GRID→OBJECT→PIXEL 5계층 지식그래프)로 ARC 를 푸는 symbolic 추론 에이전트.
+  SOAR 결정 커널은 `soar/`(옛 이름 *PySOAR*, C++ Soar 9.6.5 를 차등 오라클로 둔 충실 재구현).
+- **self-contained**: ARCKG 노드·`compare()`(`arbor/perception/arckg/`), 기초 DSL(`procedural_memory/dsl/`),
+  데이터(`data/`)를 레포에 vendor — 외부 `~/Desktop/ARC-solver` 의존 0. 진입점 `python -m debugger.build`.
+  리팩터 진행상태·구조는 memory `[[seokki-refactor]]` + `docs/REFACTOR_PLAN.md`.
 - 현행 작업 = hypothesize monolith 해체 → within-pair compare → 2차/n차 relation → search → G0-resolve →
   compose 재건. 상세 규약: `~/Desktop/wiki/wiki/{pysoar,arbor-operators,arckg-node-edge}.md`, 7원리(P1–P7)는
   `arbor-execution-trace.md`.
