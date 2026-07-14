@@ -18,8 +18,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import Action, Agent, Cond, Production  # noqa: E402
-from pysoar.production import is_var  # noqa: E402
+from soar import Action, Agent, Cond, Production  # noqa: E402
+from soar.production import is_var  # noqa: E402
 from oracle.soar_oracle import learn_chunk_signature, soar_available  # noqa: E402
 
 SOAR_AGENT = r"""

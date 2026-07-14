@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import (  # noqa: E402
+from soar import (  # noqa: E402
     Action, Cond, Elaborator, Production, Support, WorkingMemory,
     calculate_o_support, elaborate_to_quiescence, match,
 )

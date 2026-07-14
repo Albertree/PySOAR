@@ -30,9 +30,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import Agent  # noqa: E402
-from pysoar.decide import run_preference_semantics  # noqa: E402
-from pysoar.preference import SYMBOL_TO_TYPE, PreferenceType  # noqa: E402
+from soar import Agent  # noqa: E402
+from soar.decide import run_preference_semantics  # noqa: E402
+from soar.preference import SYMBOL_TO_TYPE, PreferenceType  # noqa: E402
 from arc.expr_solver import PRODUCTIONS, OPERATOR_BODIES  # noqa: E402
 from arc.dashboard import _kg_detail  # noqa: E402
 
@@ -152,8 +152,8 @@ class _Tracer:
         broke -> pending retract), and the full desired map (for the results each
         firing produces). gensym is the elaborator's own allocator, so the ids it
         mints here are the SAME ones settle will use (no divergence)."""
-        from pysoar.production import match
-        from pysoar.elaborate import instantiate
+        from soar.production import match
+        from soar.elaborate import instantiate
         el, wm = self.ag.elaborator, self.ag.wm
         desired = {}
         for prod in el.productions:
@@ -307,7 +307,7 @@ class _Tracer:
             imp, cands = run_preference_semantics(slot)
             self.emit("decide", "decide",
                       f"preference resolution → impasse={imp.name}, candidates={list(cands)}")
-            from pysoar.decide import ImpasseType
+            from soar.decide import ImpasseType
             # ── A안: 2-사이클 충실 ONC 감지 ────────────────────────────────────
             # 지난 사이클에 이 operator 를 적용했으나 무변화였다면(pending) → 이번 사이클 DECIDE 가
             # operator-no-change impasse 를 감지한다(원본 SOAR: no-change 는 한 사이클 뒤에 드러남).
@@ -510,7 +510,7 @@ class _Tracer:
         """arg-선택 substate 를 **생성만** 한다 (impasse-detect 사이클의 DECIDE 에서 호출).
         apply-fail 방출은 앞선 apply-fail 사이클이, 빈 apply·output 은 호출부가 담당한다(A안).
         select 가 super 의 ^cursor/^cmp-active 를 정하면 impasse 가 풀려 fold 로 제거된다."""
-        from pysoar.decide import ImpasseType
+        from soar.decide import ImpasseType
         # super 의 operator 선택 해제 — 안 지우면 select 이 super 커서를 세우는 순간 apply*{opname}
         # 규칙이 elaboration 에서 발화해 body 없이 flag 만 세운다. 지우면 fold 에서 새로 선택·apply.
         for (i, a, v) in list(self.ag.wm):

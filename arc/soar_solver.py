@@ -31,7 +31,7 @@ _ARC_SOLVER = os.path.expanduser("~/Desktop/ARC-solver")
 if _ARC_SOLVER not in sys.path:
     sys.path.insert(0, _ARC_SOLVER)
 
-from pysoar import Agent, Cond, Action, Production  # noqa: E402
+from soar import Agent, Cond, Action, Production  # noqa: E402
 from ARCKG.grid import Grid                          # noqa: E402  (real ARCKG)
 from ARCKG.comparison import compare as kg_compare   # noqa: E402
 

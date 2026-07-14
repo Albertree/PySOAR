@@ -27,7 +27,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import Agent, Cond, Action, Production  # noqa: E402
+from soar import Agent, Cond, Action, Production  # noqa: E402
 from arc.select_solver import fg_objects  # noqa: E402
 from arbor.perception.arckg.grid import Grid  # noqa: E402
 from arc.dsl import (context, resolve_arguments, build_answer, grid_bg,  # noqa: E402

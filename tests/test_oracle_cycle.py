@@ -16,7 +16,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import Action, Agent, Cond, Production  # noqa: E402
+from soar import Action, Agent, Cond, Production  # noqa: E402
 from oracle.soar_oracle import run_agent_trace, soar_available  # noqa: E402
 
 # normalize a PySOAR agent decision label -> the oracle event tuple

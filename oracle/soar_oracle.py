@@ -25,9 +25,9 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar.preference import PreferenceType as PT  # noqa: E402
-from pysoar.preference import Slot  # noqa: E402
-from pysoar.decide import ImpasseType  # noqa: E402
+from soar.preference import PreferenceType as PT  # noqa: E402
+from soar.preference import Slot  # noqa: E402
+from soar.decide import ImpasseType  # noqa: E402
 
 DEFAULT_SOAR = os.path.expanduser("~/Desktop/Soar/out/soar")
 
@@ -286,7 +286,7 @@ if __name__ == "__main__":
         "conflict": Slot().acceptable("O1", "O2").better("O1", "O2").better("O2", "O1"),
         "indifferent": Slot().acceptable("O1", "O2").indifferent("O1", "O2"),
     }
-    from pysoar.decide import decide_context_slot
+    from soar.decide import decide_context_slot
     print(f"{'case':14} {'pysoar':>22} {'oracle':>22}  match")
     for name, slot in examples.items():
         pim, pca = decide_context_slot(slot)

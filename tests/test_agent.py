@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import Action, Agent, Cond, ImpasseType, Production  # noqa: E402
+from soar import Action, Agent, Cond, ImpasseType, Production  # noqa: E402
 
 
 def tie_resolve_productions():

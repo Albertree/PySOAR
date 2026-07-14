@@ -18,8 +18,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import Agent, Cond, Action, Production  # noqa: E402
-from pysoar.decide import run_preference_semantics  # noqa: E402
+from soar import Agent, Cond, Action, Production  # noqa: E402
+from soar.decide import run_preference_semantics  # noqa: E402
 from arc.grid import dims, foreground_pixel, with_pixel  # noqa: E402
 from arc.solve import candidate_hypotheses, is_consistent, complexity  # noqa: E402
 

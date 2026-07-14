@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import Agent, Cond, Action, Production  # noqa: E402
+from soar import Agent, Cond, Action, Production  # noqa: E402
 from arbor.perception.arckg.grid import Grid         # noqa: E402  (vendored)
 
 

@@ -26,7 +26,7 @@ from typing import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pysoar import Action, Agent, Cond, Production  # noqa: E402
+from soar import Action, Agent, Cond, Production  # noqa: E402
 from arc.grid import dims, foreground_pixel, with_pixel  # noqa: E402
 
 # A hypothesis predicts (out_r, out_c, out_color) from (in_r,in_c,in_color,H,W).
