@@ -423,26 +423,6 @@ class _Tracer:
             hypname = f"{hyp.get('position', '')} | {hyp.get('color', '')}" if hyp else "—"
         n = len(self.attempts) + 1
         self.attempts.append({"answer": grid, "correct": info["correct"], "hyp": hypname})
-        # ── anti-unification: version space 답들을 채점부에서 순회(3회) ──
-        if S.get("mode") == "antiunify":
-            answers, hyps, idx = S.get("answers", []), S.get("hyps", []), 0
-            verdict = "정답 ✓" if info["correct"] else "오답 ✗"
-            self.emit("output", "feedback", f"제출 #{n}/{self.env._max}: {verdict}"
-                      + ("" if info["correct"] else " → 다음 후보로 재시도"),
-                      highlight=[f"attempt {n}: {'correct' if info['correct'] else 'wrong'}"])
-            while (not info["correct"]) and info["can_retry"] and (idx + 1) < len(answers):
-                idx += 1
-                grid = [list(r) for r in answers[idx]]
-                _r, _c, _d, info = self.env.step(grid)
-                n = len(self.attempts) + 1
-                lbl = hyps[idx]["label"] if idx < len(hyps) else f"solution#{idx + 1}"
-                self.attempts.append({"answer": grid, "correct": info["correct"],
-                                      "hyp": f"solution#{idx + 1} | {lbl}"})
-                verdict = "정답 ✓" if info["correct"] else "오답 ✗"
-                self.emit("output", "feedback", f"제출 #{n}/{self.env._max}: {verdict}"
-                          + ("" if info["correct"] else " → 다음 후보로 재시도"),
-                          highlight=[f"attempt {n}: {'correct' if info['correct'] else 'wrong'}"])
-            return False                                       # 종료(모든 시도 채점 완료)
         has_next = bool(S.get("hyps")) and (S.get("idx", 0) + 1) < len(S["hyps"])
         retry = (not info["correct"]) and info["can_retry"] and has_next
         verdict = "정답 ✓" if info["correct"] else "오답 ✗"
@@ -459,15 +439,24 @@ class _Tracer:
     def _reject_and_retry(self, S):
         """현재 가설을 reject: 다음 후보(idx+1)로 넘기고, 풀이 substate 의 결과
         플래그(consistent/verified/answer-ready/done/predicted/hyps-exhausted)와
-        output-link 답을 지워 predict→evaluate→...→submit 이 다음 후보로 재발화."""
+        output-link 답을 지워 compose→submit(또는 predict→…→submit)이 다음 후보로 재발화."""
         S["idx"] = S.get("idx", 0) + 1
         S["verified"] = None
+
+        def _drop(i, a, v):
+            self.ag.wm.remove(i, a, v)
+            # o-support(apply 규칙이 assert 한 ^done 등)는 persistent 집합에도 있어 WM 에서만
+            # 지우면 다음 settle 에 재확립된다 → elaborator.o_support_wmes 에서도 제거(명시 reject 상당).
+            elab = getattr(self.ag, "elaborator", None)
+            if elab is not None:
+                elab.o_support_wmes.discard((i, a, v))
+
         for attr in ("consistent", "verified", "answer-ready", "done",
                      "predicted", "hyps-exhausted"):
             for (i, a, v) in list(self.ag.wm.matching(attr=attr)):
-                self.ag.wm.remove(i, a, v)
+                _drop(i, a, v)
         for (i, a, v) in list(self.ag.wm.matching(identifier="I3", attr="answer")):
-            self.ag.wm.remove(i, a, v)
+            _drop(i, a, v)
         self.ag.kg["answer"] = None
         self.ag._clear_operator(self.ag.stack[-1])            # 현재 선택 해제 → 재결정
 

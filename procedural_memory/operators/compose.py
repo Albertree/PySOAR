@@ -20,11 +20,13 @@ def _op_compose(ag):
     if not cands:
         ag.wm.add(sid, "compose-failed", "yes")
         return
-    # ≤3 후보 답을 **미리 실행**(3-attempt). 첫 답을 제출; 오답이면 채점부가 순회(내부).
-    test_in = ag.task["test"][0]["input"]
-    answers = [execute_solution(sol["skeleton"], sol["slots"], ch, test_in) for _, ch in cands]
-    grid = answers[0]
-    label = cands[0][0]
+    S = ag.kg.setdefault("solve", {})
+    idx = S.get("idx", 0)                                 # retry 시 _reject_and_retry 가 idx+1
+    if idx >= len(cands):
+        ag.wm.add(sid, "hyps-exhausted", "yes")
+        return
+    label, choice = cands[idx]
+    grid = execute_solution(sol["skeleton"], sol["slots"], choice, ag.task["test"][0]["input"])
     ag.kg["answer"] = grid
     ag.add_output_wme("answer", tuple(tuple(r) for r in grid))   # output-link 방출
     ag.wm.add(sid, "answer-ready", "yes")                        # → propose*submit
@@ -36,11 +38,9 @@ def _op_compose(ag):
         if ag.wm.contains(ppid, "program", "{}"):
             ag.wm.remove(ppid, "program", "{}")
         ag.wm.add(ppid, "program", render_skeleton(sol["skeleton"], sol["slots"]))
-    # 3-attempt: 미리 계산한 답들을 채점부가 순회 (antiunify 모드)
-    S = ag.kg.setdefault("solve", {})
+    # 3-attempt: version space 를 retry 후보로 (오답 시 _reject_and_retry 가 idx+1 → compose 재발화)
     S["mode"] = "antiunify"
-    S["answers"] = answers
     S["hyps"] = [{"label": l} for l, _ in cands]
-    S["idx"] = 0
-    S["verified"] = {"position": "solution#1", "color": label}
+    S["idx"] = idx
+    S["verified"] = {"position": f"solution#{idx + 1}", "color": label}
     ag.kg["compose"] = {"answer": grid, "label": label}
