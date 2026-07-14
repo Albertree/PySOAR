@@ -1,0 +1,270 @@
+{
+  "note": "DSL 선언적 명세(semantic 라이브러리). body=procedural 은 procedural_memory/dsl/ 에 있다. transformation 은 동결 2개(make_grid·coloring), 나머지는 조합 재료.",
+  "counts": {
+    "property": 16,
+    "relation": 1,
+    "selection": 2,
+    "transformation": 2,
+    "util": 5
+  },
+  "dsl_specs": {
+    "property": {
+      "area_of": {
+        "name": "area_of",
+        "kind": "property",
+        "in": [
+          "object"
+        ],
+        "out": "area",
+        "effect": null
+      },
+      "color": {
+        "name": "color",
+        "kind": "property",
+        "in": [
+          "grid"
+        ],
+        "out": "color-set",
+        "effect": null
+      },
+      "color_of": {
+        "name": "color_of",
+        "kind": "property",
+        "in": [
+          "object"
+        ],
+        "out": "color-set",
+        "effect": null
+      },
+      "contents": {
+        "name": "contents",
+        "kind": "property",
+        "in": [
+          "grid"
+        ],
+        "out": "contents",
+        "effect": null
+      },
+      "coordinate_of": {
+        "name": "coordinate_of",
+        "kind": "property",
+        "in": [
+          "object"
+        ],
+        "out": "coordinate",
+        "effect": null
+      },
+      "grid_count": {
+        "name": "grid_count",
+        "kind": "property",
+        "in": [
+          "pair"
+        ],
+        "out": "int",
+        "effect": null
+      },
+      "method_of": {
+        "name": "method_of",
+        "kind": "property",
+        "in": [
+          "object"
+        ],
+        "out": "method",
+        "effect": null
+      },
+      "pair_count": {
+        "name": "pair_count",
+        "kind": "property",
+        "in": [
+          "task"
+        ],
+        "out": "int",
+        "effect": null
+      },
+      "pixel_color": {
+        "name": "pixel_color",
+        "kind": "property",
+        "in": [
+          "pixel"
+        ],
+        "out": "color",
+        "effect": null
+      },
+      "pixel_coordinate": {
+        "name": "pixel_coordinate",
+        "kind": "property",
+        "in": [
+          "pixel"
+        ],
+        "out": "coordinate",
+        "effect": null
+      },
+      "position_of": {
+        "name": "position_of",
+        "kind": "property",
+        "in": [
+          "object"
+        ],
+        "out": "position",
+        "effect": null
+      },
+      "roles": {
+        "name": "roles",
+        "kind": "property",
+        "in": [
+          "pair"
+        ],
+        "out": "role-set",
+        "effect": null
+      },
+      "shape_of": {
+        "name": "shape_of",
+        "kind": "property",
+        "in": [
+          "object"
+        ],
+        "out": "shape",
+        "effect": null
+      },
+      "size": {
+        "name": "size",
+        "kind": "property",
+        "in": [
+          "grid"
+        ],
+        "out": "size",
+        "effect": null
+      },
+      "size_of": {
+        "name": "size_of",
+        "kind": "property",
+        "in": [
+          "object"
+        ],
+        "out": "size",
+        "effect": null
+      },
+      "symmetry_of": {
+        "name": "symmetry_of",
+        "kind": "property",
+        "in": [
+          "object"
+        ],
+        "out": "symmetry",
+        "effect": null
+      }
+    },
+    "transformation": {
+      "coloring": {
+        "name": "coloring",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "position",
+          "color"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "recolor",
+          "kind": "grid"
+        }
+      },
+      "make_grid": {
+        "name": "make_grid",
+        "kind": "transformation",
+        "in": [
+          "size",
+          "color"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "create",
+          "kind": "grid"
+        }
+      }
+    },
+    "relation": {
+      "compare": {
+        "name": "compare",
+        "kind": "relation",
+        "in": [
+          "scope_a",
+          "scope_b"
+        ],
+        "out": "receipts",
+        "effect": null
+      }
+    },
+    "selection": {
+      "elements_at": {
+        "name": "elements_at",
+        "kind": "selection",
+        "in": [
+          "anchor",
+          "level"
+        ],
+        "out": "list[node]",
+        "effect": null
+      },
+      "select": {
+        "name": "select",
+        "kind": "selection",
+        "in": [
+          "anchor",
+          "level",
+          "pred"
+        ],
+        "out": "scope",
+        "effect": null
+      }
+    },
+    "util": {
+      "filter_": {
+        "name": "filter_",
+        "kind": "util",
+        "in": [
+          "set",
+          "pred"
+        ],
+        "out": "set",
+        "effect": null
+      },
+      "grids_of": {
+        "name": "grids_of",
+        "kind": "util",
+        "in": [
+          "pair"
+        ],
+        "out": "list[grid]",
+        "effect": null
+      },
+      "objects_of": {
+        "name": "objects_of",
+        "kind": "util",
+        "in": [
+          "grid"
+        ],
+        "out": "list[object]",
+        "effect": null
+      },
+      "pairs_of": {
+        "name": "pairs_of",
+        "kind": "util",
+        "in": [
+          "task"
+        ],
+        "out": "list[pair]",
+        "effect": null
+      },
+      "role_of": {
+        "name": "role_of",
+        "kind": "util",
+        "in": [
+          "grid"
+        ],
+        "out": "role",
+        "effect": null
+      }
+    }
+  }
+}
