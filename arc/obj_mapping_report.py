@@ -18,7 +18,7 @@ import os
 
 from arc.make_made_tasks import write_all
 from arc.expr_solver import build_arckg
-from ARCKG.comparison import compare as kg_compare
+from arbor.perception.arckg.comparison import compare as kg_compare
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "obj_mapping_report.html")

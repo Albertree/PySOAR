@@ -28,8 +28,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pysoar import Agent, Cond, Action, Production  # noqa: E402
-from arc.select_solver import fg_objects  # noqa: E402  (also puts ARCKG on path)
-from ARCKG.grid import Grid  # noqa: E402
+from arc.select_solver import fg_objects  # noqa: E402
+from arbor.perception.arckg.grid import Grid  # noqa: E402
 from arc.dsl import (context, resolve_arguments, build_answer, grid_bg,  # noqa: E402
                      ranked_hypotheses, build_from_hypothesis)
 
@@ -111,8 +111,8 @@ def build_arckg(tid, task):
     """Build the ARCKG Python hierarchy with the real node-ID convention:
     TASK = T{tid}; example pairs T{tid}.P0,P1,... ; TEST pairs T{tid}.Pa,Pb,... ;
     grids .G0(input)/.G1(output) ; objects .O{i}."""
-    from ARCKG.pair import Pair
-    from ARCKG.task import Task
+    from arbor.perception.arckg.pair import Pair
+    from arbor.perception.arckg.task import Task
     T = f"T{tid}"
     ex, test = [], []
     for i, p in enumerate(task["train"]):

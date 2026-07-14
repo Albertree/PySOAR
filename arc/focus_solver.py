@@ -217,7 +217,7 @@ def _compare(a, b):
       · 노드 × 노드          → property 비교(1차, ARCKG kg_compare: id·type·score·category + comp1/comp2 값).
       · 관계결과 × 관계결과    → agreement 비교(2차+, _compare2: 통일 nested·score·잎 comp1/comp2=1차 verdict).
     관계결과 = {"result": …} 를 가진 dict. 관계의 관계…(n차)도 이 분기로 재귀 처리된다."""
-    from ARCKG.comparison import compare as _kg
+    from arbor.perception.arckg.comparison import compare as _kg   # vendored
     if isinstance(a, dict) and "result" in a and isinstance(b, dict) and "result" in b:
         return _compare2(a, b)
     return _kg(a, b)
@@ -1030,11 +1030,7 @@ def _op_coloring(ag):
     g1color 로 시뮬 grid 에 칠한다(procedural_memory.coloring, frozen). '무엇을/언제'는 **규칙**
     (propose*coloring: color DIFF ∧ coord COMM 인 xform 이 있을 때)이 정한다. 하나 칠하고 applied
     표시 → 남은 게 없으면 colored-all(→ verify)."""
-    import sys
-    _arc = os.path.expanduser("~/Desktop/ARC-solver")
-    if _arc not in sys.path:
-        sys.path.insert(0, _arc)
-    from procedural_memory.DSL.transformation import coloring
+    from procedural_memory.dsl.transformation import coloring   # vendored
     sid = ag.stack[-1].id
     pend = _recolor_pending(ag, sid)
     if not pend:

@@ -24,12 +24,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_ARC = os.path.expanduser("~/Desktop/ARC-solver")
-if _ARC not in sys.path:
-    sys.path.insert(0, _ARC)
 
 from pysoar import Agent, Cond, Action, Production  # noqa: E402
-from ARCKG.grid import Grid                          # noqa: E402
+from arbor.perception.arckg.grid import Grid         # noqa: E402  (vendored)
 
 
 # -- ARCKG object access -----------------------------------------------------

@@ -82,7 +82,7 @@ def _task_section(tid, task):
                 f"<div class=gcol><span class=glbl>G0</span>{_grid(g0raw)}</div>"
                 f"<div class=gcol><span class=glbl>G1</span>{_grid(g1raw)}</div></div>{note}</section>")
     # 같은 크기 — ARCKG pixels 로 같은좌표 비교
-    from ARCKG.comparison import compare as kg_compare
+    from arbor.perception.arckg.comparison import compare as kg_compare
     root = build_arckg(tid, task)
     idx = index_arckg(root)
     g0id, g1id = f"{root.node_id}.P0.G0", f"{root.node_id}.P0.G1"

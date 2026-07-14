@@ -20,11 +20,7 @@ import os
 import sys
 from collections import Counter
 
-_ARC = os.path.expanduser("~/Desktop/ARC-solver")
-if _ARC not in sys.path:
-    sys.path.insert(0, _ARC)
-
-from procedural_memory.DSL.transformation import make_grid, coloring  # noqa: E402  frozen 2
+from procedural_memory.dsl.transformation import make_grid, coloring  # frozen 2 (vendored)
 
 
 # -- context: the input-side facts an expression may reference -----------------
