@@ -187,8 +187,8 @@ def _obj_atoms(cells, grid):
     rs = [r for r, _ in cells]; cs = [c for _, c in cells]
     r0, c0, r1, c1 = min(rs), min(cs), max(rs), max(cs)
     ar, ac = cells[0]
-    d = {"H": len(grid), "W": len(grid[0]), "r0": r0, "c0": c0,
-         "h": r1 - r0 + 1, "w": c1 - c0 + 1, "ar": ar, "ac": ac}
+    d = {"H": len(grid), "W": len(grid[0]), "r0": r0, "c0": c0, "r1": r1, "c1": c1,
+         "h": r1 - r0 + 1, "w": c1 - c0 + 1, "ar": ar, "ac": ac}   # r1,c1=bbox 우하단 모서리
     d.update({str(k): k for k in range(6)})
     return d
 
@@ -264,8 +264,8 @@ def _coord_index_fn(sfn, rf, cf):
     return fn
 
 
-_ATOM_RE = re.compile(r"r0|c0|ar|ac|H|W|h|w")
-_POS = ({"r0", "ar"}, {"c0", "ac"})   # 축별 객체-위치 원자(행/열)
+_ATOM_RE = re.compile(r"r0|c0|r1|c1|ar|ac|H|W|h|w")
+_POS = ({"r0", "ar", "r1"}, {"c0", "ac", "c1"})   # 축별 객체-위치 원자(행/열; r1,c1=우하단)
 
 
 def _axis_tier(name, axis):
@@ -297,19 +297,97 @@ def _axis_matches(atoms, targets, axis):
     return [(en, ef, ed) for en, ef, ed in hits[:_MATCH_CAP]], trunc
 
 
+# 객체 이동(placement)의 **정준 배치**: 축별로 grid 랜드마크(위/아래·좌/우 모서리)에 정렬하거나 제자리.
+# few-shot 좌표식 탐색은 우연 상수(4+ac, 7-w…)로 과적합하기 쉬워, 사용자 설계(2026-07-15)대로
+# "output object 를 비교해 그 위치의 불변(우하단이 grid 코너와 정렬)을 찾는" 것을 직접 구현한다:
+# 각 축의 앵커(모서리)를 grid 경계/제자리에 맞춰 보고 train 전 pair 를 재현하는 조합을 채택.
+#   fn(atoms) = 그 앵커가 놓일 좌표. (H-1=아래끝·W-1=오른끝·0=위/왼끝·r0/c0=제자리)
+_ROW_ANCHORS = [("keep", "min", lambda a: a["r0"]), ("top", "min", lambda a: 0),
+                ("bottom", "max", lambda a: a["H"] - 1)]
+_COL_ANCHORS = [("keep", "min", lambda a: a["c0"]), ("left", "min", lambda a: 0),
+                ("right", "max", lambda a: a["W"] - 1)]
+
+
+def _place_canonical_fn(sfn, redge, rtgt, cedge, ctgt):
+    """(선택자, row 앵커모서리·목표, col 앵커모서리·목표) → fn(grid): 객체의 그 모서리를 목표에 맞춰 이동."""
+    def fn(g):
+        cells = sfn(_components(g))
+        if cells is None:
+            return None
+        a = _obj_atoms(cells, g)
+        rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+        src_r = min(rs) if redge == "min" else max(rs)
+        src_c = min(cs) if cedge == "min" else max(cs)
+        dr, dc = rtgt(a) - src_r, ctgt(a) - src_c
+        W = len(g[0])
+        return [(r + dr) * W + (c + dc) for (r, c) in cells]
+    return fn
+
+
+def _resolve_cellset(vals, train, comps, sels):
+    """cellset slot → (survivors, tried). 셀집합 = 어떤 input object 를 이동한 것. §P5: output 좌표 직접 안 씀.
+    선택자로 고른 input object 의 모양이 셀집합과 **평행이동으로 일치**하면, 축별 정준 앵커(grid 모서리/제자리)
+    조합 중 train 전 pair 를 재현하는 것을 채택(우하단 코너 등이 여기서 창발). train 으로만 검증."""
+    N = len(vals)
+    dests = []                                            # pair 별 dest 셀 (r,c)
+    for i in range(N):
+        W = len(train[i]["input"][0])
+        dests.append(sorted((idx // W, idx % W) for idx in vals[i]))
+    keyed, tried = [], []
+    for si, (sname, sfn) in enumerate(sels):
+        objs = [sfn(comps[i]) for i in range(N)]
+        if any(o is None for o in objs):
+            continue
+        atoms, ok_shape = [], True
+        for i in range(N):
+            src = sorted(objs[i]); d = dests[i]
+            if len(src) != len(d):
+                ok_shape = False; break
+            sr, sc = min(r for r, _ in src), min(c for _, c in src)
+            dr, dc = min(r for r, _ in d), min(c for _, c in d)
+            if sorted((r - sr, c - sc) for r, c in src) != sorted((r - dr, c - dc) for r, c in d):
+                ok_shape = False; break                    # 모양(평행이동 불변) 불일치 → 이 객체론 설명 불가
+            atoms.append(_obj_atoms(objs[i], train[i]["input"]))
+        if not ok_shape:
+            tried.append((f"place@{sname}: 모양 불일치", False)); continue
+        for rname, redge, rtgt in _ROW_ANCHORS:
+            for cname, cedge, ctgt in _COL_ANCHORS:
+                ok = True
+                for i in range(N):
+                    cells = sorted(objs[i]); a = atoms[i]
+                    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+                    sr = min(rs) if redge == "min" else max(rs)
+                    sc = min(cs) if cedge == "min" else max(cs)
+                    dr, dc = rtgt(a) - sr, ctgt(a) - sc
+                    if sorted((r + dr, c + dc) for (r, c) in cells) != dests[i]:
+                        ok = False; break
+                if not ok:
+                    continue
+                nkeep = (rname != "keep") + (cname != "keep")   # 제자리(identity) 를 이동보다 우선
+                name = f"place[{rname},{cname}]@{sname}"
+                keyed.append(((nkeep, si, len(name)), name,
+                              _place_canonical_fn(sfn, redge, rtgt, cedge, ctgt)))
+    keyed.sort(key=lambda t: t[0])
+    for _k, name, fn in keyed[:_MATCH_CAP]:
+        tried.append((name, True))
+    survivors = [(name, fn) for _k, name, fn in keyed[:_MATCH_CAP]]
+    if not survivors:
+        tried.append(("<no canonical placement>", False))
+    return survivors, tried
+
+
 def resolve_slot(slot, train):
-    """slot(kind='src'|'color') → (survivors=[(name, fn(grid))], tried=[(name, ok)]).
-    소스 객체는 기하 선택자로(배경 가정 없이), 값은 좌표식/객체색 자유조합 탐색. train 으로만 검증(§P5)."""
+    """slot(kind='src'|'color'|'cellset') → (survivors=[(name, fn(grid))], tried=[(name, ok)]).
+    소스 객체는 기하 선택자로(배경 가정 없이), 값은 좌표식/객체색/객체이동 자유조합 탐색. train 으로만 검증(§P5)."""
     vals = slot["values"]
     N = len(vals)
     if N != len(train):
         return [], [("<len-mismatch>", False)]
-    if slot["kind"] == "cellset":
-        # blob(객체 셀집합) slot 의 P5 재표현(input object → 이동/우하단 탐색)은 다음 체크포인트.
-        return [], [("<cellset resolve 미구현 — 다음 단계>", False)]
     comps = [_components(e["input"]) for e in train]
     sels = _selectors(comps)
     tried, survivors = [], []
+    if slot["kind"] == "cellset":
+        return _resolve_cellset(vals, train, comps, sels)
 
     if slot["kind"] == "color":
         for k in sorted(set(vals)):                       # 상수색 후보
