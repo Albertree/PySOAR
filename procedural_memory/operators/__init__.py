@@ -9,8 +9,9 @@ from procedural_memory.operators.hypothesize import _op_hypothesize
 from procedural_memory.operators.coloring import _op_coloring
 from procedural_memory.operators.verify import _op_verify
 from procedural_memory.operators.grid_slots import _op_set_grid_size, _op_set_grid_color
+from procedural_memory.operators.generalize import _op_generalize
 
 OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select,
                    "hypothesize": _op_hypothesize, "coloring": _op_coloring, "verify": _op_verify,
                    "set_grid_size": _op_set_grid_size, "set_grid_color": _op_set_grid_color,
-                   "synthesize": _op_synthesize}
+                   "synthesize": _op_synthesize, "generalize": _op_generalize}

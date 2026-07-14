@@ -1,0 +1,32 @@
+{
+  "operator": "generalize",
+  "doc": "per-pair program 들을 anti-unify → TASK.solution 골격+변수 (COMM=상수 고정, DIFF=변수 slot). 근거=compare(prog,prog).",
+  "propose": [
+    {
+      "name": "propose*generalize",
+      "order": 23,
+      "conditions": [
+        {"id": "<s>", "attr": "programs-ready", "value": "yes", "negated": false},
+        {"id": "<s>", "attr": "generalized", "value": "<g>", "negated": true},
+        {"id": "<s>", "attr": "answer-ready", "value": "<ar>", "negated": true}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "pref": "+", "referent": null},
+        {"id": "<o>", "attr": "name", "value": "generalize", "pref": "+", "referent": null}
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*generalize",
+      "order": 24,
+      "conditions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "negated": false},
+        {"id": "<o>", "attr": "name", "value": "generalize", "negated": false}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "generalize-step", "value": "yes", "pref": "+", "referent": null}
+      ]
+    }
+  ]
+}

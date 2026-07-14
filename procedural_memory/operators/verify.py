@@ -26,5 +26,9 @@ def _op_verify(ag):
                 ag.wm.remove(ppid, "program", "{}")
             ag.wm.add(ppid, "program", code)               # 실행가능 flat Python (level-1 형식)
         _materialize_pair_programs(ag)                      # 나머지 PAIR 들도 program 물질화(N개)
+        # per-pair program 이 ≥2개 물질화되면 anti-unify 가능 → generalize 제안 트리거(§0.5 가로축)
+        nprog = sum(1 for (i, a, v) in ag.wm if a == "program" and v not in (None, "{}"))
+        if nprog >= 2 and not ag.wm.contains(sid, "programs-ready", "yes"):
+            ag.wm.add(sid, "programs-ready", "yes")
     else:
         ag.wm.add(sid, "hypothesized", "failed")

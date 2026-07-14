@@ -176,4 +176,9 @@ def focus_detail(kg, op):
         return {"kind": "aggregate",
                 "roles": [{"node": _short(r["node"]), "on": r["on"],
                            "role": r["role"]} for r in roles]}
+    if op == "generalize":
+        g = kg.get("generalize", {})
+        # 대시보드 generalize 핸들러: slot → per-pair DIFF 값 → 변수화 (근거 가시)
+        return {"kind": "generalize",
+                "exprs": {n: f"DIFF {v} → 변수" for n, v in (g.get("slots") or {}).items()}}
     return {"kind": op}
