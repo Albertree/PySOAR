@@ -268,6 +268,35 @@ table.g{border-collapse:collapse;table-layout:fixed;flex:none} table.g td{width:
 .srow{display:flex;gap:8px;font-family:ui-monospace,monospace;font-size:12px;margin:2px 0;text-align:left}
 .srow .slbl{flex:0 0 72px;color:var(--blue)} .srow .sval{flex:1 1 auto;min-width:0;word-break:break-word}
 kbd{background:var(--p2);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11px}
+/* ---- light polish (ADDITIVE only; layout & semantic colours unchanged) ---- */
+html{scrollbar-color:#3a4152 transparent}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-thumb{background:#333a4a;border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+*::-webkit-scrollbar-thumb:hover{background:#465065;background-clip:padding-box}
+*::-webkit-scrollbar-corner{background:transparent}
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;
+ background:radial-gradient(1100px 620px at 82% -12%,#141826 0,var(--bg) 62%) fixed}
+::selection{background:rgba(95,217,127,.28)}
+/* panels + top bars: soft depth, crisper headers */
+.panel{box-shadow:0 1px 3px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.02);transition:border-color .15s}
+.panel>h3{letter-spacing:.8px;color:#9aa3b5}
+#sbar,#phases{box-shadow:0 1px 3px rgba(0,0,0,.28)}
+#sbar{border-top:1px solid rgba(255,255,255,.035)}
+#sbar>b{font-size:14px}
+/* browser cards: hover lift */
+.card{transition:transform .12s ease,border-color .12s,box-shadow .12s}
+.card:hover{transform:translateY(-2px);border-color:#3a4457}
+.card.sel{box-shadow:0 0 0 1px var(--accent),0 5px 16px rgba(95,217,127,.13)}
+/* smooth state changes across the interactive surfaces */
+.ph{transition:background .15s,color .15s,border-color .15s}
+.ph.on{box-shadow:0 0 0 1px rgba(95,217,127,.38),0 2px 9px rgba(45,74,134,.5)}
+.maprow{transition:background .1s,color .1s,border-color .1s}
+.maprow.on{box-shadow:0 1px 7px rgba(45,74,134,.6)}
+.tree summary:hover{filter:brightness(1.14)}
+.rule{transition:border-color .15s,box-shadow .15s}
+.rule>summary:hover{filter:brightness(1.12)}
+.allbtn{transition:color .12s,border-color .12s}
+kbd{box-shadow:0 1px 0 rgba(0,0,0,.4)}
 </style></head><body>
 <div id="browser"></div>
 <div id="stepper">
@@ -532,27 +561,39 @@ function renderTree(){                              // git dev-tree: cycle 노�
  $('tree').querySelectorAll('.tn').forEach(g=>{const on=+g.dataset.cycle===cyc;g.classList.toggle('cur',on);if(on)curEl=g;});
  if(curEl)curEl.scrollIntoView({block:'nearest'});
 }
+// colour-band the 3 wave atoms: match / fire+retract (one colour) / wm-update
+const stageCls=k=>k=='match'?' st-match':((k=='rule-fire'||k=='rule-retract')?' st-fire':(k=='wm-update'?' st-wm':(k=='substate'?' st-impasse':'')));
+// cycle map is built ONCE per task (thousands of rows); stepping only re-marks the
+// current row (O(1)) instead of rebuilding every keystroke -- the old innerHTML=ev.map
+// churned 2000+ DOM nodes per arrow press, which was the main stepping lag.
+let _mapTi=-1,_mapCur=-1;
+function buildMap(ev){
+ $('map').innerHTML=ev.map((x,i)=>{
+   if(x.kind=='phase')
+     return `<div class="maprow phase" data-i="${i}" onclick="step=${i};renderStep()"><span class=mmark></span><span class=mdetail>${esc(x.label)}</span></div>`;
+   const wv=`<span class=mwave>${x.wave?'wave '+x.wave:''}</span>`;
+   const st=`<span class=mstage>${esc(STAGE[x.kind]||'')}</span>`;
+   return `<div class="maprow${stageCls(x.kind)}" data-i="${i}" onclick="step=${i};renderStep()"><span class=mmark></span>${wv}${st}<span class=mdetail>${esc(x.label)}</span></div>`;
+ }).join('');
+ _mapCur=-1;
+}
+function markMap(){
+ const rows=$('map').children;
+ if(_mapCur>=0&&rows[_mapCur]){ rows[_mapCur].classList.remove('on'); const m=rows[_mapCur].querySelector('.mmark'); if(m)m.textContent=''; }
+ const r=rows[step];
+ if(r){ r.classList.add('on'); const m=r.querySelector('.mmark'); if(m)m.textContent='▶'; r.scrollIntoView({block:'nearest'}); }
+ _mapCur=step;
+}
 function renderStep(){
  const t=D.tasks[ti],ev=t.events,e=ev[step];
- if(!ev.length){$('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=bad>${esc(t.error||'no steps')}</span> <span class=hint><kbd>Esc</kbd> 목록</span>`;$('phases').innerHTML='';$('map').innerHTML=`<div style="padding:24px;color:var(--muted)">진행 스텝 없음 — ${esc(t.error||'unknown')}</div>`;$('wm').innerHTML='';$('cand').innerHTML='';$('pevent').innerHTML='';return;}
+ if(!ev.length){$('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=bad>${esc(t.error||'no steps')}</span> <span class=hint><kbd>Esc</kbd> 목록</span>`;$('phases').innerHTML='';$('map').innerHTML=`<div style="padding:24px;color:var(--muted)">진행 스텝 없음 — ${esc(t.error||'unknown')}</div>`;_mapTi=-1;$('wm').innerHTML='';$('cand').innerHTML='';$('pevent').innerHTML='';return;}
  $('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=hint>step ${step+1}/${ev.length} · cycle ${e.cycle}</span>
   <span class=hint>↑↓ 스텝 · ←→ wm-update · <kbd>Esc</kbd> 목록 · <kbd>Home/End</kbd></span>
   <span style="margin-left:auto">${t.correct_attempt===null?'<span class=bad>unsolved</span>':'<span class=ok>solved (try '+(t.correct_attempt+1)+')</span>'}</span>`;
  $('phases').innerHTML=PHASES.map(p=>`<div class="ph${p==e.phase?' on':''}">${p}</div>`).join('<span class=hint>→</span>');
  renderTree();                                    // 좌측 git dev-tree (현재 cycle 하이라이트)
- // colour-band the 3 wave atoms: match / fire+retract (one colour) / wm-update
- const stageCls=k=>k=='match'?' st-match':((k=='rule-fire'||k=='rule-retract')?' st-fire':(k=='wm-update'?' st-wm':(k=='substate'?' st-impasse':'')));
- $('map').innerHTML=ev.map((x,i)=>{
-   const cur=i==step;
-   const mark=`<span class=mmark>${cur?'▶':''}</span>`;
-   // phase = header row (mark + title, outdented). others = [mark][wave][stage][detail…]
-   if(x.kind=='phase')
-     return `<div class="maprow phase${cur?' on':''}" onclick="step=${i};renderStep()">${mark}<span class=mdetail>${esc(x.label)}</span></div>`;
-   const wv=`<span class=mwave>${x.wave?'wave '+x.wave:''}</span>`;
-   const st=`<span class=mstage>${esc(STAGE[x.kind]||'')}</span>`;
-   return `<div class="maprow${cur?' on':''}${stageCls(x.kind)}" onclick="step=${i};renderStep()">${mark}${wv}${st}<span class=mdetail>${esc(x.label)}</span></div>`;
- }).join('');
- const onr=document.querySelector('.maprow.on'); if(onr) onr.scrollIntoView({block:'nearest'});
+ if(_mapTi!==ti){ buildMap(ev); _mapTi=ti; }      // map 은 태스크당 1회만 그림
+ markMap();                                        // 스텝 이동 = 현재 행만 O(1) 갱신
  const hl=new Set(e.highlight);
  const WMS=wmStates(ti);                 // delta 로 저장된 wm_states 를 full 로 복원(캐시)
  const wm=WMS[e.wm_state];

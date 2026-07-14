@@ -1074,9 +1074,50 @@ def _op_coloring(ag):
     ag.wm.add(sid, "colored-all", "yes")                       # recolor 다 적용 → verify
 
 
+def _pixel_residual_program(g0, g1):
+    """한 pair 의 per-pair program 을 **pixel 잔차**(G0≠G1 인 셀만 그 출력색으로 재채색)로 물질화한다 —
+    pixel 경로(_op_hypothesize PIXEL + _op_coloring)가 P0 에 대해 만드는 것과 **동일 형식·동일 산물**.
+    같은 크기 pair 에서만 유효(크기변화 → None). 정답을 아는 게 아니라 '달라진 셀을 출력색으로'라는
+    generic 재구성이라 §1-5 finder 아님(후보·기각이 없는 결정적 잔차)."""
+    if len(g0) != len(g1) or len(g0[0]) != len(g1[0]):
+        return None
+    H, W = len(g0), len(g0[0])
+    changed = [(r, c) for r in range(H) for c in range(W) if g0[r][c] != g1[r][c]]
+    defs, body = ["in_px = pixels_of(input_grid)"], ["tfg0 = input_grid"]
+    for k, (r, c) in enumerate(changed):
+        defs.append(f"P{k} = in_px[{r * W + c}]")
+        body.append(f"tfg{k + 1} = apply_DSL(tfg{k}, coloring, P{k}.coord, {g1[r][c]})")
+    body.append(f"output_grid = tfg{len(changed)}")
+    return "\n".join(defs + [""] + body)
+
+
+def _materialize_pair_programs(ag):
+    """**모든 example PAIR 에 per-pair program 을 물질화** (사용자 2026-07-14). 현재 substate 가 처리한
+    PAIR(sim-pair)은 operator 사이클로 이미 program 을 얻었고, 나머지 PAIR 들은 **같은 generic 합성**
+    (pixel 잔차)을 pair 마다 적용해 각자의 `PAIR.property.program` 을 채운다. → N example pair → N program.
+    (이미 program 이 있는 PAIR 은 건너뜀; 크기변화 PAIR 은 빈 슬롯 유지 = 정직히 범위 밖.)"""
+    root = ag.kg.get("arckg_root")
+    if root is None:
+        return
+    for k, p in enumerate(getattr(root, "example_pairs", []) or []):
+        if k >= len(ag.task["train"]):
+            break
+        ppid = f"{p.node_id}.property"
+        cur = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+        if cur not in (None, "{}"):
+            continue                                        # 이미 실제 program 있음(예: sim-pair)
+        code = _pixel_residual_program(ag.task["train"][k]["input"], ag.task["train"][k]["output"])
+        if code is None:
+            continue
+        if ag.wm.contains(ppid, "program", "{}"):
+            ag.wm.remove(ppid, "program", "{}")
+        ag.wm.add(ppid, "program", code)
+
+
 def _op_verify(ag):
     """**verify operator (apply body)** — 시뮬 grid 를 train output 과 대조(원자). 같으면
-    (sid ^hypothesized yes) + PAIR.program 채움, 아니면 (sid ^hypothesized failed → main 이 PIXEL 하강)."""
+    (sid ^hypothesized yes) + PAIR.program 채움, 아니면 (sid ^hypothesized failed → main 이 PIXEL 하강).
+    성공 시 **존재하는 모든 PAIR** 에 per-pair program 을 물질화(_materialize_pair_programs, §2-5 반영)."""
     sid = ag.stack[-1].id
     sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
     grid = [list(r) for r in (sim or [])]
@@ -1090,6 +1131,7 @@ def _op_verify(ag):
             if ag.wm.contains(ppid, "program", "{}"):
                 ag.wm.remove(ppid, "program", "{}")
             ag.wm.add(ppid, "program", code)               # 실행가능 flat Python (level-1 형식)
+        _materialize_pair_programs(ag)                      # 나머지 PAIR 들도 program 물질화(N개)
     else:
         ag.wm.add(sid, "hypothesized", "failed")
 
@@ -1475,8 +1517,17 @@ def make_dashboard(tasks, dataset="focus (slice 1)"):
     data = {"dataset": dataset, "tasks": dash,
             "rules": _rules_manifest(), "op_docs": OP_DOCS}
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_dashboard.html")
+    doc = _HTML.replace("__DATA__", json.dumps(data))
+    # 상단 nav 링크(고정): 생성된 per-pair program 이 anti-unify 되어 일반화되는 별도 페이지로 이동
+    # (사용자 2026-07-14). 공유 _HTML 를 오염시키지 않으려 focus 출력에만 주입한다.
+    nav = ('<a href="easy_antiunify_report.html" onclick="try{location.href=\'easy_antiunify_report.html#\''
+           '+D.tasks[ti].id;return false}catch(e){}" style="position:fixed;top:8px;right:12px;'
+           'z-index:99999;background:#243b52;color:#bcd8f5;padding:6px 12px;border-radius:7px;'
+           'text-decoration:none;font:13px/1 -apple-system,sans-serif;border:1px solid #3a5a7a;'
+           'box-shadow:0 2px 8px #0006">▤ 이 문제 anti-unification →</a>')
+    doc = doc.replace("<body>", "<body>" + nav, 1)
     with open(out, "w") as f:
-        f.write(_HTML.replace("__DATA__", json.dumps(data)))
+        f.write(doc)
     return out
 
 
@@ -1542,11 +1593,15 @@ def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, includ
 SURVEY_AGI = ["08ed6ac7", "0ca9ddb6", "009d5c81", "11852cab", "845d6e51", "868de0fa"]
 
 if __name__ == "__main__":
-    # made000a/b 가 없으면 먼저 생성
-    from arc.make_made_tasks import write_all
-    write_all()
-    tasks = _load_survey(agi_ids=SURVEY_AGI)
-    print(f"survey: easy 9 + made 2 + ARC-AGI {len(SURVEY_AGI)} — 총 {len(tasks)} 태스크 (max_cycles=1000)")
-    out = make_dashboard(tasks, dataset="survey (easy·made·ARC-AGI 15)")
+    # 사용자 지정(2026-07-14): dashboard 에는 **easy 문제만** — per-pair program 이 존재하는 모든
+    # PAIR 에 물질화되는지(N example pair → N program) easy 이동 태스크로 확인한다.
+    from arc.dataset import list_tasks, load_task
+    tasks = [(tid, load_task(p)) for tid, p in list_tasks("easy_a")]     # easy000a–i (9)
+    print(f"easy only: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=1000")
+    out = make_dashboard(tasks, dataset="easy_a (single-pixel) — per-pair program ×N")
     sz = os.path.getsize(out) / 1e6
-    print(f"wrote {out}  ({sz:.1f} MB)\nopen it:  open {out}")
+    print(f"wrote {out}  ({sz:.1f} MB)")
+    # companion 페이지: per-pair program → anti-unification 3분할 뷰 (nav 링크 대상)
+    from arc.easy_antiunify_viz import build as _build_au
+    au = _build_au()
+    print(f"wrote {au}\nopen it:  open {out}")
