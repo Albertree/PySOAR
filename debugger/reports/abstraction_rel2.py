@@ -16,7 +16,7 @@ same engine: colour is fixed by HOW MANY grey siblings the object is arithmetica
 """
 from __future__ import annotations
 
-from arc.abstraction import per_pair_objects, Obj, Pair
+from debugger.reports.abstraction import per_pair_objects, Obj, Pair
 from arc.focus_solver import objects_of
 
 

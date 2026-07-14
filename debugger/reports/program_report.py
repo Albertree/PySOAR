@@ -16,7 +16,7 @@ import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "program_report.html")
+OUT = os.path.join(HERE, "..", "traces", "program_report.html")
 
 
 def html_escape(s):

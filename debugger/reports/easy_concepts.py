@@ -253,7 +253,7 @@ def build():
            f'<p class="hsub">per-pair program(AST) 재료 → 뼈대 COMM·목적지 DIFF → 목적지를 표현식 탐색으로 '
            f'anti-unify → TASK.solution(개념: 고정위치·상대이동·격자코너)</p>'
            f'<div class="toc">{"".join(toc)}</div>{"".join(cards)}')
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "easy_concepts_report.html")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "traces", "easy_concepts_report.html")
     with open(out, "w") as f:
         f.write(doc)
     return out

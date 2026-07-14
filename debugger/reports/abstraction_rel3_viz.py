@@ -11,8 +11,8 @@ import html
 import os
 
 from arc.focus_solver import _load_survey, SURVEY_AGI, objects_of
-from arc.abstraction import per_pair_objects
-from arc.abstraction_rel3 import discover, profile, apply_map, _pair_map, sign, PROPS
+from debugger.reports.abstraction import per_pair_objects
+from debugger.reports.abstraction_rel3 import discover, profile, apply_map, _pair_map, sign, PROPS
 
 PAL = ["#101010", "#1E93FF", "#F93C31", "#4FCC30", "#FFDC00",
        "#999999", "#E53AA3", "#FF851B", "#87D8F1", "#921231"]

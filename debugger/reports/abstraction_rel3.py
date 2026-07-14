@@ -19,7 +19,7 @@ Mechanism:
 """
 from __future__ import annotations
 
-from arc.abstraction import per_pair_objects, Obj
+from debugger.reports.abstraction import per_pair_objects, Obj
 from arc.focus_solver import objects_of
 
 # candidate comparison SCOPES (the 'compare only grey' bias is one of these — to be found)

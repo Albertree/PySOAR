@@ -15,7 +15,7 @@ import html
 import os
 
 from arc.dataset import list_tasks, load_task
-from arc.easy_concepts import samples, version_space, concept_label, apply, TIDS
+from debugger.reports.easy_concepts import samples, version_space, concept_label, apply, TIDS
 
 
 def _rank(d):
@@ -255,7 +255,7 @@ def build():
            f'<h1>per-pair program → anti-unification</h1>'
            f'<p class="hs">coloring 데이터플로우(실제 코드) · 두 프로그램 겹침 COMM/DIFF · DIFF 를 새 가지(함수)로 해소</p>'
            f'<div class="tabs">{tabs}</div>{secs}{js}')
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "easy_antiunify_report.html")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "traces", "easy_antiunify_report.html")
     with open(out, "w") as f:
         f.write(doc)
     return out

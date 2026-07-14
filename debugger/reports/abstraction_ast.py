@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 
-from arc.abstraction import per_pair_objects, Obj, Pair
+from debugger.reports.abstraction import per_pair_objects, Obj, Pair
 from arc.focus_solver import objects_of
 
 VAR = "‹VAR›"

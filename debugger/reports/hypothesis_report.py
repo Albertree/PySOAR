@@ -19,7 +19,7 @@ import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_HTML = os.path.join(HERE, "hypothesis_trials.html")
+OUT_HTML = os.path.join(HERE, "..", "traces", "hypothesis_trials.html")
 OUT_CSV = os.path.join(HERE, "hypothesis_trials.csv")
 
 

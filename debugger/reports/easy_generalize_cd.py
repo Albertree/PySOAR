@@ -149,7 +149,7 @@ def build():
            f'<section class="card">{cols}</section>'
            f'<div class="seph">VERIFY — 같은 G 에 target 만 바꿔 끼움</div>'
            f'<section class="card">{verify}</section>')
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "easy_generalize_cd_report.html")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "traces", "easy_generalize_cd_report.html")
     with open(out, "w") as f:
         f.write(doc)
     return out

@@ -18,7 +18,7 @@ import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "pixel_mapping_report.html")
+OUT = os.path.join(HERE, "..", "traces", "pixel_mapping_report.html")
 
 PALETTE = {0: "#1b1b1b", 1: "#0074D9", 2: "#FF4136", 3: "#2ECC40", 4: "#FFDC00",
            5: "#AAAAAA", 6: "#F012BE", 7: "#FF851B", 8: "#7FDBFF", 9: "#870C25"}

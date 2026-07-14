@@ -11,7 +11,7 @@ import html
 import os
 
 from arc.focus_solver import _load_survey, SURVEY_AGI
-from arc.abstraction import per_pair_objects, abstract_task, _apply_solution, RELATIONS
+from debugger.reports.abstraction import per_pair_objects, abstract_task, _apply_solution, RELATIONS
 
 PAL = ["#101010", "#1E93FF", "#F93C31", "#4FCC30", "#FFDC00",
        "#999999", "#E53AA3", "#FF851B", "#87D8F1", "#921231"]
@@ -212,7 +212,7 @@ def build(order=None):
            f'<style>{CSS}</style><h1>ARBOR — abstraction 파이프라인 리포트</h1>'
            f'<p class="sub">per-pair programs → 능동 binding 탐색 → TASK.solution → 실행결과 (문제별)</p>'
            f'<div class="toc">{"".join(toc)}</div>{"".join(cards)}')
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "abstraction_report.html")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "traces", "abstraction_report.html")
     with open(out, "w") as f:
         f.write(doc)
     return out

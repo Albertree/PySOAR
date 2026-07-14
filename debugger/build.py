@@ -2,7 +2,7 @@
 """ARBOR debugger.build — 풀이 과정 시각화(대시보드) 빌더 + 진입점.
 setup_focus_agent 으로 태스크를 SOAR 로 구동, 트레이스를 focus_dashboard.html 로 렌더.
 
-    python -m debugger.build        # -> arc/focus_dashboard.html
+    python -m debugger.build        # -> debugger/traces/focus_dashboard.html
 """
 from __future__ import annotations
 import json, os, sys
@@ -134,7 +134,7 @@ def make_dashboard(tasks, dataset="focus (slice 1)"):
         dash.append(d)
     data = {"dataset": dataset, "tasks": dash,
             "rules": _rules_manifest(), "op_docs": OP_DOCS}
-    out = os.path.join(_REPO, "arc", "focus_dashboard.html")
+    out = os.path.join(_REPO, "debugger", "traces", "focus_dashboard.html")
     doc = _HTML.replace("__DATA__", json.dumps(data))
     # 상단 nav 링크(고정): 생성된 per-pair program 이 anti-unify 되어 일반화되는 별도 페이지로 이동
     # (사용자 2026-07-14). 공유 _HTML 를 오염시키지 않으려 focus 출력에만 주입한다.
@@ -159,6 +159,6 @@ if __name__ == "__main__":
     sz = os.path.getsize(out) / 1e6
     print(f"wrote {out}  ({sz:.1f} MB)")
     # companion 페이지: per-pair program → anti-unification 3분할 뷰 (nav 링크 대상)
-    from arc.easy_antiunify_viz import build as _build_au
+    from debugger.reports.easy_antiunify_viz import build as _build_au
     au = _build_au()
     print(f"wrote {au}\nopen it:  open {out}")

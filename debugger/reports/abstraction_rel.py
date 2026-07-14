@@ -19,7 +19,7 @@ concept the agent must INVENT. Those stay an honest abstraction-gap here (that i
 """
 from __future__ import annotations
 
-from arc.abstraction import per_pair_objects, Obj, Pair
+from debugger.reports.abstraction import per_pair_objects, Obj, Pair
 from arc.focus_solver import objects_of
 
 

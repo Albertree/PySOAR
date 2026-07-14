@@ -9,8 +9,8 @@ import html
 import os
 
 from arc.focus_solver import _load_survey, SURVEY_AGI, objects_of
-from arc.abstraction import per_pair_objects, Obj
-from arc.abstraction_rel2 import (compare_area, area_profile, is_greater_than_all_siblings,
+from debugger.reports.abstraction import per_pair_objects, Obj
+from debugger.reports.abstraction_rel2 import (compare_area, area_profile, is_greater_than_all_siblings,
                                   greater_count, same_color_siblings)
 
 PAL = ["#101010", "#1E93FF", "#F93C31", "#4FCC30", "#FFDC00",
