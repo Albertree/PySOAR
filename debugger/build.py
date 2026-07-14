@@ -153,7 +153,8 @@ if __name__ == "__main__":
     # 사용자 지정(2026-07-14): dashboard 에는 **easy 문제만** — per-pair program 이 존재하는 모든
     # PAIR 에 물질화되는지(N example pair → N program) easy 이동 태스크로 확인한다.
     from arbor.env.dataset import list_tasks, load_task
-    tasks = [(tid, load_task(p)) for tid, p in list_tasks("easy_a")]     # easy000a–i (9)
+    # easy000i 는 아직 미해결(다른 이동 패턴) → 대시보드에서 제외(사용자 2026-07-14, 나중에)
+    tasks = [(tid, load_task(p)) for tid, p in list_tasks("easy_a") if tid != "easy000i"]
     print(f"easy only: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=1000")
     out = make_dashboard(tasks, dataset="easy_a (single-pixel) — per-pair program ×N")
     sz = os.path.getsize(out) / 1e6
