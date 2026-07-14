@@ -123,6 +123,49 @@ def resolve_slot(slot, train):
     return survivors, tried
 
 
+# ── 실행 + version space (resolved solution 을 test 입력에 실행) ──────────────────
+def solution_candidates(sol, limit=3):
+    """resolved version space 의 곱 → 후보 solution 목록 [(label, choice{name:fn})].
+    slot 마다 생존식이 여럿이면(few-shot 애매성) 그 조합을 최대 limit 개까지 — 3-attempt."""
+    import itertools
+    slots, resolved = sol["slots"], sol.get("resolved") or {}
+    names = list(slots.keys())
+    if not names:
+        return [("(변수 없음)", {})]
+    pools = [resolved.get(n) or [] for n in names]
+    if any(not pool for pool in pools):
+        return []
+    out = []
+    for combo in itertools.product(*pools):
+        choice = {names[i]: combo[i][1] for i in range(len(names))}
+        label = ", ".join(f"{names[i]}={combo[i][0]}" for i in range(len(names)))
+        out.append((label, choice))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def execute_solution(skeleton, slots, choice, grid_in):
+    """skeleton + slot별 선택 fn(choice[name]) → grid_in 에 실행 → 답 격자.
+    var 의 픽셀 인덱스(상수 COMM 또는 resolved fn) 확정 후 coloring 단계 적용."""
+    H, W = len(grid_in), len(grid_in[0])
+    src_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "src"}
+    col_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "color"}
+    var_idx = {}
+    for i, (var, idx) in enumerate(skeleton["defs"]):
+        var_idx[var] = idx if idx is not None else choice[src_at[i]](grid_in)
+    grid = [list(r) for r in grid_in]
+    for i, (var, color) in enumerate(skeleton["steps"]):
+        col = color if color is not None else choice[col_at[i]](grid_in)
+        idx = var_idx.get(var)
+        if idx is None:
+            continue
+        r, c = idx // W, idx % W
+        if 0 <= r < H and 0 <= c < W:
+            grid[r][c] = col
+    return grid
+
+
 def render_skeleton(skeleton, slots) -> str:
     """골격+변수 → 사람이 읽는 TASK.solution 문자열(대시보드·저장용)."""
     if not skeleton:
