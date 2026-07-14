@@ -1,0 +1,32 @@
+{
+  "operator": "resolve",
+  "doc": "TASK.solution 의 변수 slot 을 G0 유래 표현식으로 resolve (후보 생성→train 검증→version space). test 오라클 금지(§P5).",
+  "propose": [
+    {
+      "name": "propose*resolve",
+      "order": 25,
+      "conditions": [
+        {"id": "<s>", "attr": "generalized", "value": "yes", "negated": false},
+        {"id": "<s>", "attr": "resolved", "value": "<r>", "negated": true},
+        {"id": "<s>", "attr": "answer-ready", "value": "<ar>", "negated": true}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "pref": "+", "referent": null},
+        {"id": "<o>", "attr": "name", "value": "resolve", "pref": "+", "referent": null}
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*resolve",
+      "order": 26,
+      "conditions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "negated": false},
+        {"id": "<o>", "attr": "name", "value": "resolve", "negated": false}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "resolve-step", "value": "yes", "pref": "+", "referent": null}
+      ]
+    }
+  ]
+}

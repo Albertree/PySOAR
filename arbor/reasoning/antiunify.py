@@ -84,6 +84,45 @@ def antiunify(programs: list[str]):
     return {"defs": sk_defs, "steps": sk_steps}, slots
 
 
+# ── resolve: 변수 slot → G0 유래 표현식 (generate → train 적용 → 대조 → 생존) ──────
+# 하네스 §1-3/§4-1: 값을 손계산하지 않는다. 후보를 만들어 **train pair 로만** 검증하고
+# (test 오라클 금지, §P5), 살아남은 것(version space)을 남긴다.
+def _fg_index(grid):
+    for r, row in enumerate(grid):
+        for c, v in enumerate(row):
+            if v:
+                return r * len(row) + c
+    return None
+
+
+def _fg_color(grid):
+    for row in grid:
+        for v in row:
+            if v:
+                return v
+    return None
+
+
+def resolve_slot(slot, train):
+    """slot(kind='src'|'color', values=[per-pair]) 를 G0 유래 후보식으로 resolve.
+    반환 (survivors=[(name, fn)], tried=[(name, ok)]). fn(grid)->value."""
+    vals = slot["values"]
+    if slot["kind"] == "src":                    # 픽셀 인덱스 slot
+        cands = [("fg_index", _fg_index)]
+    else:                                        # color slot
+        cands = [("color_of_fg", _fg_color)]
+    # 상수 후보(검색 정직성: DIFF 라 대개 기각됨 — 기각이 트레이스에 남는다 §1-5)
+    cands += [(f"const {k}", (lambda g, k=k: k)) for k in sorted(set(vals))]
+    tried, survivors = [], []
+    for name, fn in cands:
+        ok = len(train) == len(vals) and all(fn(train[i]["input"]) == vals[i]
+                                             for i in range(len(vals)))
+        tried.append((name, ok))
+        if ok:
+            survivors.append((name, fn))
+    return survivors, tried
+
+
 def render_skeleton(skeleton, slots) -> str:
     """골격+변수 → 사람이 읽는 TASK.solution 문자열(대시보드·저장용)."""
     if not skeleton:

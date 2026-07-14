@@ -181,4 +181,12 @@ def focus_detail(kg, op):
         # 대시보드 generalize 핸들러: slot → per-pair DIFF 값 → 변수화 (근거 가시)
         return {"kind": "generalize",
                 "exprs": {n: f"DIFF {v} → 변수" for n, v in (g.get("slots") or {}).items()}}
+    if op == "resolve":
+        r = kg.get("resolve", {})
+        exprs = {}
+        for n, expr in (r.get("resolved") or {}).items():
+            tried = r.get("tried", {}).get(n, [])
+            trystr = " ".join(f"{c}{'✓' if ok else '✗'}" for c, ok in tried)
+            exprs[n] = f"{expr}   (시도: {trystr})"
+        return {"kind": "generalize", "exprs": exprs}   # 대시보드 generalize 핸들러 재사용
     return {"kind": op}
