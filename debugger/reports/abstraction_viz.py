@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 import os
 
-from arc.focus_solver import _load_survey, SURVEY_AGI
+from arbor.solver import _load_survey, SURVEY_AGI
 from debugger.reports.abstraction import per_pair_objects, abstract_task, _apply_solution, RELATIONS
 
 PAL = ["#101010", "#1E93FF", "#F93C31", "#4FCC30", "#FFDC00",

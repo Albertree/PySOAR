@@ -8,7 +8,7 @@ from __future__ import annotations
 import html
 import os
 
-from arc.focus_solver import _load_survey, SURVEY_AGI, objects_of
+from arbor.solver import _load_survey, SURVEY_AGI, objects_of
 from debugger.reports.abstraction import per_pair_objects, Obj
 from debugger.reports.abstraction_rel2 import (compare_area, area_profile, is_greater_than_all_siblings,
                                   greater_count, same_color_siblings)

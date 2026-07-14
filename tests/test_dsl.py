@@ -19,7 +19,7 @@ EASY_A = os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a")
 @unittest.skipUnless(ARCKG_OK, "ARCKG not present")
 class TestDSL(unittest.TestCase):
     def test_two_frozen_transformations(self):
-        from arc.dsl import make_grid, coloring
+        from procedural_memory.dsl.helpers import make_grid, coloring
         g = make_grid({"height": 2, "width": 2}, fill=0)
         g = coloring(g, (1, 1), 5)
         self.assertEqual(g, [[0, 0], [0, 5]])
@@ -27,7 +27,7 @@ class TestDSL(unittest.TestCase):
     def test_specific_value_becomes_general_expression(self):
         # constant (5,5) on 6x6 grids must resolve to corner-br (general),
         # NOT literal (5,5) -- the whole point of expression resolution.
-        from arc.dsl import context, resolve_arguments
+        from procedural_memory.dsl.helpers import context, resolve_arguments
 
         class O:
             pass
@@ -44,7 +44,7 @@ class TestDSL(unittest.TestCase):
         self.assertEqual(args["position"][1], "corner-br")  # general, not literal
 
     def test_translation_resolves_to_coord_plus_delta(self):
-        from arc.dsl import context, resolve_arguments
+        from procedural_memory.dsl.helpers import context, resolve_arguments
         def obj(r, c, color):
             return {"cells": frozenset({(r, c)}), "color": color}
         in0 = [[0] * 6 for _ in range(6)]
@@ -58,14 +58,14 @@ class TestDSL(unittest.TestCase):
 
     @unittest.skipUnless(os.path.isdir(EASY_A), "dataset not present")
     def test_easy_a_via_expressions(self):
-        from arc.expr_solver import _bench
+        from arbor.expr_solver import _bench
         s, n = _bench("easy_a")
         self.assertEqual((s, n), (9, 9))
 
     def test_relation_expression_coord_of_other(self):
         # position = coord_of(another object) -- a RELATION expression that
         # property-only expressions cannot produce.
-        from arc.dsl import context, resolve_arguments
+        from procedural_memory.dsl.helpers import context, resolve_arguments
 
         def obj(r, c, color):
             return {"cells": frozenset({(r, c)}), "color": color}
@@ -80,7 +80,7 @@ class TestDSL(unittest.TestCase):
         self.assertIn("coord_of(other", args["position"][1])   # relation, not literal
 
     def test_relation_color_of_other(self):
-        from arc.dsl import context, resolve_arguments
+        from procedural_memory.dsl.helpers import context, resolve_arguments
 
         def obj(r, c, color):
             return {"cells": frozenset({(r, c)}), "color": color}
@@ -98,8 +98,8 @@ class TestDSL(unittest.TestCase):
     def test_retry_diversification_beats_single_submit(self):
         # the 3-submit retry (ranked candidates) must solve strictly more than a
         # single submit on the ambiguous 'easy' set -- the wiki's reject->next.
-        from arc.expr_solver import candidates
-        from arc.dataset import list_tasks, load_task
+        from arbor.expr_solver import candidates
+        from arbor.env.dataset import list_tasks, load_task
 
         def solved_within(k):
             s = 0
@@ -117,8 +117,8 @@ class TestDSL(unittest.TestCase):
     def test_candidate_covers_all_test_pairs(self):
         # a candidate answer is a LIST of grids, one per test pair (the env scores
         # all-or-nothing across test pairs).
-        from arc.expr_solver import candidates
-        from arc.dataset import list_tasks, load_task
+        from arbor.expr_solver import candidates
+        from arbor.env.dataset import list_tasks, load_task
         t = load_task(list_tasks("easy")[0][1])
         cs = candidates(t, 3)
         self.assertTrue(cs)
@@ -128,7 +128,7 @@ class TestDSL(unittest.TestCase):
     def test_declines_on_contradictory_task(self):
         # same input -> different output: no input-based expression exists;
         # the solver must DECLINE (answer None), not crash or guess.
-        from arc.expr_solver import solve
+        from arbor.expr_solver import solve
         task = {
             "train": [
                 {"input": [[0, 0], [0, 2]], "output": [[2, 0], [0, 0]]},

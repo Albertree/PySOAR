@@ -26,9 +26,9 @@ PALETTE = {0: "#1b1b1b", 1: "#0074D9", 2: "#FF4136", 3: "#2ECC40", 4: "#FFDC00",
 
 def _load():
     """대시보드와 **동일한 survey** (easy·made·ARC-AGI) 를 순서대로 반환."""
-    from arc.make_made_tasks import write_all
+    from arbor.env.make_made_tasks import write_all
     write_all()
-    from arc.focus_solver import _load_survey, SURVEY_AGI
+    from arbor.solver import _load_survey, SURVEY_AGI
     return _load_survey(agi_ids=SURVEY_AGI)
 
 
@@ -64,13 +64,13 @@ def _receipt(kg_compare, p0node, p1node):
 
 
 def _task_section(tid, task):
-    from arc.focus_solver import build_arckg, index_arckg
+    from arbor.solver import build_arckg, index_arckg
     g0raw = task["train"][0]["input"]
     g1raw = task["train"][0]["output"]
     d0, d1 = (len(g0raw), len(g0raw[0])), (len(g1raw), len(g1raw[0]))
     hdr = f"<h2>{tid} <span class=dim>P0.G0 {d0[0]}×{d0[1]} ↔ P0.G1 {d1[0]}×{d1[1]}</span></h2>"
     if d0 != d1:
-        from arc.focus_solver import _size_expr_search
+        from arbor.solver import _size_expr_search
         rule, _tried, _trials = _size_expr_search(task["train"])   # GRID hypothesize 와 동일한 크기식 탐색
         sr = (f" GRID hypothesize 크기식 도출: <b>H1={rule['H']}, W1={rule['W']}</b> — "
               f"단 그 크기의 <b>contents 생성엔 resize DSL 필요</b>(미구현)."

@@ -16,8 +16,8 @@ import html
 import json
 import os
 
-from arc.make_made_tasks import write_all
-from arc.expr_solver import build_arckg
+from arbor.env.make_made_tasks import write_all
+from arbor.expr_solver import build_arckg
 from arbor.perception.arckg.comparison import compare as kg_compare
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -33,7 +33,7 @@ EMPTY = "#D6FFFF"                 # 투명(빈=13) 셀 = ARC-TBD/basics/settings
 def _load():
     """대시보드와 **동일한 15문제** (easy 9 + made 2 + ARC-AGI 4)를 순서대로 반환."""
     write_all()
-    from arc.focus_solver import _load_survey, SURVEY_AGI
+    from arbor.solver import _load_survey, SURVEY_AGI
     return _load_survey(agi_ids=SURVEY_AGI)          # [(tid, task), ...]
 
 

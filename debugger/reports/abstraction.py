@@ -25,8 +25,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arc.expr_solver import build_arckg
-from arc.focus_solver import index_arckg, _fg_correspondence, _obj_cc, objects_of
+from arbor.expr_solver import build_arckg
+from arbor.solver import index_arckg, _fg_correspondence, _obj_cc, objects_of
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +417,7 @@ def abstract_task(tid, task):
 
 
 if __name__ == "__main__":
-    from arc.focus_solver import _load_survey, SURVEY_AGI
+    from arbor.solver import _load_survey, SURVEY_AGI
     tasks = dict(_load_survey(agi_ids=SURVEY_AGI))
     order = ["08ed6ac7", "845d6e51", "868de0fa", "009d5c81", "0ca9ddb6", "11852cab",
              "made000a", "made000b"]

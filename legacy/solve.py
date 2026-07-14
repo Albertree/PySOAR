@@ -27,7 +27,7 @@ from typing import Callable
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from soar import Action, Agent, Cond, Production  # noqa: E402
-from arc.grid import dims, foreground_pixel, with_pixel  # noqa: E402
+from arbor.env.grid import dims, foreground_pixel, with_pixel  # noqa: E402
 
 # A hypothesis predicts (out_r, out_c, out_color) from (in_r,in_c,in_color,H,W).
 Hypothesis = Callable[[int, int, int, int, int], tuple]

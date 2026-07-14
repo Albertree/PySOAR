@@ -20,7 +20,7 @@ Mechanism:
 from __future__ import annotations
 
 from debugger.reports.abstraction import per_pair_objects, Obj
-from arc.focus_solver import objects_of
+from arbor.solver import objects_of
 
 # candidate comparison SCOPES (the 'compare only grey' bias is one of these — to be found)
 SCOPES = {
@@ -101,7 +101,7 @@ def discover(task):
 
 
 if __name__ == "__main__":
-    from arc.focus_solver import _load_survey, SURVEY_AGI
+    from arbor.solver import _load_survey, SURVEY_AGI
     tasks = dict(_load_survey(agi_ids=SURVEY_AGI))
     for tid in ("08ed6ac7", "845d6e51", "868de0fa"):
         task = tasks[tid]

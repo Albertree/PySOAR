@@ -59,8 +59,8 @@ input_grid = %s
 
 def _run_programs():
     """15 태스크를 돌려 (tid, program, input, output, ok) 뽑는다. program 은 PAIR.program(합성됐으면)."""
-    from arc.focus_solver import _load_survey, SURVEY_AGI, setup_focus_agent
-    from arc.fine_trace import _Tracer
+    from arbor.solver import _load_survey, SURVEY_AGI, setup_focus_agent
+    from arbor.engine.trace import _Tracer
     out = []
     for tid, task in _load_survey(agi_ids=SURVEY_AGI):
         prog, ok, gverdict, ghyp = None, False, None, []

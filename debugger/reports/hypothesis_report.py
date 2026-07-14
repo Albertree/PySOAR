@@ -25,10 +25,10 @@ OUT_CSV = os.path.join(HERE, "hypothesis_trials.csv")
 
 def _collect():
     """17-세트를 돌려 각 task 의 hyp_trials(가설 시도 로그)를 모은다."""
-    from arc.make_made_tasks import write_all
+    from arbor.env.make_made_tasks import write_all
     write_all()
-    from arc.focus_solver import _load_survey, SURVEY_AGI, setup_focus_agent
-    from arc.fine_trace import _Tracer
+    from arbor.solver import _load_survey, SURVEY_AGI, setup_focus_agent
+    from arbor.engine.trace import _Tracer
     rows = []
     for tid, task in _load_survey(agi_ids=SURVEY_AGI):
         try:

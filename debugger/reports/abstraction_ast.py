@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 
 from debugger.reports.abstraction import per_pair_objects, Obj, Pair
-from arc.focus_solver import objects_of
+from arbor.solver import objects_of
 
 VAR = "‹VAR›"
 
@@ -163,7 +163,7 @@ def run(task, tid):
 
 
 if __name__ == "__main__":
-    from arc.focus_solver import _load_survey, SURVEY_AGI
+    from arbor.solver import _load_survey, SURVEY_AGI
     tasks = dict(_load_survey(agi_ids=SURVEY_AGI))
     for tid in ("08ed6ac7", "845d6e51", "868de0fa", "009d5c81"):
         r = run(tasks[tid], tid)

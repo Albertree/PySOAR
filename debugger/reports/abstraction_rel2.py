@@ -17,7 +17,7 @@ same engine: colour is fixed by HOW MANY grey siblings the object is arithmetica
 from __future__ import annotations
 
 from debugger.reports.abstraction import per_pair_objects, Obj, Pair
-from arc.focus_solver import objects_of
+from arbor.solver import objects_of
 
 
 # ── the only primitives ─────────────────────────────────────────────────────
@@ -118,6 +118,6 @@ def demo(task, tid):
 
 
 if __name__ == "__main__":
-    from arc.focus_solver import _load_survey, SURVEY_AGI
+    from arbor.solver import _load_survey, SURVEY_AGI
     tasks = dict(_load_survey(agi_ids=SURVEY_AGI))
     demo(tasks["08ed6ac7"], "08ed6ac7")

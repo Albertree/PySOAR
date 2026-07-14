@@ -10,7 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arc.environment import ARCEnvironment, grids_equal  # noqa: E402
+from arbor.env.environment import ARCEnvironment, grids_equal  # noqa: E402
 
 EASY_A = os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a")
 ARCKG_OK = os.path.isdir(os.path.expanduser("~/Desktop/ARC-solver/ARCKG"))

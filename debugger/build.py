@@ -61,7 +61,7 @@ def _cycle_tree(events):
 
 
 def _dash_data(task, tid="0a", max_cycles=1000):   # observe+compare+aggregate+find+solve+…×levels
-    from arc.fine_trace import _Tracer
+    from arbor.engine.trace import _Tracer
     tr = _Tracer(task, tid, setup=setup_focus_agent)
     events = tr.run(max_cycles=max_cycles)
     wm_states = tr._wm_states           # emit 이 연속중복 병합해 이미 축소·인덱싱(events 는 wm_state 보유)
@@ -73,7 +73,7 @@ def _dash_data(task, tid="0a", max_cycles=1000):   # observe+compare+aggregate+f
                    "color": "✓" if a["correct"] else "✗"}
                   for i, a in enumerate(tr.attempts)]
     correct_i = next((i for i, a in enumerate(tr.attempts) if a["correct"]), None)
-    from arc.dashboard import wm_deltas
+    from debugger.dashboard import wm_deltas
     return {
         "id": tid, "events": events, "wm_states": wm_deltas(wm_states),
         "cycle_tree": _cycle_tree(events),                  # git dev-tree(좌측 패널) — cycle 노드 + substate 가지
@@ -123,7 +123,7 @@ def _safe_dash_data(task, tid, timeout_s=180):   # 제출 예산과 동일한 �
 
 def make_dashboard(tasks, dataset="focus (slice 1)"):
     """tasks: [(tid, task_dict), ...] — 대시보드 TASK BROWSER 에 카드로 나열."""
-    from arc.dashboard import _HTML
+    from debugger.dashboard import _HTML
     if isinstance(tasks, dict):                        # 단일 태스크 하위호환: make_dashboard(task_dict)
         tasks = [("task", tasks)]
     dash = []
@@ -152,7 +152,7 @@ def make_dashboard(tasks, dataset="focus (slice 1)"):
 if __name__ == "__main__":
     # 사용자 지정(2026-07-14): dashboard 에는 **easy 문제만** — per-pair program 이 존재하는 모든
     # PAIR 에 물질화되는지(N example pair → N program) easy 이동 태스크로 확인한다.
-    from arc.dataset import list_tasks, load_task
+    from arbor.env.dataset import list_tasks, load_task
     tasks = [(tid, load_task(p)) for tid, p in list_tasks("easy_a")]     # easy000a–i (9)
     print(f"easy only: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=1000")
     out = make_dashboard(tasks, dataset="easy_a (single-pixel) — per-pair program ×N")

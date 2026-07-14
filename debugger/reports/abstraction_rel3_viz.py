@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 import os
 
-from arc.focus_solver import _load_survey, SURVEY_AGI, objects_of
+from arbor.solver import _load_survey, SURVEY_AGI, objects_of
 from debugger.reports.abstraction import per_pair_objects
 from debugger.reports.abstraction_rel3 import discover, profile, apply_map, _pair_map, sign, PROPS
 

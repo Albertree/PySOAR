@@ -17,10 +17,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arc.dataset import list_tasks, load_task                       # noqa: E402
-from arc.focus_solver import setup_focus_agent                      # noqa: E402
-from arc.fine_trace import fine_trace                               # noqa: E402
-from arc.thinking_ops import components, derive_relations, derive_roles  # noqa: E402
+from arbor.env.dataset import list_tasks, load_task                       # noqa: E402
+from arbor.solver import setup_focus_agent                      # noqa: E402
+from arbor.engine.trace import fine_trace                               # noqa: E402
+from arbor.reasoning.thinking_ops import components, derive_relations, derive_roles  # noqa: E402
 
 
 def _run(tid, task, cyc=40):
@@ -61,7 +61,7 @@ def _answer(ev):
 
 
 def test_expr_regression():
-    from arc.expr_solver import solve as esolve
+    from arbor.expr_solver import solve as esolve
     ok = sum(1 for tid, p in list_tasks("easy_a") if esolve(load_task(p), tid=tid))
     assert ok == 9, f"expr_solver regression: {ok}/9"
 
@@ -138,27 +138,27 @@ def test_rule_driven_not_scenario_fixed():
 
 def test_structure_mapping_relation_generalize():
     # 입력→출력 관계를 GRID 3속성(size/color/contents)으로 pair 간 일반화.
-    from arc import relation_solve as R
+    from arbor.reasoning import relation_solve as R
     # easy000a: 출력이 pair 간 불변 → contents=const(완결) → 관계 경로로 풀림
     _tid, epath = list_tasks("easy_a")[0]
     e = R.generalize(load_task(epath)["train"])
     assert e["size"] == ("identity",) and e["contents"][0] == "const"
     assert R.is_complete(e)
     # made000b: size·color 는 입력 보존(identity), contents 는 이동형 합성(우하단 정렬)
-    b = R.generalize(load_task("arc/data/made/made000b.json")["train"])
+    b = R.generalize(load_task("data/made/made000b.json")["train"])
     assert b["size"] == ("identity",) and b["color"] == ("identity",)
     assert b["contents"] == ("move", {"anchor": "bottom-right"})
     # made000a: size=상수(1x1), contents=선택형 합성(전경 최대 색)으로 해소
-    a = R.generalize(load_task("arc/data/made/made000a.json")["train"])
+    a = R.generalize(load_task("data/made/made000a.json")["train"])
     assert a["size"] == ("const", (1, 1)) and a["contents"][0] == "select"
 
 
 def test_made000a_solved_by_selection_synthesis():
     # made000a(선택형): contents 를 "전경 최대 area object 의 색(1×1)"으로 합성 →
     # role(max area)을 pair 간 일반화(구조 불변)해 실제로 풀린다.
-    from arc import relation_solve as R
-    from arc.focus_solver import _dash_data
-    t = load_task("arc/data/made/made000a.json")
+    from arbor.reasoning import relation_solve as R
+    from arbor.solver import _dash_data
+    t = load_task("data/made/made000a.json")
     prog = R.generalize(t["train"])
     assert prog["contents"][0] == "select" and R.is_complete(prog)
     assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
@@ -169,9 +169,9 @@ def test_made000a_solved_by_selection_synthesis():
 def test_made000b_solved_by_move_synthesis():
     # made000b(이동형): contents 를 "object → 코너 정렬"로 합성. 4 코너 전수 중 우하단이
     # pair 간 일관(표면 좌표는 달라도 '우하단 정렬' 구조 공통) → 규칙.
-    from arc import relation_solve as R
-    from arc.focus_solver import _dash_data
-    t = load_task("arc/data/made/made000b.json")
+    from arbor.reasoning import relation_solve as R
+    from arbor.solver import _dash_data
+    t = load_task("data/made/made000b.json")
     prog = R.generalize(t["train"])
     assert prog["contents"] == ("move", {"anchor": "bottom-right"})
     assert R.apply(prog, t["test"][0]["input"]) == t["test"][0]["output"]
@@ -181,8 +181,8 @@ def test_made000b_solved_by_move_synthesis():
 def test_08ed6ac7_solved_by_recolor_rank():
     # 실제 ARC 08ed6ac7: object 를 rank(높이/넓이)로 재채색. "longest" DSL 없이 object 간
     # 비교로 rank 를 도출하고 rank→color 구조를 pair 간 일반화(k번째로 긴 것=색k).
-    from arc import relation_solve as R
-    from arc.focus_solver import _dash_data
+    from arbor.reasoning import relation_solve as R
+    from arbor.solver import _dash_data
     t = _load_08ed6ac7()
     prog = R.generalize(t["train"])
     assert prog["contents"][0] == "recolor-rank" and R.is_complete(prog)
@@ -192,7 +192,7 @@ def test_08ed6ac7_solved_by_recolor_rank():
 
 def test_submission_captured_and_scored():
     # 제출된 답 격자가 대시보드 후보로 잡히고, 3회 환경이 채점해 정답 표시.
-    from arc.focus_solver import _dash_data
+    from arbor.solver import _dash_data
     tid, path = list_tasks("easy_a")[0]
     t = load_task(path)
     d = _dash_data(t, tid)
@@ -205,9 +205,9 @@ def test_submission_captured_and_scored():
 
 def test_retry_env_alive_and_bounded():
     # 오답이면 다음 후보로 재시도하되 3회로 제한(무한루프 없음). 환경을 항상-오답으로.
-    import arc.environment as E
-    from arc.fine_trace import _Tracer
-    from arc.focus_solver import setup_focus_agent
+    import arbor.env.environment as E
+    from arbor.engine.trace import _Tracer
+    from arbor.solver import setup_focus_agent
     orig = E.ARCEnvironment.step
     # 항상-오답 ∧ can_retry True 로 강제 → 후보 소진으로만 멈춰야(무한루프 없음)
     E.ARCEnvironment.step = lambda self, g: (

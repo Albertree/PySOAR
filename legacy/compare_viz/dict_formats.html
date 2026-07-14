@@ -1,0 +1,1063 @@
+<!doctype html><meta charset='utf-8'><title>dict template 0·1·2차 × GRID·OBJECT·PIXEL</title>
+<style>
+body{background:#0d1117;color:#d0d7de;font:13px/1.5 ui-monospace,monospace;margin:0;padding:22px}
+h1{font-size:16px;margin:0 0 4px} .lead{color:#8b949e;margin:0 0 12px;max-width:980px} code{color:#79c0ff}
+.tmpl{border:1px solid #30363d;border-radius:8px;background:#12161c;padding:8px 12px;margin:0 0 14px}
+.tl{color:#d2a8ff;font-size:12px;margin-bottom:4px}
+.tmpl pre{background:transparent;border:0;color:#adbac7;margin:0;font-size:12px;white-space:pre;overflow:auto}
+table.m{border-collapse:collapse;width:100%;table-layout:fixed}
+table.m th,table.m td{border:1px solid #30363d;vertical-align:top;padding:8px 10px}
+table.m th{background:#1c2128;color:#e6edf3;font-size:13px}
+.rh{width:160px;background:#161b22;color:#e6edf3} .rd{color:#8b949e;font-size:11px;font-weight:normal;margin-top:4px}
+.cell{background:#0d1117} .meta{color:#d2a8ff;font-size:11px;margin-bottom:5px}
+pre{background:#010409;border:1px solid #30363d;border-radius:6px;padding:7px 9px;margin:0;
+ overflow:auto;max-height:360px;font-size:11px;color:#c9d1d9;white-space:pre}
+</style>
+<h1>compare dict <b>template</b> — 0·1·2차 × GRID·OBJECT·PIXEL (기존 대체용, 08ed 실제 데이터)</h1>
+<p class=lead>nested dict 구조·<code>id</code>·<code>score</code> 를 <b>유지</b>. 바뀌는 건 <b>2차</b>뿐 —
+잎에서 두 1차 verdict 의 <b>일치(둘 다 DIFF=COMM)</b>만 두고 comp1/comp2 값은 빼며, 각 category 에 그 일치들의
+<b>score(n/total)</b> 를 매긴다. 나머지(0·1차)는 현행 그대로.</p>
+<div class=tmpl><div class=tl>공통 template</div><pre>0차: &lt;node&gt;.to_json()
+1차: { &quot;id&quot;: {&quot;id1&quot;: ID, &quot;id2&quot;: ID},
+       &quot;result&quot;: { &quot;type&quot;: COMM|DIFF, &quot;score&quot;: &quot;n/total&quot;,
+                   &quot;category&quot;: { &lt;prop&gt;: {&quot;type&quot;,&quot;score&quot;,&quot;category&quot;:{…}}   // 내부노드
+                                        | {&quot;type&quot;,&quot;comp1&quot;,&quot;comp2&quot;} } } }    // 잎(값)
+2차: { &quot;id&quot;: {&quot;id1&quot;: &lt;1차 id&gt;, &quot;id2&quot;: &lt;1차 id&gt;},
+       &quot;result&quot;: { &quot;type&quot;: COMM|DIFF, &quot;score&quot;: &quot;n/total&quot;,
+                   &quot;category&quot;: { &lt;prop&gt;: {&quot;type&quot;,&quot;score&quot;,&quot;category&quot;:{…}}   // 내부노드(재귀)
+                                        | {&quot;type&quot;} } } }                    // 잎 = verdict 일치?만</pre></div>
+<table class=m><tr><th></th><th>GRID</th><th>OBJECT</th><th>PIXEL</th></tr><tr><td class=rh><b>0차</b><div class=rd>노드 <b>property dict</b> (to_json).</div></td><td class=cell><div class=meta>P0G0 grid · node.to_json()</div><pre>{
+ &quot;size&quot;: {
+  &quot;height&quot;: 9,
+  &quot;width&quot;: 9
+ },
+ &quot;color&quot;: {
+  &quot;0&quot;: true,
+  &quot;1&quot;: false,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: true,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   0,
+   0,
+   0,
+   &quot;…+6&quot;
+  ],
+  [
+   0,
+   5,
+   0,
+   &quot;…+6&quot;
+  ],
+  [
+   0,
+   5,
+   0,
+   &quot;…+6&quot;
+  ],
+  &quot;…+6&quot;
+ ]
+}</pre></td><td class=cell><div class=meta>P0G0 회색가장긴 object · node.to_json()</div><pre>{
+ &quot;area&quot;: 9,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: false,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: true,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  &quot;…+6&quot;
+ ],
+ &quot;coordinate&quot;: [
+  [
+   0,
+   5
+  ],
+  [
+   1,
+   5
+  ],
+  [
+   2,
+   5
+  ],
+  &quot;…+6&quot;
+ ],
+ &quot;method&quot;: {
+  &quot;univalued&quot;: true,
+  &quot;diagonal&quot;: true,
+  &quot;without_bg&quot;: true
+ },
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 0,
+   &quot;col_index&quot;: 5
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 0,
+   &quot;col_index&quot;: 5
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 5
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 5
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  &quot;…+6&quot;
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 9,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></td><td class=cell><div class=meta>P0G0 pixel(0,5) · node.to_json()</div><pre>{
+ &quot;color&quot;: 5,
+ &quot;coordinate&quot;: {
+  &quot;row_index&quot;: 0,
+  &quot;col_index&quot;: 5
+ }
+}</pre></td></tr><tr><td class=rh><b>1차</b><div class=rd>compare(노드,노드) = <b>{id, result:{type, score, category:{…nested…}}}</b>. 잎에 comp1/comp2 값. <i>현행 유지.</i></div></td><td class=cell><div class=meta>compare(G0, G1) · id·type·score·category (값 포함)</div><pre>{
+ &quot;id&quot;: {
+  &quot;id1&quot;: &quot;T08ed6ac7.P0.G0&quot;,
+  &quot;id2&quot;: &quot;T08ed6ac7.P0.G1&quot;
+ },
+ &quot;result&quot;: {
+  &quot;type&quot;: &quot;DIFF&quot;,
+  &quot;score&quot;: &quot;1/3&quot;,
+  &quot;category&quot;: {
+   &quot;color&quot;: {
+    &quot;type&quot;: &quot;DIFF&quot;,
+    &quot;score&quot;: &quot;5/10&quot;,
+    &quot;category&quot;: {
+     &quot;0&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: true,
+      &quot;comp2&quot;: true
+     },
+     &quot;1&quot;: {
+      &quot;type&quot;: &quot;DIFF&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: true
+     },
+     &quot;2&quot;: {
+      &quot;type&quot;: &quot;DIFF&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: true
+     },
+     &quot;3&quot;: {
+      &quot;type&quot;: &quot;DIFF&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: true
+     },
+     &quot;4&quot;: {
+      &quot;type&quot;: &quot;DIFF&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: true
+     },
+     &quot;5&quot;: {
+      &quot;type&quot;: &quot;DIFF&quot;,
+      &quot;comp1&quot;: true,
+      &quot;comp2&quot;: false
+     },
+     &quot;6&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;7&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;8&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;9&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     }
+    }
+   },
+   &quot;contents&quot;: {
+    &quot;type&quot;: &quot;DIFF&quot;,
+    &quot;comp1&quot;: [
+     [
+      0,
+      0,
+      0,
+      &quot;…+6&quot;
+     ],
+     [
+      0,
+      5,
+      0,
+      &quot;…+6&quot;
+     ],
+     [
+      0,
+      5,
+      0,
+      &quot;…+6&quot;
+     ],
+     &quot;…+6&quot;
+    ],
+    &quot;comp2&quot;: [
+     [
+      0,
+      0,
+      0,
+      &quot;…+6&quot;
+     ],
+     [
+      0,
+      2,
+      0,
+      &quot;…+6&quot;
+     ],
+     [
+      0,
+      2,
+      0,
+      &quot;…+6&quot;
+     ],
+     &quot;…+6&quot;
+    ]
+   },
+   &quot;size&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;2/2&quot;,
+    &quot;category&quot;: {
+     &quot;height&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: 9,
+      &quot;comp2&quot;: 9
+     },
+     &quot;width&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: 9,
+      &quot;comp2&quot;: 9
+     }
+    }
+   }
+  }
+ }
+}</pre></td><td class=cell><div class=meta>compare(G0, G1) · id·type·score·category (값 포함)</div><pre>{
+ &quot;id&quot;: {
+  &quot;id1&quot;: &quot;T08ed6ac7.P0.G0.O1&quot;,
+  &quot;id2&quot;: &quot;T08ed6ac7.P0.G1.O2&quot;
+ },
+ &quot;result&quot;: {
+  &quot;type&quot;: &quot;DIFF&quot;,
+  &quot;score&quot;: &quot;7/9&quot;,
+  &quot;category&quot;: {
+   &quot;area&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;comp1&quot;: 9,
+    &quot;comp2&quot;: 9
+   },
+   &quot;color&quot;: {
+    &quot;type&quot;: &quot;DIFF&quot;,
+    &quot;score&quot;: &quot;8/10&quot;,
+    &quot;category&quot;: {
+     &quot;0&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;1&quot;: {
+      &quot;type&quot;: &quot;DIFF&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: true
+     },
+     &quot;2&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;3&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;4&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;5&quot;: {
+      &quot;type&quot;: &quot;DIFF&quot;,
+      &quot;comp1&quot;: true,
+      &quot;comp2&quot;: false
+     },
+     &quot;6&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;7&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;8&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;9&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     }
+    }
+   },
+   &quot;contents&quot;: {
+    &quot;type&quot;: &quot;DIFF&quot;,
+    &quot;comp1&quot;: [
+     [
+      5
+     ],
+     [
+      5
+     ],
+     [
+      5
+     ],
+     &quot;…+6&quot;
+    ],
+    &quot;comp2&quot;: [
+     [
+      1
+     ],
+     [
+      1
+     ],
+     [
+      1
+     ],
+     &quot;…+6&quot;
+    ]
+   },
+   &quot;coordinate&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;comp1&quot;: [
+     [
+      0,
+      5
+     ],
+     [
+      1,
+      5
+     ],
+     [
+      2,
+      5
+     ],
+     &quot;…+6&quot;
+    ],
+    &quot;comp2&quot;: [
+     [
+      0,
+      5
+     ],
+     [
+      1,
+      5
+     ],
+     [
+      2,
+      5
+     ],
+     &quot;…+6&quot;
+    ]
+   },
+   &quot;method&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;3/3&quot;,
+    &quot;category&quot;: {
+     &quot;diagonal&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: true,
+      &quot;comp2&quot;: true
+     },
+     &quot;univalued&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: true,
+      &quot;comp2&quot;: true
+     },
+     &quot;without_bg&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: true,
+      &quot;comp2&quot;: true
+     }
+    }
+   },
+   &quot;position&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;4/4&quot;,
+    &quot;category&quot;: {
+     &quot;left_bottom&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;2/2&quot;,
+      &quot;category&quot;: {
+       &quot;col_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;comp1&quot;: 5,
+        &quot;comp2&quot;: 5
+       },
+       &quot;row_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;comp1&quot;: 8,
+        &quot;comp2&quot;: 8
+       }
+      }
+     },
+     &quot;left_top&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;2/2&quot;,
+      &quot;category&quot;: {
+       &quot;col_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;comp1&quot;: 5,
+        &quot;comp2&quot;: 5
+       },
+       &quot;row_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;comp1&quot;: 0,
+        &quot;comp2&quot;: 0
+       }
+      }
+     },
+     &quot;right_bottom&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;2/2&quot;,
+      &quot;category&quot;: {
+       &quot;col_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;comp1&quot;: 5,
+        &quot;comp2&quot;: 5
+       },
+       &quot;row_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;comp1&quot;: 8,
+        &quot;comp2&quot;: 8
+       }
+      }
+     },
+     &quot;right_top&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;2/2&quot;,
+      &quot;category&quot;: {
+       &quot;col_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;comp1&quot;: 5,
+        &quot;comp2&quot;: 5
+       },
+       &quot;row_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;comp1&quot;: 0,
+        &quot;comp2&quot;: 0
+       }
+      }
+     }
+    }
+   },
+   &quot;shape&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;comp1&quot;: [
+     [
+      1
+     ],
+     [
+      1
+     ],
+     [
+      1
+     ],
+     &quot;…+6&quot;
+    ],
+    &quot;comp2&quot;: [
+     [
+      1
+     ],
+     [
+      1
+     ],
+     [
+      1
+     ],
+     &quot;…+6&quot;
+    ]
+   },
+   &quot;size&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;2/2&quot;,
+    &quot;category&quot;: {
+     &quot;height&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: 9,
+      &quot;comp2&quot;: 9
+     },
+     &quot;width&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: 1,
+      &quot;comp2&quot;: 1
+     }
+    }
+   },
+   &quot;symmetry&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;4/4&quot;,
+    &quot;category&quot;: {
+     &quot;anti_symm&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;diag_symm&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: false,
+      &quot;comp2&quot;: false
+     },
+     &quot;hori_symm&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: true,
+      &quot;comp2&quot;: true
+     },
+     &quot;verti_symm&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: true,
+      &quot;comp2&quot;: true
+     }
+    }
+   }
+  }
+ }
+}</pre></td><td class=cell><div class=meta>compare(G0, G1) · id·type·score·category (값 포함)</div><pre>{
+ &quot;id&quot;: {
+  &quot;id1&quot;: &quot;T08ed6ac7.P0.G0.X5&quot;,
+  &quot;id2&quot;: &quot;T08ed6ac7.P0.G1.X5&quot;
+ },
+ &quot;result&quot;: {
+  &quot;type&quot;: &quot;DIFF&quot;,
+  &quot;score&quot;: &quot;1/2&quot;,
+  &quot;category&quot;: {
+   &quot;color&quot;: {
+    &quot;type&quot;: &quot;DIFF&quot;,
+    &quot;comp1&quot;: 5,
+    &quot;comp2&quot;: 1
+   },
+   &quot;coordinate&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;2/2&quot;,
+    &quot;category&quot;: {
+     &quot;col_index&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: 5,
+      &quot;comp2&quot;: 5
+     },
+     &quot;row_index&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;comp1&quot;: 0,
+      &quot;comp2&quot;: 0
+     }
+    }
+   }
+  }
+ }
+}</pre></td></tr><tr><td class=rh><b>2차</b><div class=rd>compare(1차,1차) = 같은 nested 구조·id·score 유지. <b>잎은 type 만</b>(둘 다 DIFF=COMM), <b>값 없음</b>, category마다 score.</div></td><td class=cell><div class=meta>compare(1차_P0, 1차_P1) · id·type·score·category (verdict만·둘다DIFF=COMM)</div><pre>{
+ &quot;id&quot;: {
+  &quot;id1&quot;: {
+   &quot;id1&quot;: &quot;T08ed6ac7.P0.G0&quot;,
+   &quot;id2&quot;: &quot;T08ed6ac7.P0.G1&quot;
+  },
+  &quot;id2&quot;: {
+   &quot;id1&quot;: &quot;T08ed6ac7.P1.G0&quot;,
+   &quot;id2&quot;: &quot;T08ed6ac7.P1.G1&quot;
+  }
+ },
+ &quot;result&quot;: {
+  &quot;type&quot;: &quot;COMM&quot;,
+  &quot;score&quot;: &quot;3/3&quot;,
+  &quot;category&quot;: {
+   &quot;color&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;10/10&quot;,
+    &quot;category&quot;: {
+     &quot;0&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;1&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;DIFF&quot;,
+      &quot;comp2&quot;: &quot;DIFF&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;2&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;DIFF&quot;,
+      &quot;comp2&quot;: &quot;DIFF&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;3&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;DIFF&quot;,
+      &quot;comp2&quot;: &quot;DIFF&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;4&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;DIFF&quot;,
+      &quot;comp2&quot;: &quot;DIFF&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;5&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;DIFF&quot;,
+      &quot;comp2&quot;: &quot;DIFF&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;6&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;7&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;8&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;9&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     }
+    }
+   },
+   &quot;contents&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;1/1&quot;,
+    &quot;comp1&quot;: &quot;DIFF&quot;,
+    &quot;comp2&quot;: &quot;DIFF&quot;,
+    &quot;category&quot;: {}
+   },
+   &quot;size&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;2/2&quot;,
+    &quot;category&quot;: {
+     &quot;height&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;width&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     }
+    }
+   }
+  }
+ }
+}</pre></td><td class=cell><div class=meta>compare(1차_P0, 1차_P1) · id·type·score·category (verdict만·둘다DIFF=COMM)</div><pre>{
+ &quot;id&quot;: {
+  &quot;id1&quot;: {
+   &quot;id1&quot;: &quot;T08ed6ac7.P0.G0.O1&quot;,
+   &quot;id2&quot;: &quot;T08ed6ac7.P0.G1.O2&quot;
+  },
+  &quot;id2&quot;: {
+   &quot;id1&quot;: &quot;T08ed6ac7.P1.G0.O1&quot;,
+   &quot;id2&quot;: &quot;T08ed6ac7.P1.G1.O0&quot;
+  }
+ },
+ &quot;result&quot;: {
+  &quot;type&quot;: &quot;COMM&quot;,
+  &quot;score&quot;: &quot;9/9&quot;,
+  &quot;category&quot;: {
+   &quot;area&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;1/1&quot;,
+    &quot;comp1&quot;: &quot;COMM&quot;,
+    &quot;comp2&quot;: &quot;COMM&quot;,
+    &quot;category&quot;: {}
+   },
+   &quot;color&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;10/10&quot;,
+    &quot;category&quot;: {
+     &quot;0&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;1&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;DIFF&quot;,
+      &quot;comp2&quot;: &quot;DIFF&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;2&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;3&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;4&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;5&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;DIFF&quot;,
+      &quot;comp2&quot;: &quot;DIFF&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;6&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;7&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;8&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;9&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     }
+    }
+   },
+   &quot;contents&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;1/1&quot;,
+    &quot;comp1&quot;: &quot;DIFF&quot;,
+    &quot;comp2&quot;: &quot;DIFF&quot;,
+    &quot;category&quot;: {}
+   },
+   &quot;coordinate&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;1/1&quot;,
+    &quot;comp1&quot;: &quot;COMM&quot;,
+    &quot;comp2&quot;: &quot;COMM&quot;,
+    &quot;category&quot;: {}
+   },
+   &quot;method&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;3/3&quot;,
+    &quot;category&quot;: {
+     &quot;diagonal&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;univalued&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;without_bg&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     }
+    }
+   },
+   &quot;position&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;4/4&quot;,
+    &quot;category&quot;: {
+     &quot;left_bottom&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;2/2&quot;,
+      &quot;category&quot;: {
+       &quot;col_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;score&quot;: &quot;1/1&quot;,
+        &quot;comp1&quot;: &quot;COMM&quot;,
+        &quot;comp2&quot;: &quot;COMM&quot;,
+        &quot;category&quot;: {}
+       },
+       &quot;row_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;score&quot;: &quot;1/1&quot;,
+        &quot;comp1&quot;: &quot;COMM&quot;,
+        &quot;comp2&quot;: &quot;COMM&quot;,
+        &quot;category&quot;: {}
+       }
+      }
+     },
+     &quot;left_top&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;2/2&quot;,
+      &quot;category&quot;: {
+       &quot;col_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;score&quot;: &quot;1/1&quot;,
+        &quot;comp1&quot;: &quot;COMM&quot;,
+        &quot;comp2&quot;: &quot;COMM&quot;,
+        &quot;category&quot;: {}
+       },
+       &quot;row_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;score&quot;: &quot;1/1&quot;,
+        &quot;comp1&quot;: &quot;COMM&quot;,
+        &quot;comp2&quot;: &quot;COMM&quot;,
+        &quot;category&quot;: {}
+       }
+      }
+     },
+     &quot;right_bottom&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;2/2&quot;,
+      &quot;category&quot;: {
+       &quot;col_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;score&quot;: &quot;1/1&quot;,
+        &quot;comp1&quot;: &quot;COMM&quot;,
+        &quot;comp2&quot;: &quot;COMM&quot;,
+        &quot;category&quot;: {}
+       },
+       &quot;row_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;score&quot;: &quot;1/1&quot;,
+        &quot;comp1&quot;: &quot;COMM&quot;,
+        &quot;comp2&quot;: &quot;COMM&quot;,
+        &quot;category&quot;: {}
+       }
+      }
+     },
+     &quot;right_top&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;2/2&quot;,
+      &quot;category&quot;: {
+       &quot;col_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;score&quot;: &quot;1/1&quot;,
+        &quot;comp1&quot;: &quot;COMM&quot;,
+        &quot;comp2&quot;: &quot;COMM&quot;,
+        &quot;category&quot;: {}
+       },
+       &quot;row_index&quot;: {
+        &quot;type&quot;: &quot;COMM&quot;,
+        &quot;score&quot;: &quot;1/1&quot;,
+        &quot;comp1&quot;: &quot;COMM&quot;,
+        &quot;comp2&quot;: &quot;COMM&quot;,
+        &quot;category&quot;: {}
+       }
+      }
+     }
+    }
+   },
+   &quot;shape&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;1/1&quot;,
+    &quot;comp1&quot;: &quot;COMM&quot;,
+    &quot;comp2&quot;: &quot;COMM&quot;,
+    &quot;category&quot;: {}
+   },
+   &quot;size&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;2/2&quot;,
+    &quot;category&quot;: {
+     &quot;height&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;width&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     }
+    }
+   },
+   &quot;symmetry&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;4/4&quot;,
+    &quot;category&quot;: {
+     &quot;anti_symm&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;diag_symm&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;hori_symm&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;verti_symm&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     }
+    }
+   }
+  }
+ }
+}</pre></td><td class=cell><div class=meta>compare(1차_P0, 1차_P1) · id·type·score·category (verdict만·둘다DIFF=COMM)</div><pre>{
+ &quot;id&quot;: {
+  &quot;id1&quot;: {
+   &quot;id1&quot;: &quot;T08ed6ac7.P0.G0.X5&quot;,
+   &quot;id2&quot;: &quot;T08ed6ac7.P0.G1.X5&quot;
+  },
+  &quot;id2&quot;: {
+   &quot;id1&quot;: &quot;T08ed6ac7.P1.G0.X16&quot;,
+   &quot;id2&quot;: &quot;T08ed6ac7.P1.G1.X16&quot;
+  }
+ },
+ &quot;result&quot;: {
+  &quot;type&quot;: &quot;COMM&quot;,
+  &quot;score&quot;: &quot;2/2&quot;,
+  &quot;category&quot;: {
+   &quot;color&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;1/1&quot;,
+    &quot;comp1&quot;: &quot;DIFF&quot;,
+    &quot;comp2&quot;: &quot;DIFF&quot;,
+    &quot;category&quot;: {}
+   },
+   &quot;coordinate&quot;: {
+    &quot;type&quot;: &quot;COMM&quot;,
+    &quot;score&quot;: &quot;2/2&quot;,
+    &quot;category&quot;: {
+     &quot;col_index&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     },
+     &quot;row_index&quot;: {
+      &quot;type&quot;: &quot;COMM&quot;,
+      &quot;score&quot;: &quot;1/1&quot;,
+      &quot;comp1&quot;: &quot;COMM&quot;,
+      &quot;comp2&quot;: &quot;COMM&quot;,
+      &quot;category&quot;: {}
+     }
+    }
+   }
+  }
+ }
+}</pre></td></tr></table>

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json, os, sys
 from collections import Counter
 from soar import Agent, Cond, Action, Production
-from arc.expr_solver import build_arckg, _load_value, _tup
+from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.perception.perception import _fg_correspondence, _obj_cc, objects_of
 from procedural_memory.operators.coloring import _recolor_pending
 

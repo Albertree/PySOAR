@@ -18,10 +18,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from arc.dataset import list_tasks, load_task, available  # noqa: E402
-from arc.environment import ARCEnvironment  # noqa: E402
-from arc.memory import Memory  # noqa: E402
-from arc.expr_solver import candidate_grids, PRODUCTIONS  # noqa: E402
+from arbor.env.dataset import list_tasks, load_task, available  # noqa: E402
+from arbor.env.environment import ARCEnvironment  # noqa: E402
+from arbor.env.memory import Memory  # noqa: E402
+from arbor.expr_solver import candidate_grids, PRODUCTIONS  # noqa: E402
 
 
 def run(dataset: str, limit: int | None = None, attempts: int = 3, quiet: bool = True):

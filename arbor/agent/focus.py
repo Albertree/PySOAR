@@ -7,7 +7,7 @@ from soar import Agent
 from procedural_memory.loader import PRODUCTIONS
 from procedural_memory.operators import OPERATOR_BODIES
 from arbor.perception.nav import index_arckg
-from arc.expr_solver import build_arckg
+from arbor.expr_solver import build_arckg
 
 
 def inject_focus(ag):

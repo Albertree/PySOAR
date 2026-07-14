@@ -20,7 +20,7 @@ ARCKG_OK = os.path.isdir(os.path.expanduser("~/Desktop/ARC-solver/ARCKG"))
 @unittest.skipUnless(os.path.isdir(DATA) and ARCKG_OK, "tasks/ARCKG not present")
 class TestSelect(unittest.TestCase):
     def _solve(self, name):
-        from arc.select_solver import solve
+        from arbor.perception.select_solver import solve
         return solve(json.load(open(os.path.join(DATA, f"{name}.json"))))
 
     def test_fixed_attribute(self):
@@ -51,7 +51,7 @@ class TestSelect(unittest.TestCase):
     def test_fine_trace_is_atomic(self):
         # every system change is its own step: phases, rule fire/retract, and
         # individual WME adds are separate events.
-        from arc.fine_trace import fine_trace
+        from arbor.engine.trace import fine_trace
         import os as _os
         easy = _os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a/easy000a.json")
         ev = fine_trace(json.load(open(easy)))
@@ -72,7 +72,7 @@ class TestSelect(unittest.TestCase):
 
     def test_dashboard_data_well_formed(self):
         # the dashboard embeds task data with no leftover injection sentinel
-        from arc.dashboard import task_data, build
+        from debugger.dashboard import task_data, build
         import os as _os
         easy = _os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a/easy000a.json")
         td = task_data("easy000a", json.load(open(easy)))
