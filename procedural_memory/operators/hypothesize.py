@@ -9,6 +9,14 @@ from arbor.perception.perception import _fg_correspondence, _obj_cc, objects_of
 from procedural_memory.operators.coloring import _recolor_pending
 
 
+def pair_cursor(ag):
+    """현재 처리 중인 example pair 인덱스 (S1 ^pair-idx k; 기본 0). per-pair 순회의 커서 —
+    verify 가 한 pair 의 program 을 완성하면 다음 pair 로 +1 하고, 그 값을 hypothesize/synthesize
+    가 읽어 그 pair 의 grid 로 흐름을 다시 탄다 (§1-5: 각 program 이 흐름에서 나오게)."""
+    v = next((v for (i, a, v) in ag.wm if i == "S1" and a == "pair-idx"), None)
+    return int(v) if v is not None else 0
+
+
 def _op_hypothesize(ag):
     """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). object mapping 대응을 얻어,
     각 대응쌍을 **변환 후보(xform)** 로 WM 에 노출한다 — 속성별 COMM/DIFF 를 그대로 실어(규칙이
@@ -17,12 +25,13 @@ def _op_hypothesize(ag):
     (여기 body 는 '지각'만 — 대응/COMM-DIFF 노출 + 시뮬 초기화. 조립 로직은 Python 아님·규칙.)"""
     idx, sid = ag.kg["idx"], ag.stack[-1].id
     root = ag.kg["arckg_root"]
-    p0 = root.example_pairs[0]
+    k = pair_cursor(ag)                                        # 현재 pair (커서)
+    p0 = root.example_pairs[k]
     gid0, gid1 = p0.input_grid.node_id, p0.output_grid.node_id
     ag.wm.add(sid, "sim-pair", p0.node_id)
 
-    g0grid = [list(r) for r in ag.task["train"][0]["input"]]
-    g1grid = [list(r) for r in ag.task["train"][0]["output"]]
+    g0grid = [list(r) for r in ag.task["train"][k]["input"]]
+    g1grid = [list(r) for r in ag.task["train"][k]["output"]]
     if ag.wm.contains(sid, "level", "GRID"):
         # ── GRID hypothesize = **별도 가설공간(H-space) 열기**. 실제 가설 조합·검증은 그 공간 안에서
         #    `synthesize` DSL operator 가 SOAR 사이클로 수행(사용자 2026-07-13). 여기선 공간만 연다.
