@@ -7,9 +7,12 @@ from arbor.reasoning.transform_search import transform_search
 
 def _op_transform_search(ag):
     s = ag.stack[-1].id
-    parent = next((v for (i, a, v) in ag.wm.t if i == s and a == "superstate"), s) \
-        if hasattr(ag.wm, "t") else \
-        next((v for (i, a, v) in ag.wm if i == s and a == "superstate"), s)
+    # transform_search 는 substate 를 push 하지 않는다 — kernel 이 s 위에서 in-place 로 select+apply.
+    # 따라서 s 자신이 synthesize 가 ^transform-search-open 을 쓴 "부모"(=GRID goal 보유 상태)다.
+    # superstate(s) 로 올리면 answer-ready 가 조부모로 새어 generalize/resolve/compose 의
+    # ^answer-ready 게이트를 무력화한다(리뷰 지적 Critical). synthesize contents-DECIDE 분기의
+    # ag.wm.add(parent, "answer-ready", ...) 와 같은 레벨(=s)에 써야 한다.
+    parent = s
     res = transform_search(ag.task["train"])
     ag.wm.add(s, "required-effect", "/".join(res["required"]) or "(none)")
     ag.wm.add(s, "candidates", ",".join(res["candidates"]) or "(none)")
