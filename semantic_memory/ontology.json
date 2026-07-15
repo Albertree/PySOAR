@@ -2,12 +2,94 @@
   "note": "DSL 선언적 명세(semantic 라이브러리). body=procedural 은 procedural_memory/dsl/ 에 있다. transformation 은 동결 2개(make_grid·coloring), 나머지는 조합 재료.",
   "counts": {
     "property": 16,
-    "relation": 1,
-    "selection": 2,
-    "transformation": 2,
+    "relation": 8,
+    "selection": 21,
+    "transformation": 40,
     "util": 5
   },
   "dsl_specs": {
+    "relation": {
+      "adjacent": {
+        "name": "adjacent",
+        "kind": "relation",
+        "in": [
+          "object",
+          "object"
+        ],
+        "out": "bool",
+        "effect": null
+      },
+      "bordering": {
+        "name": "bordering",
+        "kind": "relation",
+        "in": [
+          "object",
+          "grid"
+        ],
+        "out": "bool",
+        "effect": null
+      },
+      "compare": {
+        "name": "compare",
+        "kind": "relation",
+        "in": [
+          "scope_a",
+          "scope_b"
+        ],
+        "out": "receipts",
+        "effect": null
+      },
+      "gravitate": {
+        "name": "gravitate",
+        "kind": "relation",
+        "in": [
+          "object",
+          "object"
+        ],
+        "out": "position",
+        "effect": null
+      },
+      "hmatching": {
+        "name": "hmatching",
+        "kind": "relation",
+        "in": [
+          "object",
+          "object"
+        ],
+        "out": "bool",
+        "effect": null
+      },
+      "manhattan": {
+        "name": "manhattan",
+        "kind": "relation",
+        "in": [
+          "object",
+          "object"
+        ],
+        "out": "int",
+        "effect": null
+      },
+      "position": {
+        "name": "position",
+        "kind": "relation",
+        "in": [
+          "object",
+          "object"
+        ],
+        "out": "position",
+        "effect": null
+      },
+      "vmatching": {
+        "name": "vmatching",
+        "kind": "relation",
+        "in": [
+          "object",
+          "object"
+        ],
+        "out": "bool",
+        "effect": null
+      }
+    },
     "property": {
       "area_of": {
         "name": "area_of",
@@ -154,7 +236,267 @@
         "effect": null
       }
     },
+    "selection": {
+      "asindices": {
+        "name": "asindices",
+        "kind": "selection",
+        "in": [
+          "grid"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "backdrop": {
+        "name": "backdrop",
+        "kind": "selection",
+        "in": [
+          "object"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "box": {
+        "name": "box",
+        "kind": "selection",
+        "in": [
+          "object"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "colorfilter": {
+        "name": "colorfilter",
+        "kind": "selection",
+        "in": [
+          "list[object]",
+          "color"
+        ],
+        "out": "list[object]",
+        "effect": null
+      },
+      "connect": {
+        "name": "connect",
+        "kind": "selection",
+        "in": [
+          "position",
+          "position"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "corners": {
+        "name": "corners",
+        "kind": "selection",
+        "in": [
+          "object"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "delta": {
+        "name": "delta",
+        "kind": "selection",
+        "in": [
+          "object"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "dneighbors": {
+        "name": "dneighbors",
+        "kind": "selection",
+        "in": [
+          "position"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "elements_at": {
+        "name": "elements_at",
+        "kind": "selection",
+        "in": [
+          "anchor",
+          "level"
+        ],
+        "out": "list[node]",
+        "effect": null
+      },
+      "fgpartition": {
+        "name": "fgpartition",
+        "kind": "selection",
+        "in": [
+          "grid"
+        ],
+        "out": "list[object]",
+        "effect": null
+      },
+      "frontiers": {
+        "name": "frontiers",
+        "kind": "selection",
+        "in": [
+          "grid"
+        ],
+        "out": "list[object]",
+        "effect": null
+      },
+      "ineighbors": {
+        "name": "ineighbors",
+        "kind": "selection",
+        "in": [
+          "position"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "neighbors": {
+        "name": "neighbors",
+        "kind": "selection",
+        "in": [
+          "position"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "objects": {
+        "name": "objects",
+        "kind": "selection",
+        "in": [
+          "grid"
+        ],
+        "out": "list[object]",
+        "effect": null
+      },
+      "occurrences": {
+        "name": "occurrences",
+        "kind": "selection",
+        "in": [
+          "grid",
+          "object"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "ofcolor": {
+        "name": "ofcolor",
+        "kind": "selection",
+        "in": [
+          "grid",
+          "color"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "partition": {
+        "name": "partition",
+        "kind": "selection",
+        "in": [
+          "grid"
+        ],
+        "out": "list[object]",
+        "effect": null
+      },
+      "select": {
+        "name": "select",
+        "kind": "selection",
+        "in": [
+          "anchor",
+          "level",
+          "pred"
+        ],
+        "out": "scope",
+        "effect": null
+      },
+      "shoot": {
+        "name": "shoot",
+        "kind": "selection",
+        "in": [
+          "position",
+          "position"
+        ],
+        "out": "indices",
+        "effect": null
+      },
+      "sizefilter": {
+        "name": "sizefilter",
+        "kind": "selection",
+        "in": [
+          "list[object]",
+          "int"
+        ],
+        "out": "list[object]",
+        "effect": null
+      },
+      "toindices": {
+        "name": "toindices",
+        "kind": "selection",
+        "in": [
+          "object"
+        ],
+        "out": "indices",
+        "effect": null
+      }
+    },
     "transformation": {
+      "asobject": {
+        "name": "asobject",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "object",
+        "effect": null
+      },
+      "bottomhalf": {
+        "name": "bottomhalf",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "crop",
+          "kind": "grid"
+        }
+      },
+      "canvas": {
+        "name": "canvas",
+        "kind": "transformation",
+        "in": [
+          "color",
+          "size"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "create",
+          "kind": "grid"
+        }
+      },
+      "cellwise": {
+        "name": "cellwise",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "grid",
+          "color"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "fill",
+          "kind": "grid"
+        }
+      },
+      "cmirror": {
+        "name": "cmirror",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "reflect",
+          "kind": "grid"
+        }
+      },
       "coloring": {
         "name": "coloring",
         "kind": "transformation",
@@ -166,6 +508,144 @@
         "out": "grid",
         "effect": {
           "verb": "recolor",
+          "kind": "grid"
+        }
+      },
+      "compress": {
+        "name": "compress",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "downscale",
+          "kind": "grid"
+        }
+      },
+      "cover": {
+        "name": "cover",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "object"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "fill",
+          "kind": "grid"
+        }
+      },
+      "crop": {
+        "name": "crop",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "position",
+          "size"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "crop",
+          "kind": "grid"
+        }
+      },
+      "dmirror": {
+        "name": "dmirror",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "reflect",
+          "kind": "grid"
+        }
+      },
+      "downscale": {
+        "name": "downscale",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "size"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "downscale",
+          "kind": "grid"
+        }
+      },
+      "fill": {
+        "name": "fill",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "color",
+          "object"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "fill",
+          "kind": "grid"
+        }
+      },
+      "hconcat": {
+        "name": "hconcat",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "concat",
+          "kind": "grid"
+        }
+      },
+      "hmirror": {
+        "name": "hmirror",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "reflect",
+          "kind": "grid"
+        }
+      },
+      "hsplit": {
+        "name": "hsplit",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "size"
+        ],
+        "out": "list[grid]",
+        "effect": null
+      },
+      "hupscale": {
+        "name": "hupscale",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "size"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "upscale",
+          "kind": "grid"
+        }
+      },
+      "lefthalf": {
+        "name": "lefthalf",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "crop",
           "kind": "grid"
         }
       },
@@ -181,41 +661,280 @@
           "verb": "create",
           "kind": "grid"
         }
-      }
-    },
-    "relation": {
-      "compare": {
-        "name": "compare",
-        "kind": "relation",
+      },
+      "move": {
+        "name": "move",
+        "kind": "transformation",
         "in": [
-          "scope_a",
-          "scope_b"
+          "grid",
+          "object",
+          "position"
         ],
-        "out": "receipts",
-        "effect": null
-      }
-    },
-    "selection": {
-      "elements_at": {
-        "name": "elements_at",
-        "kind": "selection",
+        "out": "grid",
+        "effect": {
+          "verb": "translate",
+          "kind": "grid"
+        }
+      },
+      "normalize": {
+        "name": "normalize",
+        "kind": "transformation",
         "in": [
-          "anchor",
-          "level"
+          "object"
         ],
-        "out": "list[node]",
+        "out": "object",
         "effect": null
       },
-      "select": {
-        "name": "select",
-        "kind": "selection",
+      "paint": {
+        "name": "paint",
+        "kind": "transformation",
         "in": [
-          "anchor",
-          "level",
-          "pred"
+          "grid",
+          "object"
         ],
-        "out": "scope",
+        "out": "grid",
+        "effect": {
+          "verb": "fill",
+          "kind": "grid"
+        }
+      },
+      "recolor": {
+        "name": "recolor",
+        "kind": "transformation",
+        "in": [
+          "color",
+          "object"
+        ],
+        "out": "object",
+        "effect": {
+          "verb": "recolor",
+          "kind": "grid"
+        }
+      },
+      "replace": {
+        "name": "replace",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "color",
+          "color"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "recolor",
+          "kind": "grid"
+        }
+      },
+      "righthalf": {
+        "name": "righthalf",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "crop",
+          "kind": "grid"
+        }
+      },
+      "rot180": {
+        "name": "rot180",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "rotate",
+          "kind": "grid"
+        }
+      },
+      "rot270": {
+        "name": "rot270",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "rotate",
+          "kind": "grid"
+        }
+      },
+      "rot90": {
+        "name": "rot90",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "rotate",
+          "kind": "grid"
+        }
+      },
+      "shift": {
+        "name": "shift",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "object",
+          "position"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "translate",
+          "kind": "grid"
+        }
+      },
+      "subgrid": {
+        "name": "subgrid",
+        "kind": "transformation",
+        "in": [
+          "object",
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "crop",
+          "kind": "grid"
+        }
+      },
+      "switch": {
+        "name": "switch",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "color",
+          "color"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "recolor",
+          "kind": "grid"
+        }
+      },
+      "toobject": {
+        "name": "toobject",
+        "kind": "transformation",
+        "in": [
+          "object",
+          "grid"
+        ],
+        "out": "object",
         "effect": null
+      },
+      "tophalf": {
+        "name": "tophalf",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "crop",
+          "kind": "grid"
+        }
+      },
+      "trim": {
+        "name": "trim",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "downscale",
+          "kind": "grid"
+        }
+      },
+      "underfill": {
+        "name": "underfill",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "color",
+          "object"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "fill",
+          "kind": "grid"
+        }
+      },
+      "underpaint": {
+        "name": "underpaint",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "object"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "fill",
+          "kind": "grid"
+        }
+      },
+      "upscale": {
+        "name": "upscale",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "size"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "upscale",
+          "kind": "grid"
+        }
+      },
+      "vconcat": {
+        "name": "vconcat",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "concat",
+          "kind": "grid"
+        }
+      },
+      "vmirror": {
+        "name": "vmirror",
+        "kind": "transformation",
+        "in": [
+          "grid"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "reflect",
+          "kind": "grid"
+        }
+      },
+      "vsplit": {
+        "name": "vsplit",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "size"
+        ],
+        "out": "list[grid]",
+        "effect": null
+      },
+      "vupscale": {
+        "name": "vupscale",
+        "kind": "transformation",
+        "in": [
+          "grid",
+          "size"
+        ],
+        "out": "grid",
+        "effect": {
+          "verb": "upscale",
+          "kind": "grid"
+        }
       }
     },
     "util": {

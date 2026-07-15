@@ -43,3 +43,6 @@ def localize(ref: dict, cur: dict) -> dict:
     (정렬이 이름으로 공짜인 presence-dict 라 쉬움. grid·object 면 정렬이 비싸짐.)
     """
     return {k: (cur.get(k), ref[k]) for k in ref if cur.get(k) != ref[k]}
+
+
+from procedural_memory.dsl.relation import hodel_relation  # noqa: F401,E402  (@dsl 발화)

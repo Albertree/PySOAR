@@ -27,3 +27,5 @@ def select(anchor, level, pred=None):
     예: select(pair,"grid",role==out)=비교 범위 / select(grid,"object",pred)=객체 선택."""
     items = elements_at(anchor, level)
     return filter_(items, pred) if pred is not None else list(items)
+
+from procedural_memory.dsl.selection import hodel_selection  # noqa: F401,E402  (@dsl 발화)
