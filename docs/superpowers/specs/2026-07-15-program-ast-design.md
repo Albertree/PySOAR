@@ -106,6 +106,27 @@ anti-unify 후 TASK.solution (DIFF slot 승격 → resolve 식):
 }
 ```
 
+### 3.4 blob/cellset 계열 (compress·object-level program) — 스키마 확장 (2026-07-15, §5 승인)
+
+이 브랜치(seokki-refactor)는 `compress` operator 로 pixel program 을 **연결 덩어리(blob)** 로 축약한
+object-level program 계열을 갖는다. 형식: `B0 = [7,8,13,14]` + `apply_DSL(tfg0, coloring, B0, 3)`
+(cellset 을 한 덩어리로 채색, `.coord` 없음). anti-unify 는 `_antiunify_blobs`(색 COMM 정렬 → cellset
+DIFF = `cellset` slot), resolve 는 `_resolve_cellset`(input object 유래 식). AST 는 이 계열도 담는다:
+
+- **target 확장**: pixel = `{"ref":"pixel","index":<leaf>}` · **cellset = `{"ref":"cellset","cells":<leaf>}`**
+  where `cells` leaf ∈ `{"const":[i,...]}` (concrete) | `{"var":"?cellsN"}` (anti-unified).
+- op 은 `coloring` 그대로(frozen). 실행 시 cellset 의 각 셀을 단일셀 coloring 조합(compress 규약).
+- 예:
+  ```json
+  {"call": "coloring", "args": {
+     "target": {"ref": "cellset", "cells": {"const": [7, 8, 13, 14]}},
+     "color":  {"const": 3}}}
+  ```
+- anti-unify 후: cells DIFF → `{"var": "?cells0"}`, color COMM → const 유지. slot kind = `cellset`.
+- `to_source(blob AST)`: 전부 const cells → **compress def-형**(`B{j}=[...]` defs + steps; `_parse_blob_program`
+  정규식 round-trip 보존) · var 포함(solution) → **render_skeleton inline-형**(defs 없이 `apply_DSL(..,[..]|?slot,c)`).
+- pixel 계열과 blob 계열은 **섞이지 않는다**(antiunify 가 한 계열만 고른다) — 계열 내 구조는 균일.
+
 ### 3.3 저장/직렬화
 - WM 키 불변: `(<pair>.property, "program", json.dumps(ast))`, `(<task>, "solution", json.dumps(ast))`.
 - 빈 슬롯 sentinel: 현 `"{}"` 문자열 → `null` 로 통일 (모든 소비처가 `null`/빈 body 를 "미합성"으로 인식).
@@ -122,6 +143,8 @@ anti-unify 후 TASK.solution (DIFF slot 승격 → resolve 식):
 - 문자열 exec 없음. 현 `execute_solution` 과 **동일 결과**(행동보존)를 내되 입력이 AST.
 - accessor 매핑: `object.color`→`color_of`, `pixel.coord`→`coordinate_of`, `grid.objects[k]`→`objects_of(grid)[k]`
   를 인터프리터 내부 테이블로 SPECS body 에 연결. `.coord`↔`.coordinate` 이름차는 여기서 흡수.
+- **cellset 분기 (§3.4)**: `target.ref=="cellset"` 이면 `cells` leaf 를 해소해(const list | var→choice fn)
+  집합의 각 셀을 색칠 — 현 `execute_solution` 의 `skeleton.kind=="blob"` 분기(antiunify.py:463-476)와 동일 산술.
 
 ### 4.2 표시용 header 자동생성 `render_header(ast, arckg) -> str`
 - AST 를 훑어 실제 등장하는 op·accessor 집합 수집 → 각각 `registry.spec(name)` 로 시그니처 라인 방출.
@@ -142,15 +165,18 @@ anti-unify 후 TASK.solution (DIFF slot 승격 → resolve 식):
      `{"var": "?slotN"}` 로 승격 + `slots[name] = {kind, pos, values:[per-pair]}`.
   3. **resolve**: `antiunify.py::resolve_slot`(G0 유래 식 생성→train 적용→대조→생존; §4-1) **그대로**. slot 이
      이미 `{var}` 형이라 입력 정리만.
-- **compare 재사용 범위 (구현 시 확정)**: ARCKG `arbor/perception/arckg/comparison.py::compare` 를 AST dict
-  에 직접 적용할지, 얇은 어댑터로 감쌀지는 그 재귀 계약(입력이 노드 vs 일반 dict) 확인 후 결정. 최소한
-  §2-2 의 "compare 결과(COMM/DIFF category)" 형태를 산출해야 한다. — **구현 P3 의 첫 작업.**
+- **compare 재사용 범위 (확정)**: ARCKG `comparison.compare` 직접 사용이 아니라 **얇은 program 전용 구조비교**
+  (`ops_of_ast` + 검증된 `_align`)를 택한다(재귀 계약 불확실·행동보존 위험 회피). §2-2 의 COMM/DIFF 형태는 유지.
+- **blob 계열 dispatch (§3.4)**: `antiunify_ast` 는 body 의 target.ref 로 계열을 판별 — 전부 `cellset` 이면
+  blob 경로(`_align_blobs` 재사용·색 COMM 정렬·cellset slot), 아니면 pixel 경로. resolve 는 기존
+  `resolve_slot`(cellset kind → `_resolve_cellset`) 를 **그대로 재사용**.
 
 ## 6. emit·consumer 이행 (행동보존)
 
-- **emit 5곳** → 문자열 join 대신 AST 빌드:
+- **emit 6곳** → 문자열 join 대신 AST 빌드:
   `program.py::_pixel_residual_program`·`::_global_recolor_program` · `coloring.py::_op_coloring` ·
-  `antiunify.py::render_skeleton`(→ AST 반환) · `compose.py`.
+  `antiunify.py::render_skeleton`(pixel+blob 분기, → AST 반환) · `compose.py` ·
+  **`compress.py::_blob_program`(blob/cellset — §3.4)**.
 - **consumer** → AST 소비:
   `antiunify.py::execute_solution`(→ `execute(ast)`) · `generalize`(AST 비교) · `verify` · `compose` · `resolve`.
 - **안전장치**: `to_source(ast)` 유지 → 이행 중 아직 문자열 읽는 지점/기존 테스트·리포트 무손상.
