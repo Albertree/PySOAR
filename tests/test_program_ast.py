@@ -111,3 +111,17 @@ class TestBlobCellset(unittest.TestCase):
         )
         out = P.execute(ast, [[0, 0], [0, 0]], choice={"?cells0": (lambda g: [3])})
         self.assertEqual(out, [[0, 0], [0, 7]])             # idx 3 = (1,1)
+
+
+class TestHeader(unittest.TestCase):
+    def test_header_lists_used_op_and_input_grid(self):
+        ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        h = P.render_header(ast, [[0, 0], [0, 0]])
+        self.assertIn("coloring", h)                       # 사용한 op 시그니처
+        self.assertIn("pixels_of", h)                      # pixel ref → pixels_of accessor
+        self.assertIn("input_grid = [[0, 0], [0, 0]]", h)  # 현 grid 스냅샷
+
+    def test_header_omits_unused_object_accessor(self):
+        ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        h = P.render_header(ast, [[0, 0], [0, 0]])
+        self.assertNotIn("objects_of", h)                  # object 미사용 → 생략

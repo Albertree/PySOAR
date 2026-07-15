@@ -137,3 +137,34 @@ def execute(ast, grid_in, choice=None):
         if 0 <= r < H and 0 <= c < W:
             grid[r][c] = col
     return grid
+
+
+# ── render_header ───────────────────────────────────────
+# level ref → 필요한 accessor DSL 이름
+_LEVEL_ACCESSOR = {"pixel": "pixels_of", "object": "objects_of"}
+
+
+def _sig(name):
+    """SPECS 명세 → 한 줄 시그니처 (없으면 이름만)."""
+    from procedural_memory.dsl.registry import SPECS
+    s = SPECS.get(name)
+    if not s:
+        return f"# {name}(...)"
+    return f"# {name}({', '.join(s['in'])}) -> {s['out']}"
+
+
+def render_header(ast, grid_in) -> str:
+    """AST 가 쓰는 op·accessor 시그니처 + 현 input_grid. 저장 안 함(표시/복붙용)."""
+    import json as _json
+    ops, accs = [], []
+    for s in (ast.get("body") or []):
+        if s["call"] not in ops:
+            ops.append(s["call"])
+        lvl = s["args"]["target"]["ref"]
+        acc = _LEVEL_ACCESSOR.get(lvl)
+        if acc and acc not in accs:
+            accs.append(acc)
+    lines = ["# --- DSL (used) ---"]
+    lines += [_sig(n) for n in ops + accs]
+    lines += ["# --- input (this pair) ---", f"input_grid = {_json.dumps(grid_in)}"]
+    return "\n".join(lines)
