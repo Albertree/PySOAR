@@ -82,8 +82,13 @@ def grid_program_from_decide(dec):
     cnote = dec["contents"].get("note")
     if cnote == "항등":
         c_leaf = keep("contents")
-    else:                                  # 상수출력·전역remap → const grid (검증된 value)
-        c_leaf = const(dec["contents"]["value"])
+    elif cnote == "상수출력":
+        c_leaf = const(dec["contents"]["value"])          # 입력-무관 고정 grid → 검증된 const 로 정직
+    else:
+        # 전역remap(등 입력-종속): dec["contents"]["value"] 는 test 입력에 remap 을 적용한 결과라, 이걸
+        # const 로 구워 전 pair 에 물질화하면 train pair 는 자기 출력을 재현 못 함(비정직 §6/§1-5).
+        # None 반환 → 호출측(hypothesize)이 하강해 기존 honest 경로(synthesize/_global_recolor_program)를 타게.
+        return None
     return grid_program(_size_leaf(dec["size"]), _color_leaf(dec["color"]), c_leaf)
 
 

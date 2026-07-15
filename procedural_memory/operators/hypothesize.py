@@ -45,6 +45,15 @@ def _op_hypothesize(ag):
         dec = _grid_decide(ag.task["train"], ag.task["test"][0]["input"])
         gp = grid_program_from_decide(dec)
         if gp is not None:                                     # all-3 결정 → 3-property program
+            hn = 0          # a/b 탐색 후보를 WM 에 노출(spec §13/§1-5 visibility) — synthesize.py:27-44 미러
+            for prop in ("size", "color", "contents"):
+                for kind, pred, ok in dec[prop]["cands"]:      # 생성된 가설(시도·기각 후보) = H1,H2…
+                    hn += 1
+                    hh = f"{sid}.H{hn}"
+                    ag.wm.add(sid, "hypothesis", hh)
+                    ag.wm.add(hh, "slot", prop)
+                    ag.wm.add(hh, "rule", kind); ag.wm.add(hh, "predict", str(pred))
+                    ag.wm.add(hh, "verdict", "survive" if ok else "reject")
             gpj = json.dumps(gp)
             for k2, pp in enumerate(root.example_pairs):       # per-pair 물질화 (같은 3속성 골격)
                 if k2 >= len(ag.task["train"]):
