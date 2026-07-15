@@ -62,3 +62,11 @@ def lefthalf(grid):
 @dsl("transformation", ["grid"], "grid", effect=effect("crop", "grid"))
 def righthalf(grid):
     return [list(r[len(grid[0]) // 2 + len(grid[0]) % 2:]) for r in grid]
+
+@dsl("transformation", ["grid", "color", "color"], "grid", effect=effect("recolor", "grid"))
+def replace(grid, replacee, replacer):
+    return [[replacer if v == replacee else v for v in r] for r in grid]
+
+@dsl("transformation", ["grid", "color", "color"], "grid", effect=effect("recolor", "grid"))
+def switch(grid, a, b):
+    return [[a if v == b else (b if v == a else v) for v in r] for r in grid]

@@ -21,5 +21,16 @@ class TestParamFree(unittest.TestCase):
         self.assertEqual(body("dmirror")(g), [[1,3],[2,4]])
         self.assertEqual(body("tophalf")([[1,1],[2,2],[3,3]]), [[1,1]])
 
+class TestRecolor(unittest.TestCase):
+    def test_registered(self):
+        import procedural_memory.dsl as d
+        for n in ("replace", "switch"):
+            self.assertEqual(d.SPECS[n]["effect"], {"verb": "recolor", "kind": "grid"})
+
+    def test_bodies(self):
+        from procedural_memory.dsl.registry import body
+        self.assertEqual(body("replace")([[1,2],[2,1]], 2, 5), [[1,5],[5,1]])
+        self.assertEqual(body("switch")([[1,2],[2,1]], 1, 2), [[2,1],[1,2]])
+
 if __name__ == "__main__":
     unittest.main()
