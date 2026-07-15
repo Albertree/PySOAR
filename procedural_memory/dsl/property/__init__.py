@@ -59,6 +59,18 @@ def contents(grid):
     return grid.to_json()["contents"]
 
 
+@dsl("property", ["grid"], "int")
+def height(grid):
+    """grid 높이 (size 의 투영 — 새 데이터 아님)."""
+    return size(grid)["height"]
+
+
+@dsl("property", ["grid"], "int")
+def width(grid):
+    """grid 너비 (size 의 투영 — 새 데이터 아님)."""
+    return size(grid)["width"]
+
+
 # ── OBJECT-level (ARCKG Object 8 property) ──────────────────
 @dsl("property", ["object"], "area")
 def area_of(obj):
