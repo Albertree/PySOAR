@@ -64,14 +64,15 @@ def _op_compress(ag):
         if k >= len(ag.task["train"]):
             break
         ppid = f"{p.node_id}.property"
-        code = as_source(next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None))
+        raw = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+        code = as_source(raw)
         if not code or code == "{}":
             continue
         W = len(ag.task["train"][k]["input"][0])
         blob = _blob_program(code, W)
         if blob is None:
             continue
-        ag.wm.remove(ppid, "program", code)
+        ag.wm.remove(ppid, "program", raw)     # was: code
         ag.wm.add(ppid, "program", blob)                  # pixel → blob(객체) program
         n += 1
     for (i, a, v) in list(ag.wm.matching(identifier=sid, attr="needs-compress")):
