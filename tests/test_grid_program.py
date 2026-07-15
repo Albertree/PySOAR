@@ -73,3 +73,19 @@ class TestGridDSLRegistered(unittest.TestCase):
     def test_frozen_atoms_still_two(self):   # make_grid·coloring 동결 불변
         from procedural_memory.dsl.registry import SPECS
         self.assertIn("make_grid", SPECS); self.assertIn("coloring", SPECS)
+
+
+class TestGridAntiunify(unittest.TestCase):
+    def test_identical_grid_programs_no_slots(self):
+        a = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[0, 2]]))
+        b = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[0, 2]]))
+        sk, slots = P.antiunify_ast([a, b])
+        self.assertEqual(slots, {})
+        self.assertTrue(P._is_grid_body(sk["body"]))
+
+    def test_diff_contents_becomes_slot(self):
+        a = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[0, 2]]))
+        b = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[2, 0]]))
+        sk, slots = P.antiunify_ast([a, b])
+        self.assertIn("?contents", slots)
+        self.assertEqual(sk["body"][2]["args"]["contents"], {"var": "?contents"})

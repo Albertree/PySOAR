@@ -301,14 +301,37 @@ def ops_of_ast(ast):
 
 
 def antiunify_ast(asts):
-    """정렬된 per-pair AST 들 → (skeleton_ast, slots). 계열 판별: 전부 cellset body → blob 경로,
-    아니면 pixel 경로. 위치별 COMM=상수, DIFF=var 승격. op 수 다르면 (None, None)."""
+    """정렬된 per-pair AST 들 → (skeleton_ast, slots). 계열 판별: 전부 grid body → grid 경로,
+    전부 cellset body → blob 경로, 아니면 pixel 경로. 위치별 COMM=상수, DIFF=var 승격.
+    op 수 다르면 (None, None)."""
     valid = [a for a in asts if a and a.get("body")]
     if len(valid) < 2:
         return None, None
+    if all(_is_grid_body(a["body"]) for a in valid):
+        return _antiunify_ast_grid(valid)
     if all(_is_cellset_body(a["body"]) for a in valid):
         return _antiunify_ast_blob(valid)
     return _antiunify_ast_pixel(valid)
+
+
+def _antiunify_ast_grid(asts):
+    """grid(3-property) AST 들 → (skeleton, slots). pixel/blob 처럼 op 위치가 아니라
+    property key(size/color/contents) 별로 비교: leaf 동일=COMM(그대로 유지), 다르면
+    DIFF → {"var":"?<prop>"} + slot."""
+    import json as _json
+    props = [("set_gridsize", "size"), ("set_gridcolor", "color"), ("set_gridcontents", "contents")]
+    body, slots = [], {}
+    partsN = [{s["call"]: s["args"] for s in a["body"]} for a in asts]
+    for call, key in props:
+        leaves = [pn[call][key] for pn in partsN]
+        same = all(_json.dumps(x, sort_keys=True) == _json.dumps(leaves[0], sort_keys=True) for x in leaves)
+        if same:
+            leaf = leaves[0]
+        else:
+            leaf = {"var": f"?{key}"}
+            slots[f"?{key}"] = {"kind": key, "pos": key, "values": leaves}
+        body.append({"call": call, "args": {key: leaf}})
+    return program(body, slots=slots), slots
 
 
 def _antiunify_ast_pixel(asts):
