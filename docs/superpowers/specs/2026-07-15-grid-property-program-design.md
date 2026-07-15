@@ -109,13 +109,27 @@ execute(set_gridsize(sz) ∘ set_gridcolor(c) ∘ set_gridcontents(ct), G0)
 - **하강(Phase 2)**: contents DESCEND → object/pixel 하강 → **그 pixel/blob program 이 이 arg 로** 들어감.
   즉 지금의 coloring program 이 "contents 실현"으로 흡수. (Phase 1 은 grid-결정 case 만; 하강 case 는 현행 유지.)
 
-## 7. 과정(operator) — 슬롯을 program emit 으로
+## 7. 과정(operator) — compare 는 비교만, hypothesize 가 관계→program (골조 정정 2026-07-16)
 
-- `synthesize`(예측) + `set_grid_*`(emit) operator 가 **opaque 슬롯 대신 set_grid* DSL 호출을 PAIR.program 에 emit**.
-  dead `slot-grid_*` scaffold 를 완성. contents 도 대칭 — `set_grid_contents` 를 operator 로 추가하거나 synthesize 에
-  통합(구현 시 결정; §2-4 상 operator 하나 추가가 자연스러우면 추가, §7 절차 불필요한 범위 — 기존 slot operator 확장).
-- **operator ≠ DSL**: operator=예측·emit 과정, DSL=emit 되는 program 어휘. 중복 아님(님 Q5).
-- per-pair 순회(기존 `S1 ^pair-idx` 커서)로 각 example pair 가 자기 3-property program 을 emit → verify → generalize.
+> **구현 중 발견(중요):** 정답 예측이 두 곳에 흩어져 있고 compare 안에 **단락(shortcut)**이 있었다 —
+> `compare.py::_predict_test_output`(분기①: 두 train 출력이 COMM(상수) → **답 직접** + placeholder
+> `TASK.solution="output=상수(불변)"`; 분기②: size/color 부분예측 → 하강). **a/b 는 분기①에서 답이 나와
+> synthesize 까지 안 내려감**(synthesize 의 contents-DECIDE 는 9태스크 통틀어 0회). c–h 는 분기②→하강→GRID
+> hypothesize→`synthesize._grid_decide`(또 판정)→contents DESCEND→object/pixel. 판정이 compare 와 synthesize
+> **두 곳**에 있다.
+
+**정정된 골조 (사용자 2026-07-16 — 각 함수 임무 명확화):**
+- **compare = 비교만.** cross-pair 관계(출력끼리 COMM/DIFF, size/color 의 within·change 등)를 WM/`ag.kg` 에
+  남기고 **끝**. **정답 예측·answer-ready·branch 없음.** `_predict_test_output` 을 compare 에서 **제거**.
+- **hypothesize = 비교 결과로 추론.** compare 가 남긴 관계를 읽어 G1 의 3속성(size/color/contents)을 정한다:
+  - **셋 다 정해짐** → **3-property program(set_grid*) 생성**(per-pair) → verify/generalize/compose 로 답.
+  - **하나라도 미결(부분예측)** → **하강.** 부분예측 program 은 contents 없이 동작 못 함 = "grid 를 예측했다"고
+    볼 수 없음(§P1 막혀야 하강). a/b(상수출력)=셋 다 정해짐→program; c–h=contents 미결→하강(현행 pixel 경로).
+- 즉 `_predict_test_output` 의 판정 로직(①·②)이 **hypothesize 로 이관**되고, 판정 결과가 **직접 답이 아니라
+  program** 이 된다. GRID 하강 시의 `synthesize._grid_decide` 판정도 이 hypothesize 판정으로 통합(hypothesize 가
+  `_grid_decide`/cross 관계를 써서 3속성 결정 → all-3: program / else: 하강).
+- **operator ≠ DSL**: operator(compare=비교 / hypothesize=추론·생성)=과정, DSL(set_grid*)=program 어휘.
+- per-pair 순회(`S1 ^pair-idx`)로 각 example pair 가 3-property program emit → generalize.
 
 ## 8. 실행 + anti-unify + compose
 
@@ -127,8 +141,11 @@ execute(set_gridsize(sz) ∘ set_gridcolor(c) ∘ set_gridcontents(ct), G0)
 
 ## 9. 행동 변화 + 골든 재기준화 (사용자 승인)
 
-- a/b 등 grid-결론 태스크가 이제 program→generalize→resolve→compose 파이프라인을 탄다 → **solve 흐름·step 수 변경**.
-- `tests/golden_steps.json` 을 **새 행동으로 재캡처**(재기준화). 재기준화 후 그 값이 새 오라클.
+- **구조 변경**(§7): compare 에서 `_predict_test_output` 단락 제거 + 판정을 hypothesize 로 이관 → a/b(상수출력)와
+  c–h(grid 단계) **모두** solve 흐름·step 수가 바뀐다(a/b 는 compare 답→hypothesize program; c–h 는 판정 위치 이동).
+- a/b 는 이제 3-property program→(generalize)→답. c–h 는 여전히 하강 pixel program(판정만 hypothesize 로).
+- `tests/golden_steps.json` 을 **새 행동으로 재캡처**(재기준화). 재기준화 후 그 값이 새 오라클. **정답(✓풀림) 불변**이
+  최우선 게이트(a/b·c–h 다 여전히 풀려야). made000b/survey 무크래시.
 - 답 정확성: a/b 가 여전히 정답(✓풀림)이어야 한다(program 실행 결과 = 기존 cv 답과 일치). survey 17 렌더 무크래시.
 - 하네스 §2-4 부합: a/b 가 답을 직접 뱉는 대신 정직한 과정(3-property 예측→program→solution)을 거침 → step 수가
   다른 문제와 달라지는 게 오히려 옳음.

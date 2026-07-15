@@ -482,145 +482,116 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ---
 
-## Task 6: synthesize — grid-결정 태스크에 3-property PAIR.program 물질화 (추가적)
+## Task 6: compare 는 비교만 — `_predict_test_output` 판정을 hypothesize 로 이관 ⚠️ 핵심 리스크 (골조 정정)
 
-`synthesize._op_synthesize` 의 contents-DECIDE 분기에서, 지금의 placeholder/부분 program 대신 **3-property AST** 를 각 example pair 의 `PAIR.program` 에 쓴다. **답 경로는 유지**(추가적) → 이 태스크는 골든 보존이 목표.
+정답 예측 단락을 compare 에서 들어내고, 판정(관계→3속성)을 hypothesize 로 옮긴다. **all-3 → 3-property
+program 생성, 부분 → 하강.** SOAR 흐름 변경 → **골든 재기준화**. (스펙 §7 정정 2026-07-16.)
+
+> **⚠️ 이 태스크는 솔버 핵심 흐름(compare↔hypothesize 경계)을 바꾼다 — Tasks 1-5(격리)와 성격이 다르다.**
+> 착수 전 `ARBOR_HARNESS.md` 재독. bite-size 로 안 쪼개지거나 c–h 정답이 깨지면 **멈추고 사용자와 의논.**
 
 **Files:**
-- Modify: `procedural_memory/operators/synthesize.py`
-- Test: 골든 + WM 검사(아래 명령)
+- Modify: `procedural_memory/operators/compare.py` (`_predict_test_output` 제거/축소 — 비교 결과만 남김)
+- Modify: `procedural_memory/operators/hypothesize.py` (grid 판정: cross/`_grid_decide` 관계 → 3속성 → all-3: `grid_program_from_decide` per-pair emit / 부분: 하강)
+- Modify: 관련 `production_rules/*.json` (compare 후 grid-hypothesize 발화; predict 종류 조정)
+- Modify: `tests/golden_steps.json` (재캡처)
 
 **Interfaces:**
-- Consumes: `program_ast.grid_program_from_decide`, `_grid_decide`(이미 호출됨), `root.example_pairs`.
+- Consumes: `program_ast.grid_program_from_decide`(Task 3), `_grid_decide`, `ag.kg["cross"]`(compare 산물), `root.example_pairs`.
 
-- [ ] **Step 1: 현행 파악 + 물질화 지점.** `synthesize.py` 의 contents-DECIDE 분기(대략 line 59–75)에서 지금
-`prog = (_global_recolor… | program([]) | "output_grid = <상수 출력>")` 로 pair0 program 을 쓴다. 이를:
-```python
-import json
-from arbor.reasoning.program_ast import grid_program_from_decide
-# ... contents DECIDE 분기 내에서:
-gp = grid_program_from_decide(dec)                 # 세 property DECIDE → 3-property AST
-prog = json.dumps(gp) if gp is not None else "output_grid = <상수 출력>"
-# 모든 example pair 에 동일 3-property program 물질화 (grid-결정은 pair 불변)
-for pp in getattr(root, "example_pairs", []) or []:
-    ppid = f"{pp.node_id}.property"
-    old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
-    if old in (None, "{}"):
-        if old is not None: ag.wm.remove(ppid, "program", old)
-    ag.wm.add(ppid, "program", prog)
-# (기존 답 경로 유지: ag.kg["answer"]=cv["value"]; answer-ready 등 그대로)
+- [ ] **Step 1: 흐름 discovery (필수).** `compare.py`(`_op_compare` kind=predict → `_predict_test_output` ①②),
+  `hypothesize.py`(level 별 진입; grid → H-space/synthesize), `solve.json`/`compare.json`/`hypothesize.json`/
+  `synthesize.json` 규칙, `S1 ^pair-idx` 커서, `answer-ready`/`produce`/`grid-descend` 배선을 읽어
+  **"compare 가 어디서 답을 내고(①), 어디서 하강 신호(②)를 세우는가"** 를 특정. 이관 계획을 report 에 적고 진행.
+
+- [ ] **Step 2: compare 를 비교만으로.** `_predict_test_output` 의 답-예측/answer-ready/branch 를 compare 에서
+  제거(cross 결과는 `ag.kg["cross"]` 에 그대로 남김). compare 는 관계만 남기고 끝나게.
+
+- [ ] **Step 3: hypothesize 가 판정·생성.** grid 단계 hypothesize 가 cross 관계(+`_grid_decide`)로 3속성 결정:
+  `gp = grid_program_from_decide(dec)`; `gp` 있으면(all-3) 각 example pair 에 `PAIR.program = json.dumps(gp)`
+  물질화 + 답 경로(program 실행/기존) 연결; `None`(부분)이면 하강(`produce`/`grid-descend` — 현행 c–h 경로).
+
+- [ ] **Step 4: 정답 불변 확인** (재기준화 전 최우선 게이트)
+
+```bash
+PYTHONPATH=. python3 -c "
+from arbor.env.dataset import list_tasks, load_task
+from debugger.build import _dash_data
+for tid,p in list_tasks('easy_a'):
+    d=_dash_data(load_task(p), tid)
+    print(tid,'correct=',d.get('correct_attempt'),'n_steps=',d['n_steps'])
+assert all(_dash_data(load_task(p),t).get('correct_attempt') is not None or t=='easy000i'
+           for t,p in list_tasks('easy_a')), 'a-h 중 정답 회귀'
+print('OK: easy a-h 정답 유지(i 제외)')
+"
+```
+Expected: easy a–h `correct` 非None(i 는 원래 미해결). a/b 에 3-property `PAIR.program` 존재(Task 6 이전 확인 스크립트 재사용).
+
+- [ ] **Step 5: 골든 재기준화 + 커밋.** a/b·c–h 새 step 수 재캡처(§Task 7 Step 4 스크립트) → `golden_steps.json`
+  갱신 → `verify_refactor.py` PASS. made000b 정답 유지. 커밋(재기준화 이유 명시):
+```bash
+cd /Users/sir_k/Desktop/PySOAR
+git add procedural_memory/operators/compare.py procedural_memory/operators/hypothesize.py \
+        procedural_memory/production_rules/ tests/golden_steps.json
+git commit -m "refactor(grid-program): compare=비교만, hypothesize=관계→3-property program (골조 정정) + 골든 재기준화
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
-> **주의:** 이 태스크는 **답 경로를 안 바꾼다**(answer-ready 유지). PAIR.program 물질화는 `wm.add` 뿐이라
-> **decision cycle 을 늘리지 않는다** → 골든 불변이 기대. 만약 늘어나면(다른 operator 발화) 원인 규명 후
-> 최소화. grid-결정 아닌 태스크(c–h)는 이 분기를 안 타므로 무영향.
+> **Fallback(체크포인트):** compare↔hypothesize 재배선이 너무 얽히면 — compare 단락을 남기되 그 자리에서
+> program+solution 만 추가 물질화(추가적, 골든 보존)하는 최소안으로 후퇴하고 **의논**. (뷰어 Task 8 은 그걸로도 동작.)
 
-- [ ] **Step 2: 골든 게이트 (불변)**
+---
 
-Run: `cd /Users/sir_k/Desktop/PySOAR && PYTHONPATH=. python3 tests/verify_refactor.py`
-Expected: `PASS: 9/9` (a/b 포함 step 수 불변 — 답 경로 무변, program 은 wm.add 만).
-(MISMATCH 면: 물질화가 새 operator 를 발화시킨 것 → 그 트리거를 끊거나, Task 7 로 미룬다.)
+## Task 7: 3-property 파이프라인 완결(generalize/compose) + 재기준화 확정
 
-- [ ] **Step 3: a/b 에 3-property program 존재 확인**
+a/b 의 per-pair 3-property program 이 generalize(3-property antiunify, Task 5) → solution → compose(test 실행)
+→ 답 으로 이어지는지 확인·완결. (Task 6 에서 답이 이미 program 실행으로 나오면 이 태스크는 solution 물질화 확인.)
+
+**Files:**
+- Modify: `procedural_memory/operators/generalize.py`·`compose.py` (grid program 소비 — 대부분 Task 5 로 이미 지원; 배선 확인)
+- Modify: `tests/golden_steps.json` (필요 시 최종 재캡처)
+
+- [ ] **Step 1: generalize 가 grid program 을 anti-unify.** example pair 들의 3-property `PAIR.program`(AST-json)을
+  `antiunify_ast`(grid 계열, Task 5)로 → `TASK.solution`(3-property, a/b 는 변수 없음=동일). 배선 확인/보완.
+
+- [ ] **Step 2: compose 가 solution 을 test 에 실행.** `execute`(grid 분기, Task 2)로 test G0 → 답. 기존 compose 경로.
+
+- [ ] **Step 3: a/b 파이프라인 정답 + solution 확인**
 
 ```bash
 cd /Users/sir_k/Desktop/PySOAR && PYTHONPATH=. python3 -c "
 from arbor.env.dataset import list_tasks, load_task
 from arbor.engine.trace import _Tracer
 from arbor.agent.focus import setup_focus_agent
-from arbor.reasoning.program_ast import as_source, _is_grid_body
-import json
-paths = dict(list_tasks('easy_a'))
+paths=dict(list_tasks('easy_a'))
 for tid in ('easy000a','easy000b'):
-    tr = _Tracer(load_task(paths[tid]), tid, setup=setup_focus_agent); tr.run(max_cycles=1500)
-    progs = [v for (i,a,v) in tr.ag.wm if a=='program' and v not in (None,'{}')]
-    ok = any((lambda o: isinstance(o,dict) and _is_grid_body(o.get('body') or []))(
-              json.loads(p)) for p in progs if p.lstrip().startswith('{'))
-    print(tid, 'has 3-property program:', ok, '| n_progs:', len(progs))
-    assert ok, f'{tid} 3-property program 없음'
-print('OK')
+    tr=_Tracer(load_task(paths[tid]),tid,setup=setup_focus_agent); tr.run(max_cycles=1500)
+    sol=[v for (i,a,v) in tr.ag.wm if a=='solution' and v not in (None,'{}')]
+    print(tid,'solution:', sol[:1])
+    assert sol, f'{tid} solution 없음'
+print('OK: a/b solution 물질화')
 "
 ```
-Expected: `easy000a has 3-property program: True … OK`
+Expected: a/b `TASK.solution` 이 3-property(placeholder 아님).
 
-- [ ] **Step 4: 커밋**
-
-```bash
-cd /Users/sir_k/Desktop/PySOAR
-git add procedural_memory/operators/synthesize.py
-git commit -m "feat(grid-program): synthesize 가 grid-결정 pair 에 3-property program 물질화 (답 경로 유지)
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
-```
-
----
-
-## Task 7: 파이프라인 라우팅 + 골든 재기준화 ⚠️ 체크포인트
-
-a/b 를 program→generalize→compose 파이프라인으로 라우팅(답을 solution 실행에서). **행동 변화 → 골든 재기준화.**
-
-> **⚠️ 이 태스크는 SOAR production-rule 흐름을 바꾼다(가장 큰 리스크).** 착수 전 `ARBOR_HARNESS.md` 재독 +
-> `solve.json`·`synthesize.json`·`verify.json`·`generalize.json`·`compose.json` 규칙과 per-pair 커서
-> (`S1 ^pair-idx`, verify 의 `_advance_or_finish`, `programs-ready`) 를 읽어 **현행 grid-결정 경로가 어디서
-> answer-ready 로 단락되는지** 파악한다. **너무 얽혀 bite-size 로 안 쪼개지면 멈추고 사용자와 의논**(설계 재검토).
-
-**Files:**
-- Modify: `procedural_memory/operators/synthesize.py` (answer-ready 단락 제거 → programs-ready/커서로)
-- Modify: 관련 `production_rules/*.json` (grid-결정 후 generalize 발화 조건)
-- Modify: `tests/golden_steps.json` (재캡처)
-
-**Interfaces:**
-- 기존 `generalize`(antiunify_ast — Task 5 로 grid 계열 지원)·`resolve`·`compose` 그대로 소비.
-
-- [ ] **Step 1: 흐름 파악(discovery).** 위 규칙들을 읽고, grid-결정 태스크에서 (a) synthesize 가 answer-ready 를
-세우는 대신 (b) 각 pair program 물질화 → programs-ready(≥2) → generalize → resolve → compose → submit 로
-가도록 **최소 편집 지점**을 특정한다. 편집 계획을 report 에 적고 진행.
-
-- [ ] **Step 2: 라우팅 구현.** synthesize contents-DECIDE 분기에서 `answer-ready`/`ag.kg["answer"]` 직접설정을
-제거하고, Task 6 의 program 물질화 후 `programs-ready` 를 세운다(pixel 경로와 동형). generalize 가 grid program
-들을 anti-unify(Task 5) → solution → compose 가 test 에 execute → 답.
-
-- [ ] **Step 3: a/b 정답 + 파이프라인 확인**
-
-```bash
-cd /Users/sir_k/Desktop/PySOAR && PYTHONPATH=. python3 -c "
-from arbor.env.dataset import list_tasks, load_task
-from debugger.build import _dash_data
-paths = dict(list_tasks('easy_a'))
-for tid in ('easy000a','easy000b','easy000c'):
-    d=_dash_data(load_task(paths[tid]), tid)
-    print(tid, 'correct_attempt=', d.get('correct_attempt'), 'n_steps=', d['n_steps'])
-    assert d.get('correct_attempt') is not None, f'{tid} 오답 회귀'
-print('OK: a/b/c 정답')
-"
-```
-Expected: a/b/c 모두 `correct_attempt` 非None. task.solution 도 WM 에(3-property).
-
-- [ ] **Step 4: 골든 재기준화.** a/b(및 흐름이 바뀐 태스크)의 새 step 수를 캡처해 `tests/golden_steps.json` 갱신.
-c–h 는 불변이어야(경로 무변) — 바뀌면 조사. 재캡처:
+- [ ] **Step 4: 최종 골든 재기준화.** easy_a 전부 재캡처 → `golden_steps.json` → `verify_refactor.py` PASS. c–h 정답 유지.
 ```bash
 cd /Users/sir_k/Desktop/PySOAR && PYTHONPATH=. python3 -c "
 import json
 from arbor.env.dataset import list_tasks, load_task
 from debugger.build import _dash_data
-g={}
-for tid,p in list_tasks('easy_a'):
-    d=_dash_data(load_task(p), tid); g[tid]={'n_steps':d['n_steps'],'correct_attempt':d.get('correct_attempt')}
-json.dump(g, open('tests/golden_steps.json','w'), indent=2)
-print('re-baselined:', {k:v['n_steps'] for k,v in g.items()})
+g={t:{'n_steps':_dash_data(load_task(p),t)['n_steps'],
+      'correct_attempt':_dash_data(load_task(p),t).get('correct_attempt')} for t,p in list_tasks('easy_a')}
+json.dump(g, open('tests/golden_steps.json','w'), indent=2); print('re-baselined:', {k:v['n_steps'] for k,v in g.items()})
 "
 ```
-그다음 `PYTHONPATH=. python3 tests/verify_refactor.py` → `PASS: 9/9`(새 기준). made000b 정답 유지 확인.
 
-- [ ] **Step 5: 커밋** (재기준화 이유 명시)
-
+- [ ] **Step 5: 커밋**
 ```bash
 cd /Users/sir_k/Desktop/PySOAR
-git add procedural_memory/operators/synthesize.py procedural_memory/production_rules/ tests/golden_steps.json
-git commit -m "feat(grid-program): grid-결정 태스크를 program 파이프라인으로 라우팅 + 골든 재기준화
-
-a/b 가 answer-ready 단락 대신 3-property program→generalize→compose 를 탄다(정답 유지).
-grid-결정 태스크 step 수 변경(의도) → golden_steps.json 재캡처. c–h 불변.
+git add procedural_memory/operators/generalize.py procedural_memory/operators/compose.py tests/golden_steps.json
+git commit -m "feat(grid-program): a/b 3-property 파이프라인 완결(generalize/compose) + 재기준화 확정
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
