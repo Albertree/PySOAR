@@ -23,3 +23,5 @@ def coloring(grid, position, color):
     out = [row[:] for row in grid]
     out[r][c] = color
     return out
+
+from procedural_memory.dsl.transformation import hodel_transforms  # noqa: F401,E402  (@dsl 발화)
