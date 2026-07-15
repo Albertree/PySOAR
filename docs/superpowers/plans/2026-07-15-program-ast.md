@@ -816,16 +816,25 @@ if code == "{}":
     code = None
 ```
 
-`procedural_memory/operators/compress.py` — `_op_compress` 의 program 읽기(line 66)를 감싼다 (parse_program 이
-텍스트 파서라 flat 이 필요; AST-json 이 와도 흡수):
+`procedural_memory/operators/compress.py` — `_op_compress` 는 program 을 **소비(parse)하면서 같은 슬롯을
+교체**(remove raw → add blob)한다. 따라서 **raw(제거 키용)와 as_source(파싱용)를 분리**해야 한다 — 안 그러면
+Task 6 에서 program 이 AST-json 이 될 때 `wm.remove(..., code=렌더값)` 이 raw 와 불일치해 조용히 no-op →
+program 트리플 중복 → compress 무력화(made000b). program_report 의 `_p`/`prog` 분리와 동형:
 ```python
 # import 추가
 from arbor.reasoning.program_ast import as_source
 # 기존:  code = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+#        if not code or code == "{}": continue
+#        ... blob = _blob_program(code, W) ...
+#        ag.wm.remove(ppid, "program", code); ag.wm.add(ppid, "program", blob)
 # 변경:
-code = as_source(next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None))
-if code == "{}":
-    code = None
+raw = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+code = as_source(raw)                       # 파싱용 flat
+if not code or code == "{}":
+    continue
+# ... blob = _blob_program(code, W) ... (변경 없음)
+ag.wm.remove(ppid, "program", raw)          # 제거는 raw(원본 WM 값)로
+ag.wm.add(ppid, "program", blob)
 ```
 
 `debugger/reports/program_report.py` line 70:
