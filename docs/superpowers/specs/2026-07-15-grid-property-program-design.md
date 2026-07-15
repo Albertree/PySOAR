@@ -1,7 +1,7 @@
 # G1 3-property program — grid-level 결론을 program·solution 으로 (설계)
 
 > **정본 스펙.** 모든 문제의 program 을 "G1 의 세 GRID property(size·color·contents)를 예측·설정"하는
-> 보편 골격으로 재정의한다. 세 property setter DSL — `set_gridsize` · `set_gridcolor` · `set_gridcontents`
+> 보편 골격으로 재정의한다. 세 property setter DSL — `set_grid_size` · `set_grid_color` · `set_grid_contents`
 > — 를 도입(고차 DSL = frozen make_grid+coloring 조합; 하네스 §5 승인). arg 는 확장가능 표현식(단순:
 > keep/const/expr/delta; 복잡: 재귀 DSL-조합, forward slot). grid-level 에서 결론나는 태스크(a/b)도
 > 이 골격으로 **pair.program + task.solution** 이 나오게 한다. **의도된 행동 변화** → 골든 재기준화.
@@ -30,7 +30,7 @@
 ## 2. 목표 / 비목표
 
 **목표**
-- 모든 program 의 보편 골격 = **G1 의 세 GRID property 예측**: `set_gridsize`·`set_gridcolor`·`set_gridcontents`
+- 모든 program 의 보편 골격 = **G1 의 세 GRID property 예측**: `set_grid_size`·`set_grid_color`·`set_grid_contents`
   (ARCKG GRID 노드의 3 property 와 1:1 대응, §2-1).
 - 이 세 개를 **DSL**(program 어휘, 실행가능)로 도입 — 고차 DSL = frozen `make_grid`+`coloring` 조합(§dsl-taxonomy).
 - arg = **확장가능 표현식**: 단순(keep/const/expr/delta, `_grid_decide` 산물) + 복잡(재귀 DSL-조합, 스키마만 open).
@@ -40,7 +40,7 @@
 **비목표(이번 아님 / forward slot)**
 - 복잡 DSL-조합 값을 *탐색*하는 로직(예: "width = 빨간 object 수"의 자동 도출) — 스키마는 열되 **search 는 forward
   slot**(§7 의논 후). Phase 1 은 `_grid_decide` 의 단순 결론만 채운다.
-- pixel/blob program 을 `set_gridcontents` arg 로 완전 흡수(= Phase 2; §11).
+- pixel/blob program 을 `set_grid_contents` arg 로 완전 흡수(= Phase 2; §11).
 - `②` 대시보드 program 뷰어(별도 서브프로젝트; §12).
 - 새 primitive transformation atom (make_grid·coloring 동결 유지 — set_grid* 는 그 *조합*).
 
@@ -50,7 +50,7 @@
 
 ```
 G0 = input_grid
-G1 = set_gridsize( <size-expr> ) ∘ set_gridcolor( <color-expr> ) ∘ set_gridcontents( <contents-expr> )
+G1 = set_grid_size( <size-expr> ) ∘ set_grid_color( <color-expr> ) ∘ set_grid_contents( <contents-expr> )
 output_grid = G1
 ```
 
@@ -59,9 +59,9 @@ AST(기존 typed-arg dict 확장 — program step 도 `{call,args}`):
 {
   "input": {"grid": "G0"},
   "body": [
-    {"call": "set_gridsize",     "args": {"size":     <arg-expr>}},
-    {"call": "set_gridcolor",    "args": {"color":    <arg-expr>}},
-    {"call": "set_gridcontents", "args": {"contents": <arg-expr>}}
+    {"call": "set_grid_size",     "args": {"size":     <arg-expr>}},
+    {"call": "set_grid_color",    "args": {"color":    <arg-expr>}},
+    {"call": "set_grid_contents", "args": {"contents": <arg-expr>}}
   ],
   "output": {"var": "grid"}
 }
@@ -73,15 +73,15 @@ AST(기존 typed-arg dict 확장 — program step 도 `{call,args}`):
 
 `procedural_memory/dsl/` 에 등록(`@dsl("transformation", …)`). 각각 frozen atom 의 *조합* 으로 정의(새 원자 아님):
 
-- **`set_gridsize(size)` → make_grid 의 size**: G1 의 차원을 정한다. 실행 = `make_grid(size=eval(size), fill=…)`.
-- **`set_gridcolor(color)` → base/palette**: G1 의 배경 fill + 색 팔레트 제약. color 는 contents 에서 대부분
+- **`set_grid_size(size)` → make_grid 의 size**: G1 의 차원을 정한다. 실행 = `make_grid(size=eval(size), fill=…)`.
+- **`set_grid_color(color)` → base/palette**: G1 의 배경 fill + 색 팔레트 제약. color 는 contents 에서 대부분
   파생되므로 실행 역할은 **base 색(make_grid fill) + 검증용 팔레트**. (전체 색집합 = fill ∪ contents 색.)
-- **`set_gridcontents(contents)` → coloring/구성**: G1 의 셀 값. 실행 = coloring 조합(또는 상수/항등/remap).
+- **`set_grid_contents(contents)` → coloring/구성**: G1 의 셀 값. 실행 = coloring 조합(또는 상수/항등/remap).
   **contents-expr 이 곧 통일점**(§6): grid 결정이면 간단식, 하강이면 pixel/blob program 이 이 arg 로 들어감(Phase 2).
 
 **실행 lowering(개념)**:
 ```
-execute(set_gridsize(sz) ∘ set_gridcolor(c) ∘ set_gridcontents(ct), G0)
+execute(set_grid_size(sz) ∘ set_grid_color(c) ∘ set_grid_contents(ct), G0)
   = let base = make_grid(size=eval(sz,G0), fill=base_of(c))
     in  apply_contents(base, ct, G0)          # coloring 조합 / 상수 / 항등 / remap
 ```
@@ -101,7 +101,7 @@ execute(set_gridsize(sz) ∘ set_gridcolor(c) ∘ set_gridcontents(ct), G0)
 
 ## 6. contents 가 통일자
 
-`set_gridcontents` 의 arg 가 문제 유형을 흡수한다:
+`set_grid_contents` 의 arg 가 문제 유형을 흡수한다:
 - **상수출력**(a/b): `{"const": <고정 grid>}` — 실행 = 그 grid 를 make_grid+coloring 으로 물질화(모든 비배경 셀 채색).
   train-검증된 CONST 결론이라 §1-5 정직(실행하면 그 grid).
 - **항등**: `{"keep": "contents"}` (=G0).
@@ -122,7 +122,7 @@ execute(set_gridsize(sz) ∘ set_gridcolor(c) ∘ set_gridcontents(ct), G0)
 - **compare = 비교만.** cross-pair 관계(출력끼리 COMM/DIFF, size/color 의 within·change 등)를 WM/`ag.kg` 에
   남기고 **끝**. **정답 예측·answer-ready·branch 없음.** `_predict_test_output` 을 compare 에서 **제거**.
 - **hypothesize = 비교 결과로 추론.** compare 가 남긴 관계를 읽어 G1 의 3속성(size/color/contents)을 정한다:
-  - **셋 다 정해짐** → **3-property program(set_grid*) 생성**(per-pair) → verify/generalize/compose 로 답.
+  - **셋 다 정해짐** → **3-property program(set_grid*) 생성**(per-pair) → verify/generalize/apply_solution 로 답.
   - **하나라도 미결(부분예측)** → **하강.** 부분예측 program 은 contents 없이 동작 못 함 = "grid 를 예측했다"고
     볼 수 없음(§P1 막혀야 하강). a/b(상수출력)=셋 다 정해짐→program; c–h=contents 미결→하강(현행 pixel 경로).
 - 즉 `_predict_test_output` 의 판정 로직(①·②)이 **hypothesize 로 이관**되고, 판정 결과가 **직접 답이 아니라
@@ -131,13 +131,21 @@ execute(set_gridsize(sz) ∘ set_gridcolor(c) ∘ set_gridcontents(ct), G0)
 - **operator ≠ DSL**: operator(compare=비교 / hypothesize=추론·생성)=과정, DSL(set_grid*)=program 어휘.
 - per-pair 순회(`S1 ^pair-idx`)로 각 example pair 가 3-property program emit → generalize.
 
-## 8. 실행 + anti-unify + compose
+**명명·정리 결정 (2026-07-16, 사용자):**
+- **dead operator `set_grid_size`·`set_grid_color`(grid_slots.py + 규칙) 제거.** grid property 설정은
+  hypothesize 가 `set_grid_*` **DSL** 을 program 에 emit 하는 것으로 일원화(operator/DSL 이름 충돌·dead code 제거).
+- **DSL 이름 = `set_grid_size`/`set_grid_color`/`set_grid_contents`** (grid + property, 언더스코어; 읽기 property
+  `size`/`color`/`contents` 와 짝). operator 제거로 이 이름이 비어 DSL 이 가져감.
+- **`compose` operator → `apply_solution`** (compose=조립 뉘앙스라 약함; 이 단계는 solution 을 test 에 *적용*.
+  `apply` 단독은 SOAR apply-phase·`apply_DSL` 과 충돌 → `apply_solution`).
 
-- `execute`(program_ast): set_gridsize/color/contents step 을 make_grid+coloring 으로 lowering 실행 → G1. train 검증.
+## 8. 실행 + anti-unify + apply_solution
+
+- `execute`(program_ast): set_grid_size/color/contents step 을 make_grid+coloring 으로 lowering 실행 → G1. train 검증.
 - `antiunify_ast`: 3-property program 들을 **구조 비교** — 세 step 이 정렬돼 있으니 property 별로 arg-expr 비교
   (COMM=상수, DIFF=변수 slot). 기존 pixel/blob dispatch 에 **grid(3-property) 계열** 추가.
 - `resolve`: DIFF slot(예: size expr 변수)을 G0 유래 식으로(기존 `resolve_slot` 확장 — expr/delta 대응).
-- `compose`: task.solution(3-property, 변수)을 test G0 에 execute → 답. 기존 파이프라인 그대로.
+- `apply_solution`: task.solution(3-property, 변수)을 test G0 에 execute → 답. 기존 파이프라인 그대로.
 
 ## 9. 행동 변화 + 골든 재기준화 (사용자 승인)
 
@@ -152,19 +160,19 @@ execute(set_gridsize(sz) ∘ set_gridcolor(c) ∘ set_gridcontents(ct), G0)
 
 ## 10. 데이터 모델 요약 (program_ast.py 확장)
 
-- 새 step op: `set_gridsize`·`set_gridcolor`·`set_gridcontents`(고차 DSL; body=make_grid/coloring 조합).
+- 새 step op: `set_grid_size`·`set_grid_color`·`set_grid_contents`(고차 DSL; body=make_grid/coloring 조합).
 - 새 leaf: `{"keep": <prop>}`, `{"delta": {"remove","add"}}` (const/expr/var/ref/cellset 는 기존).
 - arg 노드 재귀: leaf | `{"call","args"}`(DSL-조합).
-- `to_source`: 3-property 를 `set_gridsize(…)∘set_gridcolor(…)∘set_gridcontents(…)` 로 렌더(사람이 읽는 형).
+- `to_source`: 3-property 를 `set_grid_size(…)∘set_grid_color(…)∘set_grid_contents(…)` 로 렌더(사람이 읽는 형).
 - `execute`: 3 step lowering; keep/delta/expr 해소.
 - `ops_of_ast`/`antiunify_ast`: grid(3-property) 계열 dispatch.
 
 ## 11. 단계 (phasing)
 
 - **Phase 1 (이번 스펙 핵심)**: grid-결론 태스크(a/b, 그리고 size/color/contents 가 grid 에서 결정되는 임의 태스크)에
-  3-property program 물질화 — arg 는 leaf(keep/const/expr/delta)만. execute/antiunify/compose 로 solution·답.
+  3-property program 물질화 — arg 는 leaf(keep/const/expr/delta)만. execute/antiunify/apply_solution 로 solution·답.
   a/b 가 program+solution 을 갖고 여전히 ✓풀림. 골든 재기준화.
-- **Phase 2 (후속)**: contents DESCEND case 흡수 — 하강 pixel/blob program 이 `set_gridcontents` arg 로. 모든 program
+- **Phase 2 (후속)**: contents DESCEND case 흡수 — 하강 pixel/blob program 이 `set_grid_contents` arg 로. 모든 program
   이 3-property 골격. (기존 pixel/blob program 을 감싸는 작업.)
 - **forward slot**: 복잡 DSL-조합 arg 의 *탐색*(§2 비목표).
 
@@ -182,7 +190,7 @@ per-pair program + task.solution.
 
 - easy000a/b 가 **3-property pair.program + task.solution** 을 물질화(WM 에 AST-json). 여전히 ✓풀림(정답).
 - program 이 실행가능: `execute` 로 a/b program → 그 고정 grid 재현(train 검증).
-- `set_gridsize/color/contents` DSL 이 `SPECS`/ontology 에 등록(고차 DSL, body=조합).
+- `set_grid_size/color/contents` DSL 이 `SPECS`/ontology 에 등록(고차 DSL, body=조합).
 - `tests/golden_steps.json` 재기준화; 재캡처 시 동일(결정성). survey 17 렌더 무크래시.
 - (하네스) 3-property 값이 `_grid_decide` 탐색 산물(손코딩 아님) — 시도·기각이 트레이스에 남음(§1-5).
 
@@ -192,7 +200,7 @@ per-pair program + task.solution.
 - **§1-2/§1-3**: 값은 `_grid_decide`/`_size_expr_search` 탐색에서. 상수출력을 make_grid+coloring 으로 펴는 건
   "답 박기"가 아니라 train-검증 CONST 결론의 실행 물질화. size expr(H-1)은 탐색 산물.
 - **§1-5**: program 실행·train 검증 필수 — 실행하면 G1 이 나와야. 안 나오면 그 arg 는 틀림(기각).
-- **color 파생 애매성**: set_gridcolor 실행 역할(base/palette) 명세를 구현 시 확정 — color 집합이 fill+contents 로
+- **color 파생 애매성**: set_grid_color 실행 역할(base/palette) 명세를 구현 시 확정 — color 집합이 fill+contents 로
   재현되는지 검증. 안 맞으면 멈추고 §7.
 - **재기준화 위험**: golden 이 바뀌므로 "무엇이 왜 바뀌었나"를 커밋에 기록(회귀 vs 의도 구분). a/b 외 태스크
   step 수는 불변이어야(grid-결정 아닌 것은 경로 무변) — 바뀌면 조사.
