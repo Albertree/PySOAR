@@ -20,6 +20,15 @@ def expr(e):                  return {"expr": e}
 def ref(level, index_leaf):   return {"ref": level, "index": index_leaf}
 
 
+def cellset(cells_leaf):
+    """blob target — 셀 집합(픽셀 인덱스)을 한 덩어리로. cells_leaf = {"const":[i,..]} | {"var":"?name"}."""
+    return {"ref": "cellset", "cells": cells_leaf}
+
+
+def _is_cellset_body(body):
+    return bool(body) and all(s["args"]["target"].get("ref") == "cellset" for s in body)
+
+
 def step(op, **args):
     return {"call": op, "args": dict(args)}
 
@@ -53,22 +62,42 @@ def to_source(ast) -> str:
     if not ast or not ast.get("body"):
         return "{}"
     body = ast["body"]
-    used = {}                                   # level → (src_line, ref_name, var_prefix)
+    if _is_cellset_body(body):
+        return _to_source_blob(body)
+    # ── pixel/object 계열 (기존) ──
+    src_lines, seen = [], set()
     for s in body:
-        tgt = s["args"]["target"]
-        used.setdefault(tgt["ref"], _LEVEL[tgt["ref"]])
-    # defs: 각 level 의 소스 선언 라인(등장 순), 그다음 스텝별 참조 정의
-    defs = [v[0] for v in used.values()]
-    steps = ["tfg0 = input_grid"]
+        lvl = s["args"]["target"]["ref"]
+        if lvl not in seen:
+            seen.add(lvl); src_lines.append(_LEVEL[lvl][0])
+    defs, steps = list(src_lines), ["tfg0 = input_grid"]
     for i, s in enumerate(body):
         tgt = s["args"]["target"]
         _, ref_name, prefix = _LEVEL[tgt["ref"]]
-        idx_src = _leaf_src(tgt["index"])
-        col_src = _leaf_src(s["args"]["color"])
-        defs.append(f"{prefix}{i} = {ref_name}[{idx_src}]")
-        steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {prefix}{i}.coord, {col_src})")
+        defs.append(f"{prefix}{i} = {ref_name}[{_leaf_src(tgt['index'])}]")
+        steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {prefix}{i}.coord, {_leaf_src(s['args']['color'])})")
     steps.append(f"output_grid = tfg{len(body)}")
     return "\n".join(defs + [""] + steps)
+
+
+def _to_source_blob(body):
+    """blob AST → 소스. 전부 const cells → compress def-형(정규식 round-trip); var 포함 → inline-형."""
+    has_var = any("var" in s["args"]["target"]["cells"] for s in body)
+    if not has_var:
+        defs, steps = [], ["tfg0 = input_grid"]
+        for j, s in enumerate(body):
+            cells = list(s["args"]["target"]["cells"]["const"])
+            defs.append(f"B{j} = {cells}")
+            steps.append(f"tfg{j + 1} = apply_DSL(tfg{j}, coloring, B{j}, {_leaf_src(s['args']['color'])})")
+        steps.append(f"output_grid = tfg{len(body)}")
+        return "\n".join(defs + [""] + steps)
+    lines = ["tfg0 = input_grid"]
+    for j, s in enumerate(body):
+        cl = s["args"]["target"]["cells"]
+        cs = str(list(cl["const"])) if "const" in cl else cl["var"]
+        lines.append(f"tfg{j + 1} = apply_DSL(tfg{j}, coloring, {cs}, {_leaf_src(s['args']['color'])})  # 객체 덩어리")
+    lines.append(f"output_grid = tfg{len(body)}")
+    return "\n".join(lines)
 
 
 # ── execute ─────────────────────────────────────────────
@@ -90,8 +119,18 @@ def execute(ast, grid_in, choice=None):
     grid = [list(r) for r in grid_in]
     for s in ast["body"]:
         tgt = s["args"]["target"]
-        ix = _leaf_value(tgt["index"], grid_in, choice)
         col = _leaf_value(s["args"]["color"], grid_in, choice)
+        if tgt.get("ref") == "cellset":                     # blob: 셀 집합 전체 채색 (execute_solution blob 분기)
+            cl = tgt["cells"]
+            cells = cl["const"] if "const" in cl else ((choice or {}).get(cl["var"], lambda g: None)(grid_in))
+            if cells is None or col is None:
+                continue
+            for ix in cells:
+                r, c = ix // W, ix % W
+                if 0 <= r < H and 0 <= c < W:
+                    grid[r][c] = col
+            continue
+        ix = _leaf_value(tgt["index"], grid_in, choice)      # pixel/object
         if ix is None or col is None:
             continue
         r, c = ix // W, ix % W

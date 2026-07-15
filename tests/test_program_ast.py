@@ -71,3 +71,43 @@ class TestExecute(unittest.TestCase):
         ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(99)), color=P.const(3))])
         out = P.execute(ast, [[0, 0], [0, 0]])
         self.assertEqual(out, [[0, 0], [0, 0]])
+
+
+class TestBlobCellset(unittest.TestCase):
+    def test_to_source_const_cells_compress_defform(self):
+        ast = P.program([
+            P.step("coloring", target=P.cellset(P.const([7, 8, 13, 14])), color=P.const(3)),
+            P.step("coloring", target=P.cellset(P.const([20])), color=P.const(5)),
+        ])
+        expected = (
+            "B0 = [7, 8, 13, 14]\n"
+            "B1 = [20]\n"
+            "\n"
+            "tfg0 = input_grid\n"
+            "tfg1 = apply_DSL(tfg0, coloring, B0, 3)\n"
+            "tfg2 = apply_DSL(tfg1, coloring, B1, 5)\n"
+            "output_grid = tfg2"
+        )
+        self.assertEqual(P.to_source(ast), expected)
+
+    def test_to_source_var_cells_inline_form(self):
+        ast = P.program(
+            [P.step("coloring", target=P.cellset(P.var("?cells0")), color=P.const(3))],
+            slots={"?cells0": {"kind": "cellset", "pos": 0}},
+        )
+        src = P.to_source(ast)
+        self.assertIn("tfg1 = apply_DSL(tfg0, coloring, ?cells0, 3)  # 객체 덩어리", src)
+        self.assertNotIn("B0 =", src)                       # var → def 없음(inline)
+
+    def test_execute_cellset_colors_all_cells(self):
+        ast = P.program([P.step("coloring", target=P.cellset(P.const([0, 1, 2])), color=P.const(4))])
+        out = P.execute(ast, [[0, 0, 0], [0, 0, 0]])        # W=3; idx 0,1,2 = (0,0),(0,1),(0,2)
+        self.assertEqual(out, [[4, 4, 4], [0, 0, 0]])
+
+    def test_execute_cellset_var_uses_choice(self):
+        ast = P.program(
+            [P.step("coloring", target=P.cellset(P.var("?cells0")), color=P.const(7))],
+            slots={"?cells0": {"kind": "cellset", "pos": 0}},
+        )
+        out = P.execute(ast, [[0, 0], [0, 0]], choice={"?cells0": (lambda g: [3])})
+        self.assertEqual(out, [[0, 0], [0, 7]])             # idx 3 = (1,1)
