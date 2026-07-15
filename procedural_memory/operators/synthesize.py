@@ -58,8 +58,9 @@ def _op_synthesize(ag):
         ag.wm.add(parent, "color-ready", "yes")
     if slotval.get("contents"):                                       # contents DECIDE → 부모에서 GRID 종결
         ppid = f"{p0.node_id}.property"; cv = slotval["contents"]
-        if ag.wm.contains(ppid, "program", "{}"):
-            ag.wm.remove(ppid, "program", "{}")
+        old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+        if old in (None, "{}"):
+            ag.wm.remove(ppid, "program", old)          # 실제 저장된 sentinel(None 또는 구 "{}") 제거
         cmap = dec["color"].get("map")
         # 전역remap: _global_recolor_program 이 이미 AST-json 반환(Task 7). 항등(output=input): 빈 body
         # AST(execute 가 input 을 그대로 복사) — program_ast.program([]). 상수출력(입력과 무관한 고정

@@ -136,6 +136,6 @@ def _load_props(ag, nid, node, lvl):
     for k, v in node.to_json().items():
         _load_value(ag.wm, pid, k, v)
     if lvl == "task":                                 # 파생 아티팩트 슬롯 → property 아래
-        ag.wm.add(pid, "solution", "{}")              # 빈 dict — 이후 흐름(generalize)이 채움
+        ag.wm.add(pid, "solution", None)              # 빈 슬롯(sentinel=None) — 이후 흐름(generalize)이 채움
     elif lvl == "pair":
-        ag.wm.add(pid, "program", "{}")               # 빈 dict — 이후 흐름(hypothesize/search)이 채움
+        ag.wm.add(pid, "program", None)               # 빈 슬롯(sentinel=None) — 이후 흐름(hypothesize/search)이 채움

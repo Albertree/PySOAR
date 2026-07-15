@@ -38,8 +38,8 @@ def _op_compose(ag):
     if tpa is not None:
         ppid = f"{tpa.node_id}.property"
         old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
-        if old in (None, "{}") and old is not None:
-            ag.wm.remove(ppid, "program", old)
+        if old in (None, "{}"):
+            ag.wm.remove(ppid, "program", old)                # 실제 저장된 sentinel(None 또는 구 "{}") 제거
         test_ast = dict(sol["skeleton"]); test_ast["slots"] = sol["slots"]
         ag.wm.add(ppid, "program", json.dumps(test_ast))
     # 3-attempt: version space 를 retry 후보로 (오답 시 _reject_and_retry 가 idx+1 → compose 재발화)

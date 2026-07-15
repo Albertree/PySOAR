@@ -51,8 +51,8 @@ def _op_generalize(ag):
     solution = json.dumps(sk_with)
     tpid = f"{tid}.property"
     old = next((v for (i, a, v) in ag.wm if i == tpid and a == "solution"), None)
-    if old in (None, "{}") and old is not None:
-        ag.wm.remove(tpid, "solution", old)
+    if old in (None, "{}"):
+        ag.wm.remove(tpid, "solution", old)               # 실제 저장된 sentinel(None 또는 구 "{}") 제거
     ag.wm.add(tpid, "solution", solution)                 # TASK.solution 물질화(§2-5)
     for name, s in slots.items():                         # slot 근거 = DIFF per-pair 값
         ag.wm.add(tpid, "slot", f"{name}[{s['kind']}]=DIFF{s['values']}")

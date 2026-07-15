@@ -168,7 +168,9 @@ def _predict_test_output(ag, sid):
         ag.wm.add(sid, "answer-ready", "yes")
         ag.wm.add(sid, "predict", "output=상수(불변) → Pa.G1 = 훈련 출력")
         pid = f"{root.node_id}.property"                      # 아티팩트 슬롯은 이제 property 아래
-        ag.wm.remove(pid, "solution", "{}")                   # 빈 슬롯 → 채운 값으로
+        old = next((v for (i, a, v) in ag.wm if i == pid and a == "solution"), None)
+        if old in (None, "{}"):
+            ag.wm.remove(pid, "solution", old)                # 빈 슬롯(sentinel) → 채운 값으로
         ag.wm.add(pid, "solution", "output=상수(불변)")
         return
     # ② 속성별 도출 (size·color; contents 제외)

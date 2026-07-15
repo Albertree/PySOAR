@@ -25,8 +25,9 @@ def _op_verify(ag):
     code = next((v for (i, a, v) in ag.wm if i == sid and a == "program-code"), "output_grid = input_grid")
     if pid:
         ppid = f"{pid}.property"
-        if ag.wm.contains(ppid, "program", "{}"):
-            ag.wm.remove(ppid, "program", "{}")
+        old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+        if old in (None, "{}"):
+            ag.wm.remove(ppid, "program", old)                # 실제 저장된 sentinel(None 또는 구 "{}") 제거
         ag.wm.add(ppid, "program", code)                      # 실행가능 flat Python (level-1)
     _advance_or_finish(ag, sid, k)
 

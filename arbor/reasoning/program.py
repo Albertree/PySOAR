@@ -230,8 +230,7 @@ def _materialize_pair_programs(ag):
         code = _pixel_residual_program(ag.task["train"][k]["input"], ag.task["train"][k]["output"])
         if code is None:
             continue
-        if ag.wm.contains(ppid, "program", "{}"):
-            ag.wm.remove(ppid, "program", "{}")
+        ag.wm.remove(ppid, "program", cur)              # 실제 저장된 sentinel(None 또는 구 "{}") 제거
         ag.wm.add(ppid, "program", code)
 
 
