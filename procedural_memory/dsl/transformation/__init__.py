@@ -25,7 +25,7 @@ def coloring(grid, position, color):
     return out
 
 
-@dsl("transformation", ["size"], "grid", effect=effect("create", "grid"))
+@dsl("transformation", ["grid", "size"], "grid", effect=effect("create", "grid"))
 def set_grid_size(grid, size):
     """G1 의 차원 설정 = make_grid 조합. (고차 DSL: frozen make_grid 로 lowering.)"""
     return make_grid(size, fill=0)
