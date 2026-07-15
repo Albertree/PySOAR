@@ -32,5 +32,18 @@ class TestRecolor(unittest.TestCase):
         self.assertEqual(body("replace")([[1,2],[2,1]], 2, 5), [[1,5],[5,1]])
         self.assertEqual(body("switch")([[1,2],[2,1]], 1, 2), [[2,1],[1,2]])
 
+class TestTranslate(unittest.TestCase):
+    def test_registered(self):
+        import procedural_memory.dsl as d
+        for n in ("move", "shift"):
+            self.assertEqual(d.SPECS[n]["effect"], {"verb": "translate", "kind": "grid"})
+
+    def test_move_covers_and_paints(self):
+        from procedural_memory.dsl.registry import body
+        g = [[5,0,0],[0,0,0],[0,0,0]]           # bg=0, obj={(5,(0,0))}
+        obj = frozenset({(5, (0, 0))})
+        self.assertEqual(body("move")(g, obj, (2, 2)),
+                         [[0,0,0],[0,0,0],[0,0,5]])
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """arc-dsl(michaelhodel) GRID transform 어휘 vendoring — list[list] 표현.
 frozen 원자(make_grid/coloring)와 분리된 확장 어휘. propose 는 effect 일치로 걸린다."""
+from collections import Counter
 from procedural_memory.dsl.registry import dsl
 from procedural_memory.dsl.effect import effect
 
@@ -70,3 +71,26 @@ def replace(grid, replacee, replacer):
 @dsl("transformation", ["grid", "color", "color"], "grid", effect=effect("recolor", "grid"))
 def switch(grid, a, b):
     return [[a if v == b else (b if v == a else v) for v in r] for r in grid]
+
+def _bg(grid):
+    return Counter(v for r in grid for v in r).most_common(1)[0][0]
+
+def _paint(grid, obj_cells):
+    H, W = len(grid), len(grid[0])
+    out = [row[:] for row in grid]
+    for v, (i, j) in obj_cells:
+        if 0 <= i < H and 0 <= j < W:
+            out[i][j] = v
+    return out
+
+@dsl("transformation", ["grid", "object", "position"], "grid", effect=effect("translate", "grid"))
+def shift(grid, obj_cells, offset):
+    di, dj = offset
+    return _paint(grid, frozenset((v, (i + di, j + dj)) for v, (i, j) in obj_cells))
+
+@dsl("transformation", ["grid", "object", "position"], "grid", effect=effect("translate", "grid"))
+def move(grid, obj_cells, offset):
+    bg = _bg(grid)
+    covered = _paint(grid, frozenset((bg, (i, j)) for _, (i, j) in obj_cells))
+    di, dj = offset
+    return _paint(covered, frozenset((v, (i + di, j + dj)) for v, (i, j) in obj_cells))
