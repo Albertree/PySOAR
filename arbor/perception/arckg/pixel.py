@@ -30,6 +30,11 @@ class Pixel:
         self.row = row
         self.col = col
 
+    @property
+    def coord(self):
+        """(row, col) 튜플 — coloring(grid, position, color) 의 position 인자와 정합."""
+        return (self.row, self.col)
+
     def to_json(self) -> dict:
         """
         PIXEL 속성: color + coordinate(row_index, col_index).

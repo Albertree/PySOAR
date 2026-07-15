@@ -49,6 +49,20 @@ def objects_of(grid):
     return grid.objects
 
 
+@dsl("util", ["grid"], "list[pixel]")
+def pixels_of(grid):
+    """grid 의 모든 셀을 행우선 PIXEL 노드 리스트로 (index i = r*width + c).
+    pixels_of(g)[i] 의 좌표 = (i // width, i % width) — 솔버 전역 idx 규약과 일치.
+    (grid.pixels 는 객체추출 파생이라 index 비정렬 → raw 에서 직접 생성.)"""
+    from arbor.perception.arckg.pixel import Pixel
+    W = grid.width
+    out = []
+    for i in range(grid.height * W):
+        r, c = divmod(i, W)
+        out.append(Pixel(pixel_id=f"{grid.node_id}.X{i}", color=grid.raw[r][c], row=r, col=c))
+    return out
+
+
 def is_foreground(obj) -> bool:
     """배경(색 0)이 아닌 전경 객체인지 (select predicate). ARC 관례: 0=배경."""
     c = obj.to_json()["color"]
