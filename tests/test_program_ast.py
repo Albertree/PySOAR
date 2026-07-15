@@ -41,3 +41,33 @@ class TestToSource(unittest.TestCase):
 
     def test_empty_program_is_none_source(self):
         self.assertEqual(P.to_source(None), "{}")
+
+
+class TestExecute(unittest.TestCase):
+    def test_concrete_pixel_program_recolors_cell(self):
+        ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        # 2x2 grid, index 1 = (0,1)
+        out = P.execute(ast, [[0, 0], [0, 0]])
+        self.assertEqual(out, [[0, 3], [0, 0]])
+
+    def test_two_steps_apply_in_order(self):
+        ast = P.program([
+            P.step("coloring", target=P.ref("pixel", P.const(0)), color=P.const(5)),
+            P.step("coloring", target=P.ref("pixel", P.const(3)), color=P.const(7)),
+        ])
+        out = P.execute(ast, [[0, 0], [0, 0]])
+        self.assertEqual(out, [[5, 0], [0, 7]])
+
+    def test_slot_index_uses_choice_fn(self):
+        ast = P.program(
+            [P.step("coloring", target=P.ref("pixel", P.var("?src0")), color=P.var("?color0"))],
+            slots={"?src0": {"kind": "src", "pos": 0}, "?color0": {"kind": "color", "pos": 0}},
+        )
+        choice = {"?src0": (lambda g: 2), "?color0": (lambda g: 9)}
+        out = P.execute(ast, [[0, 0], [0, 0]], choice=choice)
+        self.assertEqual(out, [[0, 0], [9, 0]])   # index 2 = (1,0)
+
+    def test_out_of_range_index_skipped(self):
+        ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(99)), color=P.const(3))])
+        out = P.execute(ast, [[0, 0], [0, 0]])
+        self.assertEqual(out, [[0, 0], [0, 0]])

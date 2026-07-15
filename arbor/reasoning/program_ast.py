@@ -69,3 +69,32 @@ def to_source(ast) -> str:
         steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {prefix}{i}.coord, {col_src})")
     steps.append(f"output_grid = tfg{len(body)}")
     return "\n".join(defs + [""] + steps)
+
+
+# ── execute ─────────────────────────────────────────────
+def _leaf_value(leaf, grid_in, choice):
+    """index/color leaf → 정수. const=값, var=choice[name](grid_in), expr 는 미지원(호출측이 var 로 변환)."""
+    if "const" in leaf:
+        return leaf["const"]
+    if "var" in leaf:
+        fn = (choice or {}).get(leaf["var"])
+        return fn(grid_in) if fn else None
+    raise ValueError(f"execute: unresolved leaf {leaf}")
+
+
+def execute(ast, grid_in, choice=None):
+    """AST 를 grid_in 에 실행 → 출력 grid. (숫자 처리 = antiunify.execute_solution 과 동일.)"""
+    if not ast or not ast.get("body"):
+        return [list(r) for r in grid_in]
+    H, W = len(grid_in), len(grid_in[0])
+    grid = [list(r) for r in grid_in]
+    for s in ast["body"]:
+        tgt = s["args"]["target"]
+        ix = _leaf_value(tgt["index"], grid_in, choice)
+        col = _leaf_value(s["args"]["color"], grid_in, choice)
+        if ix is None or col is None:
+            continue
+        r, c = ix // W, ix % W
+        if 0 <= r < H and 0 <= c < W:
+            grid[r][c] = col
+    return grid
