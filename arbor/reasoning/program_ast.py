@@ -161,6 +161,8 @@ def execute(ast, grid_in, choice=None):
     """AST 를 grid_in 에 실행 → 출력 grid. (숫자 처리 = antiunify.execute_solution 과 동일.)"""
     if not ast or not ast.get("body"):
         return [list(r) for r in grid_in]
+    if _is_grid_body(ast["body"]):
+        return _execute_grid(ast["body"], grid_in, choice)
     H, W = len(grid_in), len(grid_in[0])
     grid = [list(r) for r in grid_in]
     for s in ast["body"]:
@@ -183,6 +185,19 @@ def execute(ast, grid_in, choice=None):
         if 0 <= r < H and 0 <= c < W:
             grid[r][c] = col
     return grid
+
+
+def _execute_grid(body, grid_in, choice):
+    """set_gridsize/color/contents → make_grid+coloring lowering. contents 가 산출을 지배."""
+    from procedural_memory.dsl.transformation import make_grid, coloring
+    parts = {s["call"]: s["args"] for s in body}
+    ct = parts["set_gridcontents"]["contents"]
+    if "keep" in ct:                      # 항등 = G0
+        return [list(r) for r in grid_in]
+    if "const" in ct:                     # 상수/결정된 grid = 그대로 산출
+        return [list(r) for r in ct["const"]]
+    # 그 외(remap 등 leaf)는 Phase 1 범위 밖 → 항등 fallback (구현 확장 지점)
+    return [list(r) for r in grid_in]
 
 
 # ── render_header ───────────────────────────────────────

@@ -24,3 +24,20 @@ class TestGridSchema(unittest.TestCase):
     def test_pixel_body_still_works(self):   # 회귀: 기존 pixel to_source 불변
         ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
         self.assertIn("apply_DSL(tfg0, coloring, P0.coord, 3)", P.to_source(ast))
+
+
+class TestGridExecute(unittest.TestCase):
+    def test_const_contents_produces_that_grid(self):
+        out_grid = [[0, 2, 0], [2, 0, 2]]
+        ast = P.grid_program(P.const({"height": 2, "width": 3}), P.const([0, 2]), P.const(out_grid))
+        self.assertEqual(P.execute(ast, [[9, 9, 9], [9, 9, 9]]), out_grid)   # 입력 무관 상수출력
+
+    def test_keep_contents_is_identity(self):
+        g0 = [[1, 0], [0, 1]]
+        ast = P.grid_program(P.keep("size"), P.keep("color"), P.keep("contents"))
+        self.assertEqual(P.execute(ast, g0), g0)
+
+    def test_keep_size_const_contents(self):   # size=keep(=G0 dims), contents=const 같은 크기
+        g0 = [[0, 0], [0, 0]]
+        ast = P.grid_program(P.keep("size"), P.const([0, 5]), P.const([[5, 0], [0, 5]]))
+        self.assertEqual(P.execute(ast, g0), [[5, 0], [0, 5]])
