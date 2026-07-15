@@ -23,3 +23,21 @@ def coloring(grid, position, color):
     out = [row[:] for row in grid]
     out[r][c] = color
     return out
+
+
+@dsl("transformation", ["size"], "grid", effect=effect("create", "grid"))
+def set_gridsize(grid, size):
+    """G1 의 차원 설정 = make_grid 조합. (고차 DSL: frozen make_grid 로 lowering.)"""
+    return make_grid(size, fill=0)
+
+
+@dsl("transformation", ["grid", "color"], "grid", effect=effect("recolor", "grid"))
+def set_gridcolor(grid, color):
+    """G1 의 base/palette 설정. color 집합의 base(fill) 로 배경 확정 — 나머지 색은 contents 가 채움."""
+    return grid                          # base/palette 는 표시·검증용; 산출은 contents 지배(Phase 1)
+
+
+@dsl("transformation", ["grid", "contents"], "grid", effect=effect("create", "grid"))
+def set_gridcontents(grid, contents):
+    """G1 의 셀 값 = coloring 조합(또는 상수/항등). Phase 1: const grid 그대로, keep=입력."""
+    return [list(r) for r in contents] if contents is not None else grid

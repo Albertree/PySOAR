@@ -62,3 +62,14 @@ class TestGridBuilder(unittest.TestCase):
                "color": {"decision": "DECIDE", "value": frozenset({0})},
                "contents": {"decision": "DESCEND", "value": None}}
         self.assertIsNone(P.grid_program_from_decide(dec))
+
+
+class TestGridDSLRegistered(unittest.TestCase):
+    def test_three_setters_in_specs(self):
+        from procedural_memory.dsl.registry import SPECS
+        for name in ("set_gridsize", "set_gridcolor", "set_gridcontents"):
+            self.assertIn(name, SPECS)
+            self.assertEqual(SPECS[name]["kind"], "transformation")
+    def test_frozen_atoms_still_two(self):   # make_grid·coloring 동결 불변
+        from procedural_memory.dsl.registry import SPECS
+        self.assertIn("make_grid", SPECS); self.assertIn("coloring", SPECS)
