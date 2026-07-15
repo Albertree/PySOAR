@@ -183,3 +183,20 @@ class TestAsSource(unittest.TestCase):
     def test_empty_sentinels(self):
         self.assertEqual(P.as_source(None), "{}")
         self.assertEqual(P.as_source("{}"), "{}")
+
+
+class TestMergeSource(unittest.TestCase):
+    def test_object_then_pixel_merge_matches_legacy(self):
+        # object 가설(O0) 뒤에 pixel 잔여(P1) 를 이어붙인 base-merge 형태
+        ast = P.program([
+            P.step("coloring", target=P.ref("object", P.const(2)), color=P.const(4)),
+            P.step("coloring", target=P.ref("pixel", P.const(7)), color=P.const(5)),
+        ])
+        src = P.to_source(ast)
+        self.assertIn("in_objs = objects_of(input_grid)", src)
+        self.assertIn("in_px = pixels_of(input_grid)", src)
+        self.assertIn("O0 = in_objs[2]", src)
+        self.assertIn("P1 = in_px[7]", src)
+        self.assertIn("tfg1 = apply_DSL(tfg0, coloring, O0.coord, 4)", src)
+        self.assertIn("tfg2 = apply_DSL(tfg1, coloring, P1.coord, 5)", src)
+        self.assertTrue(src.rstrip().endswith("output_grid = tfg2"))
