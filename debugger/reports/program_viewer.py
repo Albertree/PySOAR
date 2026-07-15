@@ -33,6 +33,78 @@ from debugger.reports import easy_antiunify_viz as EV
 TIDS = [f"easy000{c}" for c in "abcdefghi"]
 
 
+# ── display_source: 뷰어 로컬 통일 body (to_source[파싱계약]과 독립; 실 DSL·ARCKG accessor·실값) ──
+def _disp_leaf(leaf):
+    """color/index leaf → 소스 토큰. const=실값(json), var=이름, expr=식 그대로."""
+    if "const" in leaf:
+        return json.dumps(leaf["const"])
+    if "var" in leaf:
+        return str(leaf["var"])
+    if "expr" in leaf:
+        return str(leaf["expr"])
+    return json.dumps(leaf)
+
+
+def _disp_grid_leaf(leaf, prop):
+    """grid-property leaf → 실행형 소스. keep→`prop(input_grid)`(ARCKG 투영), const=실값,
+    expr=식 그대로(forward). prop ∈ {size,color,contents}."""
+    if "keep" in leaf:
+        return f"{prop}(input_grid)"                 # size/color/contents(input_grid)
+    if "const" in leaf:
+        return json.dumps(leaf["const"])             # size dict / color list / contents 2D 배열 실값
+    if "expr" in leaf:
+        return str(leaf["expr"])                     # (forward: H/W 어휘 번역은 별건)
+    if "delta" in leaf:
+        d = leaf["delta"]
+        return f"delta(remove={d['remove']}, add={d['add']})"
+    return json.dumps(leaf)
+
+
+def _display_grid(body):
+    parts = {s["call"]: s["args"] for s in body}
+    sz = _disp_grid_leaf(parts["set_grid_size"]["size"], "size")
+    co = _disp_grid_leaf(parts["set_grid_color"]["color"], "color")
+    ct = _disp_grid_leaf(parts["set_grid_contents"]["contents"], "contents")
+    return ("g = input_grid\n"
+            f"g = set_grid_size(g, {sz})\n"
+            f"g = set_grid_color(g, {co})\n"
+            f"g = set_grid_contents(g, {ct})\n"
+            "output_grid = g")
+
+
+_ACCESSOR = {"pixel": "pixels_of", "object": "objects_of"}
+
+
+def _display_pixel(body):
+    lines = ["g = input_grid"]
+    for s in body:
+        tgt = s["args"]["target"]
+        col = _disp_leaf(s["args"]["color"])
+        ref = tgt.get("ref")
+        if ref in _ACCESSOR:                          # pixel/object: 단일 좌표 채색
+            idx = _disp_leaf(tgt["index"])
+            lines.append(f"g = coloring(g, {_ACCESSOR[ref]}(input_grid)[{idx}].coord, {col})")
+        elif ref == "cellset":                        # blob: 셀 집합 (a–h 밖 — 정직한 다중형)
+            cl = tgt["cells"]
+            cells = _disp_leaf(cl)
+            lines.append(f"for ix in {cells}:\n    g = coloring(g, divmod(ix, width(input_grid)), {col})")
+        else:
+            lines.append(f"# 해석 불가 target: {json.dumps(tgt)}")
+    lines.append("output_grid = g")
+    return "\n".join(lines)
+
+
+def display_source(ast):
+    """AST → 통일 body 소스(뷰어 로컬). grid/pixel 계열 모두 실행형 'g = fn(g, …)'.
+    to_source(파싱 계약) 와 독립 — 같은 AST 를 일관 프레이밍만(표현 계열은 그대로 드러남)."""
+    body = (ast or {}).get("body") or []
+    if not body:
+        return "g = input_grid\noutput_grid = g"
+    if PA._is_grid_body(body):
+        return _display_grid(body)
+    return _display_pixel(body)
+
+
 # ── Step 1: 수집 — 솔버 1 회 실행해 example PAIR.program(AST) 전부 + TASK.solution 을 WM 실측값으로 ──
 def _collect(tid, task):
     """(pair_asts, solution_ast, attempts) 반환. program/solution 없으면 각각 [] / None(정직하게 미해결)."""
@@ -169,9 +241,11 @@ def _pair_block(label, ast, ex):
     return (f'<div class="pair">'
             f'<div class="lab">{html.escape(str(label))}</div>'
             f'<div class="views">'
-            f'<div class="view"><div class="vt">① text (to_source + render_header)</div>'
+            f'<div class="view"><div class="vt">① text (통일 body · 실행형)</div>'
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
-            f'<pre class="src">{html.escape(PA.to_source(ast))}</pre></div>'
+            f'<pre class="src">{html.escape(display_source(ast))}</pre>'
+            f'<details class="rawsrc"><summary>canonical to_source (파싱계약·참조용)</summary>'
+            f'<pre class="src">{html.escape(PA.to_source(ast))}</pre></details></div>'
             f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast)}</div>'
             f'<div class="view"><div class="vt">③ 시각화</div>{_viz(ast, ex)}</div>'
             f'</div></div>')
