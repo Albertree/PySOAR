@@ -168,3 +168,18 @@ class TestHeader(unittest.TestCase):
         ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
         h = P.render_header(ast, [[0, 0], [0, 0]])
         self.assertNotIn("objects_of", h)                  # object 미사용 → 생략
+
+
+class TestAsSource(unittest.TestCase):
+    def test_legacy_string_passthrough(self):
+        s = "in_px = pixels_of(input_grid)\nP0 = in_px[1]\n\ntfg0 = input_grid\noutput_grid = tfg0"
+        self.assertEqual(P.as_source(s), s)
+
+    def test_ast_json_rendered_to_source(self):
+        import json
+        ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        self.assertEqual(P.as_source(json.dumps(ast)), P.to_source(ast))
+
+    def test_empty_sentinels(self):
+        self.assertEqual(P.as_source(None), "{}")
+        self.assertEqual(P.as_source("{}"), "{}")

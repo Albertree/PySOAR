@@ -8,6 +8,7 @@ COMM 라인은 상수로 고정, DIFF 라인은 변수 slot(per-pair 값 = 근�
 from __future__ import annotations
 
 from arbor.reasoning.antiunify import antiunify, render_skeleton, compressible
+from arbor.reasoning.program_ast import as_source
 
 
 def _op_generalize(ag):
@@ -21,7 +22,9 @@ def _op_generalize(ag):
     progs = []
     for p in getattr(root, "example_pairs", []) or []:
         ppid = f"{p.node_id}.property"
-        code = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+        code = as_source(next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None))
+        if code == "{}":
+            code = None
         if code and code != "{}":
             progs.append(code)
     sk, slots = antiunify(progs)

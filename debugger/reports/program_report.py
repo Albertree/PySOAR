@@ -15,6 +15,8 @@ import html
 import json
 import os
 
+from arbor.reasoning.program_ast import as_source
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "traces", "program_report.html")
 
@@ -67,7 +69,8 @@ def _run_programs():
         try:
             tr = _Tracer(task, tid, setup=setup_focus_agent)
             tr.run(max_cycles=6000)                          # PIXEL 하강은 픽셀 개별관측으로 cycle 이 큼
-            prog = next((v for (i, a, v) in tr.ag.wm if a == "program" and v != "{}"), None)
+            _p = next((v for (i, a, v) in tr.ag.wm if a == "program" and v != "{}"), None)
+            prog = as_source(_p) if _p else None
             ok = "yes" in [v for (i, a, v) in tr.ag.wm if a == "hypothesized"]
             # GRID hypothesize 의 속성별 결론 — program 이 없어도 '무엇을 분석했나' 를 보이게(§2-5).
             gverdict = next((v for (i, a, v) in tr.ag.wm if a == "grid-verdict"), None)

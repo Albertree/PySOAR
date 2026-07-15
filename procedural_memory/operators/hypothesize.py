@@ -7,6 +7,7 @@ from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.perception.perception import _fg_correspondence, _obj_cc, objects_of
 from procedural_memory.operators.coloring import _recolor_pending
+from arbor.reasoning.program_ast import as_source
 
 
 def pair_cursor(ag):
@@ -45,7 +46,10 @@ def _op_hypothesize(ag):
         # 순회 pair(k>0)는 자기 G0 에서 새로 시작(상위 object sim 이어받지 않음 — 그건 pair0 descent 용).
         sup = ag.stack[-2].id if (k == 0 and len(ag.stack) >= 2) else None
         base_sim = next((v for (i, a, v) in ag.wm if i == sup and a == "sim"), None) if sup else None
-        base_prog = next((v for (i, a, v) in ag.wm if i == sup and a == "program-code"), None) if sup else None
+        _bp = next((v for (i, a, v) in ag.wm if i == sup and a == "program-code"), None) if sup else None
+        base_prog = as_source(_bp) if _bp else None
+        if base_prog == "{}":
+            base_prog = None
         sim0 = [list(r) for r in base_sim] if base_sim else [list(r) for r in g0grid]  # object 재채색 후 상태
         ag.wm.add(sid, "sim", _tup(sim0))                       # pixel sim = object 재채색 결과에서 이어감
         if base_prog:

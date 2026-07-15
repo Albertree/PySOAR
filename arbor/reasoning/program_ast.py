@@ -170,6 +170,22 @@ def render_header(ast, grid_in) -> str:
     return "\n".join(lines)
 
 
+# ── as_source (읽기 지점 정규화 shim) ─────────────────────
+def as_source(wm_value):
+    """WM 저장값(legacy flat 문자열 | AST-json | None | '{}') → flat 문자열('{}'=미합성)."""
+    if wm_value in (None, "{}", ""):
+        return "{}"
+    if isinstance(wm_value, str) and wm_value.lstrip().startswith("{"):
+        try:
+            obj = json.loads(wm_value)
+        except (ValueError, TypeError):
+            return wm_value
+        if isinstance(obj, dict) and ("body" in obj or "input" in obj):
+            return to_source(obj)
+        return wm_value          # '{}' 등 program 아닌 dict
+    return wm_value
+
+
 # ── ops_of_ast / antiunify_ast ───────────────────────────
 def ops_of_ast(ast):
     """concrete AST → [(target_value, color)]. pixel=idx, cellset=frozenset(cells). slot(var)=None."""
