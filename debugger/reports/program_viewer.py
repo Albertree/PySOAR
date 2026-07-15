@@ -105,6 +105,21 @@ def display_source(ast):
     return _display_pixel(body)
 
 
+def _runner_payload(tid, asts, task):
+    """각 example program → 러너용 {tid, pair, body, input, expected}.
+    expected = 실제 program_ast.execute(ast, input) (JS 미러 대조 기준 = 정직성 가드)."""
+    items = []
+    for k, ast in enumerate(asts):
+        ex = task["train"][k]
+        items.append({
+            "tid": tid, "pair": k,
+            "body": display_source(ast),
+            "input": ex["input"],
+            "expected": PA.execute(ast, ex["input"]),
+        })
+    return items
+
+
 # ── Step 1: 수집 — 솔버 1 회 실행해 example PAIR.program(AST) 전부 + TASK.solution 을 WM 실측값으로 ──
 def _collect(tid, task):
     """(pair_asts, solution_ast, attempts) 반환. program/solution 없으면 각각 [] / None(정직하게 미해결)."""
@@ -268,12 +283,12 @@ def _pair_block(label, ast, ex):
             f'</div></div>')
 
 
-def task_section(tid, task):
+def task_section(tid, task, precomputed=None):
     thumbs = "".join(EV.grid(ex["input"]) + EV.grid(ex["output"]) for ex in task["train"])
     tp = task["test"][0]
     thumbs += EV.grid(tp["input"]) + (EV.grid(tp["output"]) if tp.get("output") else "")
 
-    asts, solution, attempts = _collect(tid, task)
+    asts, solution, attempts = precomputed if precomputed else _collect(tid, task)
     if not asts:
         same = all(len(e["input"]) == len(e["output"]) and len(e["input"][0]) == len(e["output"][0])
                    for e in task["train"])
@@ -323,11 +338,20 @@ CSS = """
 .solblock{border:1px solid #3a5a7a;border-radius:10px;padding:2px 12px 12px;margin-top:16px;background:#131a22}
 """
 
+_RUNNER_HTML = ""   # Task 6 에서 코드 실행기 패널로 채움
+
 
 def build():
     tabs = "".join(f'<a href="#{t}" data-t="{t}">{t[-1].upper()}</a>' for t in TIDS)
     paths = dict(list_tasks("easy_a"))
-    secs = "".join(task_section(t, load_task(paths[t])) for t in TIDS)
+    tasks = {t: load_task(paths[t]) for t in TIDS}
+    runner_data = []
+    secs_list = []
+    for t in TIDS:
+        asts, solution, attempts = _collect(t, tasks[t])
+        runner_data.extend(_runner_payload(t, asts, tasks[t]))
+        secs_list.append(task_section(t, tasks[t], precomputed=(asts, solution, attempts)))
+    secs = "".join(secs_list)
     js = ("<script>var TIDS=%s;function sh(){var h=location.hash.slice(1);"
           "if(!document.getElementById(h))h=TIDS[0];"
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(s.id===h)?'':'none'});"
@@ -336,10 +360,11 @@ def build():
     doc = (f'<!doctype html><meta charset="utf-8"><title>program 뷰어</title><style>{EV.CSS}{CSS}</style>'
            f'<a class="back" href="focus_dashboard.html">← focus_dashboard</a>'
            f'<h1>easy a–h program 뷰어</h1>'
-           f'<p class="hs">solve 를 실제 실행해 WM 의 PAIR.program(AST-json) + TASK.solution 을 그대로 읽어'
-           f' ① text(to_source+render_header) ② AST 트리 ③ 시각화(grid=3-property box-flow /'
-           f' pixel·object=coloring flow) 로 렌더 — exec/eval 없음, 재계산 없음.</p>'
-           f'<div class="tabs">{tabs}</div>{secs}{js}')
+           f'<p class="hs">solve 실행 → WM 의 PAIR.program 을 통일 body(실행형)·단일 box-flow 로 렌더.'
+           f' 하단 코드 실행기에서 body 를 실행/검증(빌드타임 parity ✓/✗).</p>'
+           f'<div class="tabs">{tabs}</div>{secs}'
+           f'<script>var RUNNER_DATA={json.dumps(runner_data)};</script>'
+           f'{_RUNNER_HTML}{js}')
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "traces", "program_report_all.html")
     with open(out, "w") as f:
         f.write(doc)
