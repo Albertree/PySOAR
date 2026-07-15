@@ -297,6 +297,16 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-r
 .rule>summary:hover{filter:brightness(1.12)}
 .allbtn{transition:color .12s,border-color .12s}
 kbd{box-shadow:0 1px 0 rgba(0,0,0,.4)}
+/* transform_search 패널 (Task 7, §2-5) -- required-effect/candidates/시도(verdict)/survivor */
+.transform-search-panel{font-size:12px}
+.transform-search-state{margin:0 0 10px;padding:8px 10px;background:var(--p2);border:1px solid var(--line);border-radius:6px}
+.transform-search-state h4{margin:0 0 4px;font-size:11px;color:var(--muted);font-weight:normal}
+.transform-search-state p{margin:2px 0}
+.transform-search-state table{width:100%;border-collapse:collapse;margin-top:4px}
+.transform-search-state th,.transform-search-state td{border:1px solid var(--line);padding:2px 6px;text-align:left}
+.transform-search-state th{color:var(--muted);font-weight:normal}
+.transform-search-state tr.survive td{color:var(--accent)}
+.transform-search-state tr.reject td{color:var(--muted)}
 </style></head><body>
 <div id="browser"></div>
 <div id="stepper">
@@ -309,6 +319,7 @@ kbd{box-shadow:0 1px 0 rgba(0,0,0,.4)}
  <div id="pright">
   <div class="panel" id="pprob"><h3>problem<span class="info">i<div class="tip"><b>train 예제쌍</b>(input → output)과 <b>test 입력</b>. 풀이의 입력 데이터(ARC task).</div></span></h3><div id="prob"></div></div>
   <div class="panel" id="pcand"><h3>answer candidates<span class="info">i<div class="tip"><b>compose/output 단계에서 생성</b>되는 답 후보들. 랭킹 <b>제출 순서대로</b> 내고, 틀리면 다음 후보(최대 3회). <span class=g>✓</span> = 정답.</div></span></h3><div id="cand"></div></div>
+  <div class="panel" id="ptsearch"><h3>transform_search<span class="info">i<div class="tip">synthesize 의 contents-DESCEND 공백에서 <b>DSL transform 을 effect 일치로 제안·검증</b>(procedural_memory/operators/transform_search.py). <b>required-effect</b>=train 이 요구하는 효과, <b>candidates</b>=열거된 DSL 후보, 표는 <b>각 시도</b>(rule·arg src·verdict) — 기각된 것도 남아 보인다(§1-5), <b>survivor</b>=최종 생존 가설.</div></span></h3><div id="tsearch"></div></div>
  </div>
  <div id="pevent"></div>
 </div>
@@ -586,7 +597,7 @@ function markMap(){
 }
 function renderStep(){
  const t=D.tasks[ti],ev=t.events,e=ev[step];
- if(!ev.length){$('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=bad>${esc(t.error||'no steps')}</span> <span class=hint><kbd>Esc</kbd> 목록</span>`;$('phases').innerHTML='';$('map').innerHTML=`<div style="padding:24px;color:var(--muted)">진행 스텝 없음 — ${esc(t.error||'unknown')}</div>`;_mapTi=-1;$('wm').innerHTML='';$('cand').innerHTML='';$('pevent').innerHTML='';return;}
+ if(!ev.length){$('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=bad>${esc(t.error||'no steps')}</span> <span class=hint><kbd>Esc</kbd> 목록</span>`;$('phases').innerHTML='';$('map').innerHTML=`<div style="padding:24px;color:var(--muted)">진행 스텝 없음 — ${esc(t.error||'unknown')}</div>`;_mapTi=-1;$('wm').innerHTML='';$('cand').innerHTML='';$('tsearch').innerHTML='';$('pevent').innerHTML='';return;}
  $('sbar').innerHTML=`<b>${esc(t.id)}</b> <span class=hint>step ${step+1}/${ev.length} · cycle ${e.cycle}</span>
   <span class=hint>↑↓ 스텝 · ←→ wm-update · <kbd>Esc</kbd> 목록 · <kbd>Home/End</kbd></span>
   <span style="margin-left:auto">${t.correct_attempt===null?'<span class=bad>unsolved</span>':'<span class=ok>solved (try '+(t.correct_attempt+1)+')</span>'}</span>`;
@@ -642,6 +653,9 @@ function renderStep(){
    tail=detail(e)+t.candidates.map((c,i)=>`<div class=cand><span class=cap>cand${i+1} ${i===t.correct_attempt?'<span class=ok>✓</span>':''}</span>${c.answer.map(grid).join(' ')}<div class=hint>${esc(c.position)}<br>${esc(c.color)}</div></div>`).join('');
  }
  $('cand').innerHTML=(build+tail)||'<span class=hint>목표 미정 (task 관측 전)</span>';
+ // transform_search 패널(Task 7): Python 이 이미 완성 HTML 문자열로 렌더해뒀다(render_transform_panel,
+ // debugger/build.py) — 태스크 전체 실행 동안의 흔적(합집합)이라 스텝과 무관하게 동일.
+ $('tsearch').innerHTML=t.transform_panel||'<span class=hint>transform_search 흔적 없음</span>';
  const chg = e.highlight.length ? (e.highlight.length>4
    ? e.highlight.slice(0,4).map(x=>esc(trunc(x,40))).join(', ')+` <span class=hint>(+${e.highlight.length-4} more)</span>`
    : e.highlight.map(x=>esc(trunc(x,40))).join(', ')) : '';
