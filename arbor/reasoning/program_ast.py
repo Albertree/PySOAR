@@ -53,6 +53,40 @@ def _is_grid_body(body):
     return bool(body) and all(s.get("call") in _GRID_OPS for s in body)
 
 
+# ── grid_program_from_decide (_grid_decide → 3-property AST) ────
+def _size_leaf(d):
+    cands = d.get("cands") or []
+    kinds = {k for k, _, ok in cands if ok}
+    if "KEEP" in kinds:                    # 출력크기=입력크기
+        return keep("size")
+    for k, v, ok in cands:                 # MAP[H1=...] → expr
+        if ok and k.startswith("MAP"):
+            return expr(k[k.find("[") + 1:k.rfind("]")])
+    h, w = d["value"]
+    return const({"height": h, "width": w})
+
+
+def _color_leaf(d):
+    for k, v, ok in (d.get("cands") or []):
+        if ok and k.startswith("KEEP"):
+            return keep("color")
+    # SET-MAP(-{rem}+{add}) 은 Phase 1 의 a/b(CONST) 가 안 타는 경로 → 구현 시 kind 문자열
+    # "SET-MAP(-[..]+[..])" 를 파싱해 delta(remove, add) 로(또는 _grid_decide 가 remove/add 를
+    # 구조로 노출하도록 값-파생 확장). 전역remap 태스크에서 골든으로 검증. Phase 1 필수 아님.
+    return const(sorted(d["value"]))                       # 기본: 색집합 상수
+
+
+def grid_program_from_decide(dec):
+    if any(dec[p]["decision"] != "DECIDE" for p in ("size", "color", "contents")):
+        return None
+    cnote = dec["contents"].get("note")
+    if cnote == "항등":
+        c_leaf = keep("contents")
+    else:                                  # 상수출력·전역remap → const grid (검증된 value)
+        c_leaf = const(dec["contents"]["value"])
+    return grid_program(_size_leaf(dec["size"]), _color_leaf(dec["color"]), c_leaf)
+
+
 def step(op, **args):
     return {"call": op, "args": dict(args)}
 

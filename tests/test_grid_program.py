@@ -41,3 +41,24 @@ class TestGridExecute(unittest.TestCase):
         g0 = [[0, 0], [0, 0]]
         ast = P.grid_program(P.keep("size"), P.const([0, 5]), P.const([[5, 0], [0, 5]]))
         self.assertEqual(P.execute(ast, g0), [[5, 0], [0, 5]])
+
+
+class TestGridBuilder(unittest.TestCase):
+    def test_constant_output_task_ab_shape(self):
+        # a/b 형: size DECIDE(KEEP), color DECIDE(CONST set), contents DECIDE(상수출력, value=고정 grid)
+        fixed = [[0, 2, 0], [2, 0, 2]]
+        dec = {
+            "size":     {"decision": "DECIDE", "value": (2, 3), "within": [True, True], "cands": [("KEEP", (2, 3), True)]},
+            "color":    {"decision": "DECIDE", "value": frozenset({0, 2}), "cands": [("CONST", frozenset({0, 2}), True)]},
+            "contents": {"decision": "DECIDE", "value": fixed, "note": "상수출력", "cands": [("CONST", "상수출력", True)]},
+        }
+        ast = P.grid_program_from_decide(dec)
+        self.assertTrue(P._is_grid_body(ast["body"]))
+        self.assertEqual(ast["body"][2]["args"]["contents"], {"const": fixed})   # 상수출력 → const grid
+        self.assertEqual(P.execute(ast, [[9, 9, 9], [9, 9, 9]]), fixed)          # 실행하면 그 grid
+
+    def test_descend_returns_none(self):
+        dec = {"size": {"decision": "DECIDE", "value": (2, 2)},
+               "color": {"decision": "DECIDE", "value": frozenset({0})},
+               "contents": {"decision": "DESCEND", "value": None}}
+        self.assertIsNone(P.grid_program_from_decide(dec))
