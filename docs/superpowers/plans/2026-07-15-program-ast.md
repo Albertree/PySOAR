@@ -1138,9 +1138,41 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Modify: `procedural_memory/operators/compose.py`
 - Modify: `arbor/reasoning/antiunify.py` (`execute_solution`→`execute` 위임; `antiunify`/`parse_program` 은퇴)
 
+**Files (추가):**
+- Modify: `arbor/reasoning/program_ast.py` (`antiunify_ast` pixel path 에 **object-body 제외 필터** — 행동보존)
+
 **Interfaces:**
 - Consumes: `program_ast.antiunify_ast`, `program_ast.execute`, `program_ast.as_source`.
 - `generalize` 가 `ag.kg["solution"]` 에 `{"skeleton": <AST>, "slots": ..., "programs": <AST 리스트>, "tid": ...}` 저장 (skeleton 이 이제 AST).
+
+- [ ] **Step 0 (행동보존 필수): `antiunify_ast` pixel path 에 object-body 제외 필터.**
+레거시 `antiunify()` 는 `parse_program`(정규식 `in_px` 만) 이 **object 프로그램(`in_objs`)에 None** 을 돌려줘
+generalize 가 그 pair 를 **건너뛰었다**(pixel 프로그램만 anti-unify). Task 6 이 object+pixel merge·pure-object
+`PAIR.program` 을 정상 생산하므로, `antiunify_ast` 도 **pure-pixel body 만** anti-unify 해야 동작이 보존된다
+(안 그러면 object body 가 잘못 anti-unify 되어 solution/step 이 달라짐 — 009d5c81-style). `program_ast.py` 에:
+```python
+def _is_pixel_body(body):
+    return bool(body) and all(s["args"]["target"].get("ref") == "pixel" for s in body)
+```
+그리고 `_antiunify_ast_pixel(asts)` 시작에서 pure-pixel 만 남긴다:
+```python
+def _antiunify_ast_pixel(asts):
+    from arbor.reasoning.antiunify import _align
+    asts = [a for a in asts if _is_pixel_body(a.get("body") or [])]   # ← object body 제외(레거시 parse None 대응)
+    progs = [ops_of_ast(a) for a in asts]
+    progs = [p for p in progs if p and all(o[0] is not None for o in p)]
+    ...  # (이하 기존과 동일)
+```
+테스트 추가(`TestAntiunify`): object body 가 섞이면 pixel 것만 anti-unify:
+```python
+    def test_object_body_excluded_from_pixel_antiunify(self):
+        a = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        b = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(8))])
+        obj = P.program([P.step("coloring", target=P.ref("object", P.const(0)), color=P.const(4))])
+        sk, slots = P.antiunify_ast([a, b, obj])          # obj 제외 → a,b 만
+        self.assertIsNotNone(sk); self.assertIn("?color0", slots)
+        self.assertEqual(len(sk["body"]), 1)
+```
 
 - [ ] **Step 1: 실패 테스트 작성** (generalize 경로의 핵심: 두 AST → solution AST 실행)
 
