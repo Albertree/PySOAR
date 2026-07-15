@@ -33,6 +33,26 @@ def _is_pixel_body(body):
     return bool(body) and all(s["args"]["target"].get("ref") == "pixel" for s in body)
 
 
+# ── grid-property 생성자 (G1 = set_gridsize ∘ set_gridcolor ∘ set_gridcontents) ──
+def keep(prop):                 return {"keep": prop}
+def delta(remove, add):         return {"delta": {"remove": list(remove), "add": list(add)}}
+def set_gridsize(size_leaf):    return {"call": "set_gridsize", "args": {"size": size_leaf}}
+def set_gridcolor(color_leaf):  return {"call": "set_gridcolor", "args": {"color": color_leaf}}
+def set_gridcontents(c_leaf):   return {"call": "set_gridcontents", "args": {"contents": c_leaf}}
+
+
+def grid_program(size_leaf, color_leaf, contents_leaf, input_grid="G0"):
+    body = [set_gridsize(size_leaf), set_gridcolor(color_leaf), set_gridcontents(contents_leaf)]
+    return program(body, input_grid=input_grid)
+
+
+_GRID_OPS = ("set_gridsize", "set_gridcolor", "set_gridcontents")
+
+
+def _is_grid_body(body):
+    return bool(body) and all(s.get("call") in _GRID_OPS for s in body)
+
+
 def step(op, **args):
     return {"call": op, "args": dict(args)}
 
@@ -56,6 +76,15 @@ def _leaf_src(leaf):
     raise ValueError(f"bad leaf: {leaf}")
 
 
+def _grid_leaf_src(leaf):
+    """grid-property leaf → 소스 조각. keep/delta 는 전용 렌더, 그 외(const/var/expr) 는 _leaf_src 재사용."""
+    if "keep" in leaf:
+        return "keep"
+    if "delta" in leaf:
+        return f"-{leaf['delta']['remove']}+{leaf['delta']['add']}"
+    return _leaf_src(leaf)
+
+
 # ── to_source ───────────────────────────────────────────
 _LEVEL = {"pixel": ("in_px = pixels_of(input_grid)", "in_px", "P"),
           "object": ("in_objs = objects_of(input_grid)", "in_objs", "O")}
@@ -66,6 +95,8 @@ def to_source(ast) -> str:
     if not ast or not ast.get("body"):
         return "{}"
     body = ast["body"]
+    if _is_grid_body(body):
+        return _to_source_grid(body)
     if _is_cellset_body(body):
         return _to_source_blob(body)
     # ── pixel/object 계열 (기존) ──
@@ -82,6 +113,17 @@ def to_source(ast) -> str:
         steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {prefix}{i}.coord, {_leaf_src(s['args']['color'])})")
     steps.append(f"output_grid = tfg{len(body)}")
     return "\n".join(defs + [""] + steps)
+
+
+def _to_source_grid(body):
+    """grid body(set_gridsize/set_gridcolor/set_gridcontents) → G0/G1 소스."""
+    parts = {s["call"]: s["args"] for s in body}
+    sz = _grid_leaf_src(parts["set_gridsize"]["size"])
+    co = _grid_leaf_src(parts["set_gridcolor"]["color"])
+    ct = _grid_leaf_src(parts["set_gridcontents"]["contents"])
+    return ("G0 = input_grid\n"
+            f"G1 = set_gridsize({sz}) ∘ set_gridcolor({co}) ∘ set_gridcontents({ct})\n"
+            "output_grid = G1")
 
 
 def _to_source_blob(body):
