@@ -9,7 +9,7 @@ class TestParityPayload(unittest.TestCase):
             PA.step("coloring", target=PA.ref("pixel", PA.const(1)), color=PA.const(5)),
         ])
         task = {"train": [{"input": [[0, 0], [0, 0]], "output": [[0, 5], [0, 0]]}]}
-        payload = _runner_payload("easy000x", [ast], task)
+        payload = _runner_payload("easy000x", [ast], [0], task)
         self.assertEqual(len(payload), 1)
         item = payload[0]
         self.assertEqual(item["expected"], PA.execute(ast, task["train"][0]["input"]))

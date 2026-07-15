@@ -5,7 +5,8 @@
 솔버(_Tracer+setup_focus_agent)를 실제로 돌려 WM 에 남은 값만 그대로 읽는다(재계산·재해석 없음).
 각 태스크의 example(train) pair 마다 PAIR.program 을:
 
-  ① text    — program_ast.to_source(ast) + render_header(ast, 그 pair 의 실제 input_grid)
+  ① text    — display_source(ast)(뷰어 로컬 통일 실행형 body) + render_header(ast, 그 pair 의 실제
+              input_grid); canonical program_ast.to_source(ast)(파싱 계약 원본)는 접힌 <details> 로 참조용 병기
   ② AST 트리 — 원본 typed-arg dict(JSON)을 그대로 nested 렌더 (leaf 값 재해석 없음)
   ③ 시각화  — grid(a/b) = 3-property setter box-flow(G0→set_grid_size∘set_grid_color∘set_grid_contents→G1),
               pixel/object(c–h) = coloring box-flow(easy_antiunify_viz 의 원자 box 헬퍼 재사용)
@@ -13,7 +14,11 @@
 로 보여주고, 마지막에 TASK.solution(anti-unify 골격 — COMM=상수 유지·DIFF=slot 변수)을 같은 3-뷰로 보여준다.
 program 이 없는 태스크(i: 격자 크기 변화 등 미해결)는 플레이스홀더만 표시.
 
-program 문자열은 표시만 한다 — exec/eval 없음(program_ast.to_source/as_source 텍스트 그대로).
+Python 빌드 쪽은 표시만 한다 — eval/exec 없음(program_ast.to_source/display_source 텍스트 그대로,
+RUNNER_DATA 는 build 시점에 미리 계산한 값을 JSON 으로 굽는다). 다만 페이지 하단에는 순수 프런트엔드
+코드 실행기가 있다 — body 를 JS atom 미러(ATOM, new Function 기반 안전 평가)로 브라우저에서 직접
+실행하고, 그 결과를 build 시점에 구운 program_ast.execute 결과와 대조해 parity ✓/✗ 배지로 보여준다
+(JS↔Python 드리프트 감시 — §7 honesty 가드).
 
     python -m debugger.reports.program_viewer   # -> debugger/traces/program_report_all.html
 """
@@ -57,6 +62,8 @@ def _disp_grid_leaf(leaf, prop):
     if "delta" in leaf:
         d = leaf["delta"]
         return f"delta(remove={d['remove']}, add={d['add']})"
+    if "var" in leaf:
+        return str(leaf["var"])                       # TASK.solution slot (pair 간 값이 다른 grid property)
     return json.dumps(leaf)
 
 
@@ -105,14 +112,16 @@ def display_source(ast):
     return _display_pixel(body)
 
 
-def _runner_payload(tid, asts, task):
+def _runner_payload(tid, asts, pairs, task):
     """각 example program → 러너용 {tid, pair, body, input, expected}.
-    expected = 실제 program_ast.execute(ast, input) (JS 미러 대조 기준 = 정직성 가드)."""
+    expected = 실제 program_ast.execute(ast, input) (JS 미러 대조 기준 = 정직성 가드).
+    pairs[k] = asts[k] 가 실제로 속한 train index(중간 pair 누락 시 리스트 위치 ≠ train index 이므로
+    반드시 carry 된 실 index 로 짝짓는다 — T5 index-carry 가드)."""
     items = []
-    for k, ast in enumerate(asts):
-        ex = task["train"][k]
+    for ast, p in zip(asts, pairs):
+        ex = task["train"][p]
         items.append({
-            "tid": tid, "pair": k,
+            "tid": tid, "pair": p,
             "body": display_source(ast),
             "input": ex["input"],
             "expected": PA.execute(ast, ex["input"]),
@@ -122,14 +131,19 @@ def _runner_payload(tid, asts, task):
 
 # ── Step 1: 수집 — 솔버 1 회 실행해 example PAIR.program(AST) 전부 + TASK.solution 을 WM 실측값으로 ──
 def _collect(tid, task):
-    """(pair_asts, solution_ast, attempts) 반환. program/solution 없으면 각각 [] / None(정직하게 미해결)."""
+    """(pair_asts, pair_indices, solution_ast, attempts) 반환.
+    program/solution 없으면 각각 [] / None(정직하게 미해결).
+    pair_indices[k] = asts[k] 가 실제로 속한 train index — 중간 pair 에 program 이 없으면
+    asts 의 리스트 위치가 train index 와 어긋나므로, 그 실제 index 를 나란히 carry 한다
+    (T5 index-carry 가드 — false-green 방지: 다른 pair 의 input 과 program 이 잘못 짝지어지는 것 방지)."""
     try:
         tr = _Tracer(task, tid, setup=setup_focus_agent)
         tr.run(max_cycles=6000)                       # PIXEL 하강은 픽셀 개별관측으로 cycle 이 큼
     except Exception:                                 # noqa: BLE001 — 리포트 생성용, 한 태스크 예외가 전체를 죽이지 않게
-        return [], None, []
+        return [], [], None, []
     T = f"T{tid}"
     asts = []
+    pairs = []
     for k in range(len(task["train"])):
         v = next((v for (i, a, v) in tr.ag.wm if i == f"{T}.P{k}.property" and a == "program"), None)
         if v in (None, "{}"):
@@ -140,6 +154,7 @@ def _collect(tid, task):
             continue
         if ast and ast.get("body"):
             asts.append(ast)
+            pairs.append(k)
     sol_v = next((v for (i, a, v) in tr.ag.wm if i == f"{T}.property" and a == "solution"), None)
     solution = None
     if sol_v not in (None, "{}"):
@@ -149,7 +164,7 @@ def _collect(tid, task):
             sol = None
         if sol and sol.get("body"):
             solution = sol
-    return asts, solution, tr.attempts
+    return asts, pairs, solution, tr.attempts
 
 
 # ── Step 2a: ② AST 트리 — 원본 dict/list(JSON) 를 그대로 nested 렌더 ──────────────────────────
@@ -183,7 +198,7 @@ def _is_grid_literal(v):
 def _grid_leaf_repr(leaf, prop=""):
     """grid-arg leaf → 시각화 박스 라벨(정직화). keep→`prop(input_grid)`, contents const→실 2D 배열."""
     if "keep" in leaf:
-        return f"{leaf['keep']}(input_grid)"          # size/color/contents(input_grid)
+        return f"{prop or leaf['keep']}(input_grid)"  # size/color/contents(input_grid)
     if "delta" in leaf:
         d = leaf["delta"]
         return f"-{d['remove']}+{d['add']}"
@@ -288,7 +303,7 @@ def task_section(tid, task, precomputed=None):
     tp = task["test"][0]
     thumbs += EV.grid(tp["input"]) + (EV.grid(tp["output"]) if tp.get("output") else "")
 
-    asts, solution, attempts = precomputed if precomputed else _collect(tid, task)
+    asts, pairs, solution, attempts = precomputed if precomputed else _collect(tid, task)
     if not asts:
         same = all(len(e["input"]) == len(e["output"]) and len(e["input"][0]) == len(e["output"][0])
                    for e in task["train"])
@@ -306,8 +321,8 @@ def task_section(tid, task, precomputed=None):
 
     kind = ("3-property grid program (set_grid_size∘set_grid_color∘set_grid_contents)"
             if PA._is_grid_body(asts[0]["body"]) else "pixel/object coloring program")
-    pairs_html = "".join(_pair_block(f"PAIR {k + 1}", a, ex)
-                          for k, (a, ex) in enumerate(zip(asts, task["train"])))
+    ast_ex_pairs = [(a, task["train"][p], p) for a, p in zip(asts, pairs)]
+    pairs_html = "".join(_pair_block(f"PAIR {p + 1}", a, ex) for a, ex, p in ast_ex_pairs)
     if solution is not None:
         sol_html = f'<div class="solblock">{_pair_block("TASK.solution (anti-unify 골격)", solution, task["train"][0])}</div>'
     else:
@@ -450,9 +465,9 @@ def build():
     runner_data = []
     secs_list = []
     for t in TIDS:
-        asts, solution, attempts = _collect(t, tasks[t])
-        runner_data.extend(_runner_payload(t, asts, tasks[t]))
-        secs_list.append(task_section(t, tasks[t], precomputed=(asts, solution, attempts)))
+        asts, pairs, solution, attempts = _collect(t, tasks[t])
+        runner_data.extend(_runner_payload(t, asts, pairs, tasks[t]))
+        secs_list.append(task_section(t, tasks[t], precomputed=(asts, pairs, solution, attempts)))
     secs = "".join(secs_list)
     js = ("<script>var TIDS=%s;function sh(){var h=location.hash.slice(1);"
           "if(!document.getElementById(h))h=TIDS[0];"
