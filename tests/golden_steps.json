@@ -1,38 +1,38 @@
 {
   "easy000a": {
-    "n_steps": 1227,
+    "n_steps": 1280,
     "correct_attempt": 0
   },
   "easy000b": {
-    "n_steps": 1227,
+    "n_steps": 1280,
     "correct_attempt": 0
   },
   "easy000c": {
-    "n_steps": 2851,
+    "n_steps": 2760,
     "correct_attempt": 0
   },
   "easy000d": {
-    "n_steps": 2851,
+    "n_steps": 2760,
     "correct_attempt": 0
   },
   "easy000e": {
-    "n_steps": 2851,
+    "n_steps": 2760,
     "correct_attempt": 0
   },
   "easy000f": {
-    "n_steps": 2851,
+    "n_steps": 2760,
     "correct_attempt": 0
   },
   "easy000g": {
-    "n_steps": 2851,
+    "n_steps": 2760,
     "correct_attempt": 0
   },
   "easy000h": {
-    "n_steps": 2851,
+    "n_steps": 2760,
     "correct_attempt": 0
   },
   "easy000i": {
-    "n_steps": 2740,
+    "n_steps": 2649,
     "correct_attempt": null
   }
 }

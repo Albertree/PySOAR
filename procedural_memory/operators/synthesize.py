@@ -47,15 +47,18 @@ def _op_synthesize(ag):
             ag.wm.add(hid, "value", str(d["value"])); slotval[prop] = d
         else:
             miss.append(prop)
-    # DECIDE size/color → **부모** 슬롯 트리거(순차: size→color→하강; H-space pop 후 부모에서 실행).
+    # (골조 정정 2026-07-16) dead operator set_grid_size/set_grid_color 제거 → size-ready/color-ready 를
+    # 여기서 **직접** 세운다. 옛 handshake(set-size/set-color → set_grid_* operator → slot-grid_* WM 슬롯
+    # → size-ready/color-ready)의 slot-grid_* 는 아무도 안 읽던 죽은 슬롯이었고, grid property 설정은 이제
+    # hypothesize 가 all-3 일 때 set_grid_* **DSL** 을 program 에 emit 하는 것으로 일원화됐다. size-hyp/
+    # color-hyp(예측 표현식)는 대시보드 근거로 남긴다. 하강 게이트 propose*solve*grid 는 size-ready·
+    # color-ready 를 요구하므로 값 유무와 무관하게 ready 를 세워 c–h 하강 흐름을 보존한다.
     if slotval.get("size"):
-        ag.wm.add(parent, "size-hyp", str(slotval["size"]["value"])); ag.wm.add(parent, "set-size", "yes")
-    else:
-        ag.wm.add(parent, "size-ready", "yes")
+        ag.wm.add(parent, "size-hyp", str(slotval["size"]["value"]))
+    ag.wm.add(parent, "size-ready", "yes")
     if slotval.get("color"):
-        ag.wm.add(parent, "color-hyp", str(sorted(slotval["color"]["value"]))); ag.wm.add(parent, "set-color", "yes")
-    else:
-        ag.wm.add(parent, "color-ready", "yes")
+        ag.wm.add(parent, "color-hyp", str(sorted(slotval["color"]["value"])))
+    ag.wm.add(parent, "color-ready", "yes")
     if slotval.get("contents"):                                       # contents DECIDE → 부모에서 GRID 종결
         ppid = f"{p0.node_id}.property"; cv = slotval["contents"]
         old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)

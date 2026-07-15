@@ -65,8 +65,6 @@ def _do_compare_kind(ag, sid, c, kind):
     elif kind == "pxmatch":                                         # PIXEL: G0-pixels ↔ G1-pixels 교차
         g0, g1 = _wm_vals(ag, c, "g0")[0], _wm_vals(ag, c, "g1")[0]
         _compare_pixels(ag, sid, c, g0, g1, kg_compare, nodes, idx)
-    elif kind == "predict":
-        _predict_test_output(ag, sid)
 
 
 def _compare_objects(ag, sid, c, g0, g1, pair, kg_compare, nodes, idx, topk=None):
@@ -151,38 +149,9 @@ def _compare_peers(ag, sid, group):
             ag.wm.add(gid, "produce", ",".join(diff))
 
 
-def _predict_test_output(ag, sid):
-    """cross-pair 결과로 테스트 출력 Pa.G1 의 GRID 3속성(size·color·contents)을 채운다:
-      - 출력끼리(G1↔G1) 전체 COMM → 출력 상수 → Pa.G1 = 관측된 훈련 출력 → 제출 준비.
-      - 아니면 속성별(size·color): 출력끼리 그 속성 COMM 이면 그대로 / within 변화가 pair 간
-        일관(2차 COMM)이면 그 공통변화 적용. contents 는 DIFF=범주형이라 표면비교로 못 얻어 제외.
-      - 3속성 다 정해지면 ^answer-ready, 아니면 goal(produce 미결) → solve*fallback → object 하강."""
-    root = ag.kg["arckg_root"]
-    cross = ag.kg.get("cross", {})
-    out_rel = cross.get("output")
-    # ① 출력 상수? (두 훈련 출력이 표면 동일 → 테스트 출력도 그 상수)
-    if out_rel is not None and out_rel["result"]["type"] == "COMM":
-        ans = ag.task["train"][0]["output"]
-        ag.kg["answer"] = ans
-        ag.add_output_wme("answer", tuple(tuple(r) for r in ans))
-        ag.wm.add(sid, "answer-ready", "yes")
-        ag.wm.add(sid, "predict", "output=상수(불변) → Pa.G1 = 훈련 출력")
-        pid = f"{root.node_id}.property"                      # 아티팩트 슬롯은 이제 property 아래
-        old = next((v for (i, a, v) in ag.wm if i == pid and a == "solution"), None)
-        if old in (None, "{}"):
-            ag.wm.remove(pid, "solution", old)                # 빈 슬롯(sentinel) → 채운 값으로
-        ag.wm.add(pid, "solution", "output=상수(불변)")
-        return
-    # ② 속성별 도출 (size·color; contents 제외)
-    out_cat = (out_rel or {}).get("result", {}).get("category", {})
-    chg_cat = (cross.get("change") or {}).get("result", {}).get("category", {})
-    got = {}
-    for prop in ("size", "color"):
-        if out_cat.get(prop, {}).get("type") == "COMM":
-            got[prop] = "출력끼리 COMM → 그대로"
-        elif chg_cat.get(prop, {}).get("type") == "COMM":
-            got[prop] = "변화 일관 → 공통변화 적용"
-        if prop in got:
-            ag.wm.add(sid, f"predict-{prop}", got[prop])
-    missing = [p for p in ("size", "color", "contents") if p not in got]   # contents 는 항상 미결
-    ag.wm.add(sid, "predict", f"채움={list(got)} · 미결={missing}")
+# ── (골조 정정 2026-07-16) `_predict_test_output` 제거됨. compare = **비교만**. ──
+# 옛 predict 분기가 여기서 (①) 출력 COMM → 답 직접 + answer-ready + solution placeholder,
+# (②) size/color 부분예측 → 하강 신호를 냈다 — 정답 예측이 compare 안에 숨은 **단락(shortcut)**.
+# 사용자 교정: 판정(관계→3속성)은 **hypothesize** 의 임무다. compare 는 within/cross 관계를
+# `ag.kg["cross"]`(+relation edge)에 남기고 끝. hypothesize 가 그 관계(+`_grid_decide`)로 G1 의
+# 3속성을 정해 all-3 이면 3-property program, 부분이면 하강(§P1 막혀야 하강)한다.

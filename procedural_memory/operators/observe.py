@@ -84,7 +84,7 @@ def _build_agenda(ag, sid, group):
                 for p in train:
                     ag.wm.add(cid, "pair", p)
                 specs.append((cid, "cross", order)); order += 1
-        specs.append((f"{sid}.cmp:predict", "predict", order))
+        # (골조 정정 2026-07-16) predict 마커 제거 — compare 는 비교만. 답 예측/판정은 hypothesize 로.
         if train:
             ag.wm.add(sid, "to-hypothesize", "yes")         # within/cross 비교 끝나면 GRID hypothesize 발화
 

@@ -1,6 +1,6 @@
 {
   "operator": "submit",
-  "doc": "predict 가 output-link 에 얹은 답 제출 → 채점 → ^done",
+  "doc": "^answer-ready(apply_solution 이 program 실행결과를 output-link 에 얹고 세움) → 답 제출 → 채점 → ^done",
   "propose": [
     {
       "name": "propose*submit",

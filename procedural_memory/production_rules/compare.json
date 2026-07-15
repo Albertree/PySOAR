@@ -1,6 +1,6 @@
 {
   "operator": "compare",
-  "doc": "arg 없이 propose → ^cmp-active(select 가 세워줌) 있을 때만 그 비교 수행(원자연산 kg_compare). 없으면 impasse. PAIR=peers(불균형→goal), GRID=within×pair→cross(삼중쌍)→predict",
+  "doc": "arg 없이 propose → ^cmp-active(select 가 세워줌) 있을 때만 그 비교 수행(원자연산 kg_compare). 없으면 impasse. compare=비교만(골조 정정 2026-07-16). PAIR=peers(불균형→goal), GRID=within×pair→cross(삼중쌍). 판정(관계→3속성)은 hypothesize 로 이관",
   "propose": [
     {
       "name": "propose*compare",

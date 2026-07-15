@@ -6,6 +6,8 @@ from collections import Counter
 from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.perception.perception import _fg_correspondence, _obj_cc, objects_of
+from arbor.reasoning.program import _grid_decide
+from arbor.reasoning.program_ast import grid_program_from_decide
 from procedural_memory.operators.coloring import _recolor_pending
 
 
@@ -33,9 +35,31 @@ def _op_hypothesize(ag):
     g0grid = [list(r) for r in ag.task["train"][k]["input"]]
     g1grid = [list(r) for r in ag.task["train"][k]["output"]]
     if ag.wm.contains(sid, "level", "GRID"):
-        # ── GRID hypothesize = **별도 가설공간(H-space) 열기**. 실제 가설 조합·검증은 그 공간 안에서
-        #    `synthesize` DSL operator 가 SOAR 사이클로 수행(사용자 2026-07-13). 여기선 공간만 연다.
-        ag.create_hspace(ag.stack[-1], "GRID")
+        # ── (골조 정정 2026-07-16) GRID hypothesize = **관계로 3속성 판정 → program 생성 or 하강**.
+        #    compare 가 남긴 within/cross 관계 + `_grid_decide`(후보 생성→train 검증→Pa.G0 적용)로 G1 의
+        #    size/color/contents 를 정한다. 셋 다 결정(all-3) → `grid_program_from_decide` 로 3-property
+        #    program → 각 example pair 에 물질화 + programs-ready(→ generalize→resolve→apply_solution 로
+        #    답이 program 실행에서 나옴). 하나라도 미결(부분) → 별도 가설공간(H-space)을 열어 `synthesize`
+        #    가 판정·하강신호를 잇는다(현행 c–h object/pixel 경로). 부분예측 program 은 contents 없이
+        #    실행 불가 = "grid 를 예측했다"고 볼 수 없음(§P1 막혀야 하강).
+        dec = _grid_decide(ag.task["train"], ag.task["test"][0]["input"])
+        gp = grid_program_from_decide(dec)
+        if gp is not None:                                     # all-3 결정 → 3-property program
+            gpj = json.dumps(gp)
+            for k2, pp in enumerate(root.example_pairs):       # per-pair 물질화 (같은 3속성 골격)
+                if k2 >= len(ag.task["train"]):
+                    break
+                ppid = f"{pp.node_id}.property"
+                old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+                if old in (None, "{}"):
+                    ag.wm.remove(ppid, "program", old)         # sentinel(None/구 "{}") → 실제 program
+                ag.wm.add(ppid, "program", gpj)                # PAIR.program (3-property AST-json)
+            ag.wm.add(sid, "programs-ready", "yes")            # → generalize→resolve→apply_solution
+            ag.wm.add(sid, "grid-verdict",
+                      f"GRID 종결(3속성 program: size={dec['size']['decision']}·"
+                      f"color={dec['color']['decision']}·contents={dec['contents']['note']})")
+            return
+        ag.create_hspace(ag.stack[-1], "GRID")                 # 부분 미결 → 하강(현행 synthesize 경로)
         return
     if ag.wm.contains(sid, "level", "PIXEL"):
         # PIXEL 가설 = **잔여(residual) 처리**: 상위(object) substate 가 재채색한 sim·program 을 이어받아,

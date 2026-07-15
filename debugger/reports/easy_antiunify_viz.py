@@ -234,6 +234,20 @@ def task_section(tid, task):
                 f'<div class="thumbs">{thumbs}</div>'
                 f'<p class="note">antiunify_ast() 가 None 반환(예: pair 간 step 수 불일치) — COMM/DIFF'
                 f' 렌더 불가.</p></section>')
+    if PA._is_grid_body(skeleton.get("body") or []):
+        # (골조 정정 2026-07-16) a/b 등 grid-level 태스크 = 3-property grid program(set_grid_size∘
+        # set_grid_color∘set_grid_contents). pixel/blob box-flow 스키마 밖 → 뷰어의 정식 grid 박스
+        # 렌더는 후속(스펙 §12 = Task 8). 여기선 크래시 없이 **text 로 degrade**: per-pair program +
+        # anti-unified skeleton 을 to_source 로 보인다(§12 mode①=text). c–h(pixel)는 아래 box-flow 그대로.
+        prog_txt = "\n\n".join(f"— PAIR {k + 1} —\n{PA.to_source(ast_k)}"
+                               for k, ast_k in enumerate(asts))
+        sk_txt = PA.to_source(skeleton)
+        return (f'<section class="task" id="{tid}"><h2>{tid}'
+                f'<span class="tag2">3-property grid program</span></h2>'
+                f'<div class="thumbs">{thumbs}</div>'
+                f'<pre class="note" style="white-space:pre-wrap;overflow-x:auto">'
+                f'{html.escape(prog_txt)}\n\n══ TASK.solution (anti-unify) ══\n'
+                f'{html.escape(sk_txt)}</pre>{_attempts_block(attempts, tp)}</section>')
     outline = _slot_outline(skeleton)
 
     dl = skeleton["body"][-1]["args"]["target"]
