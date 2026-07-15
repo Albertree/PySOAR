@@ -136,13 +136,14 @@ def make_dashboard(tasks, dataset="focus (slice 1)"):
             "rules": _rules_manifest(), "op_docs": OP_DOCS}
     out = os.path.join(_REPO, "debugger", "traces", "focus_dashboard.html")
     doc = _HTML.replace("__DATA__", json.dumps(data))
-    # 상단 nav 링크(고정): 생성된 per-pair program 이 anti-unify 되어 일반화되는 별도 페이지로 이동
-    # (사용자 2026-07-14). 공유 _HTML 를 오염시키지 않으려 focus 출력에만 주입한다.
-    nav = ('<a href="easy_antiunify_report.html" onclick="try{location.href=\'easy_antiunify_report.html#\''
+    # 상단 nav 링크(고정): easy a-h 각 태스크의 PAIR.program(text+AST+시각화)+TASK.solution 을
+    # 확인하는 program 뷰어로 이동(스펙 §12 / 2026-07-16 버튼 교체 — 이전엔 anti-unify 3분할 뷰).
+    # 공유 _HTML 를 오염시키지 않으려 focus 출력에만 주입한다.
+    nav = ('<a href="program_report_all.html" onclick="try{location.href=\'program_report_all.html#\''
            '+D.tasks[ti].id;return false}catch(e){}" style="position:fixed;top:8px;right:12px;'
            'z-index:99999;background:#243b52;color:#bcd8f5;padding:6px 12px;border-radius:7px;'
            'text-decoration:none;font:13px/1 -apple-system,sans-serif;border:1px solid #3a5a7a;'
-           'box-shadow:0 2px 8px #0006">▤ 이 문제 anti-unification →</a>')
+           'box-shadow:0 2px 8px #0006">▤ 이 문제 program 보기 →</a>')
     doc = doc.replace("<body>", "<body>" + nav, 1)
     with open(out, "w") as f:
         f.write(doc)
@@ -159,7 +160,7 @@ if __name__ == "__main__":
     out = make_dashboard(tasks, dataset="survey 17 = easy 9 + made 2 + ARC-AGI 6")
     sz = os.path.getsize(out) / 1e6
     print(f"wrote {out}  ({sz:.1f} MB)")
-    # companion 페이지: per-pair program → anti-unification 3분할 뷰 (nav 링크 대상)
-    from debugger.reports.easy_antiunify_viz import build as _build_au
-    au = _build_au()
-    print(f"wrote {au}\nopen it:  open {out}")
+    # companion 페이지: easy a-h program 뷰어 (nav 링크 대상; 스펙 §12)
+    from debugger.reports.program_viewer import build as _build_pv
+    pv = _build_pv()
+    print(f"wrote {pv}\nopen it:  open {out}")
