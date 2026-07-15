@@ -155,6 +155,25 @@ class TestAntiunify(unittest.TestCase):
         self.assertEqual(slots["?cells0"]["values"], [[1, 2], [5, 6]])
         self.assertEqual(sk["body"][0]["args"]["target"], {"ref": "cellset", "cells": {"var": "?cells0"}})
 
+    def test_object_body_excluded_from_pixel_antiunify(self):
+        a = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        b = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(8))])
+        obj = P.program([P.step("coloring", target=P.ref("object", P.const(0)), color=P.const(4))])
+        sk, slots = P.antiunify_ast([a, b, obj])          # obj 제외 → a,b 만
+        self.assertIsNotNone(sk); self.assertIn("?color0", slots)
+        self.assertEqual(len(sk["body"]), 1)
+
+
+class TestSolutionExecute(unittest.TestCase):
+    def test_antiunify_then_execute_on_new_input(self):
+        # 두 pair: 같은 위치(idx1) 다른 색 → color slot; execute 는 choice 로 색 주입
+        a = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        b = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(8))])
+        sk, slots = P.antiunify_ast([a, b])
+        choice = {"?color0": (lambda g: 5)}
+        out = P.execute(sk, [[0, 0], [0, 0]], choice=choice)
+        self.assertEqual(out, [[0, 5], [0, 0]])     # idx1=(0,1) → 5
+
 
 class TestHeader(unittest.TestCase):
     def test_header_lists_used_op_and_input_grid(self):

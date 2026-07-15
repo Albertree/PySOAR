@@ -7,7 +7,9 @@ retry 후보로 남긴다(ARC 3회 프로토콜). test 출력은 실행에 쓰�
 """
 from __future__ import annotations
 
-from arbor.reasoning.antiunify import solution_candidates, execute_solution, render_skeleton
+import json
+from arbor.reasoning.antiunify import solution_candidates        # 유지(version space)
+from arbor.reasoning.program_ast import execute
 
 
 def _op_compose(ag):
@@ -26,7 +28,7 @@ def _op_compose(ag):
         ag.wm.add(sid, "hyps-exhausted", "yes")
         return
     label, choice = cands[idx]
-    grid = execute_solution(sol["skeleton"], sol["slots"], choice, ag.task["test"][0]["input"])
+    grid = execute(sol["skeleton"], ag.task["test"][0]["input"], choice=choice)
     ag.kg["answer"] = grid
     ag.add_output_wme("answer", tuple(tuple(r) for r in grid))   # output-link 방출
     ag.wm.add(sid, "answer-ready", "yes")                        # → propose*submit
@@ -35,9 +37,11 @@ def _op_compose(ag):
     tpa = getattr(root, "test_pair", None) or getattr(root, "test_pairs", [None])[0]
     if tpa is not None:
         ppid = f"{tpa.node_id}.property"
-        if ag.wm.contains(ppid, "program", "{}"):
-            ag.wm.remove(ppid, "program", "{}")
-        ag.wm.add(ppid, "program", render_skeleton(sol["skeleton"], sol["slots"]))
+        old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+        if old in (None, "{}") and old is not None:
+            ag.wm.remove(ppid, "program", old)
+        test_ast = dict(sol["skeleton"]); test_ast["slots"] = sol["slots"]
+        ag.wm.add(ppid, "program", json.dumps(test_ast))
     # 3-attempt: version space 를 retry 후보로 (오답 시 _reject_and_retry 가 idx+1 → compose 재발화)
     S["mode"] = "antiunify"
     S["hyps"] = [{"label": l} for l, _ in cands]

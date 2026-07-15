@@ -29,6 +29,10 @@ def _is_cellset_body(body):
     return bool(body) and all(s["args"]["target"].get("ref") == "cellset" for s in body)
 
 
+def _is_pixel_body(body):
+    return bool(body) and all(s["args"]["target"].get("ref") == "pixel" for s in body)
+
+
 def step(op, **args):
     return {"call": op, "args": dict(args)}
 
@@ -218,6 +222,7 @@ def antiunify_ast(asts):
 
 def _antiunify_ast_pixel(asts):
     from arbor.reasoning.antiunify import _align
+    asts = [a for a in asts if _is_pixel_body(a.get("body") or [])]   # ← object body 제외(레거시 parse None 대응)
     progs = [ops_of_ast(a) for a in asts]
     progs = [p for p in progs if p and all(o[0] is not None for o in p)]
     if len(progs) < 2:
