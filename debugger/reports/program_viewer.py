@@ -338,7 +338,109 @@ CSS = """
 .solblock{border:1px solid #3a5a7a;border-radius:10px;padding:2px 12px 12px;margin-top:16px;background:#131a22}
 """
 
-_RUNNER_HTML = ""   # Task 6 에서 코드 실행기 패널로 채움
+CSS += """
+#runner{background:#1a1d24;border:1px solid #262b34;border-radius:10px;padding:16px 18px;margin:18px 0}
+.runwrap{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+#rsel{background:#0f1218;color:#dfe3ea;border:1px solid #2a3038;border-radius:6px;padding:4px 8px}
+#rrun{background:#243b52;color:#bcd8f5;border:1px solid #3a5a7a;border-radius:6px;padding:4px 12px;cursor:pointer;width:max-content}
+#rcode{background:#0d1014;color:#dfe3ea;border:1px solid #232a35;border-radius:6px;padding:8px 10px;
+ font:11.5px/1.5 ui-monospace,monospace;min-height:120px;white-space:pre;overflow:auto}
+.rout{display:flex;gap:18px;margin-top:6px}.rlab{font-size:10px;color:#8b93a3;margin-bottom:4px}
+.rbadge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px}
+.rok{background:#12281c;color:#a9e6c1;border:1px solid #2f5a41}
+.rno{background:#241417;color:#e0a3a4;border:1px solid #5a2f34}
+.rerr{color:#e0a3a4;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap}
+.rawsrc summary{color:#7a8698;font-size:10px;cursor:pointer;margin-top:6px}
+"""
+
+_RUNNER_HTML = r"""
+<section id="runner"><h2>코드 실행기 <span class="tag2">순수 프런트엔드 · frozen atom JS 미러</span></h2>
+<p class="hs">아래 body 를 실행(공통 ARCKG atom 은 러너에 로드). 결과를 빌드타임 expected(=실제
+program_ast.execute)와 대조 — JS↔Python 드리프트가 ✓/✗ 로 드러남.</p>
+<div class="runwrap">
+  <select id="rsel"></select>
+  <button id="rrun">▶ Run</button>
+  <span id="rbadge" class="rbadge"></span>
+  <textarea id="rcode" spellcheck="false"></textarea>
+  <div class="rout"><div><div class="rlab">출력(JS 실행)</div><div id="rgrid"></div></div>
+    <div><div class="rlab">expected(Python execute)</div><div id="regrid"></div></div></div>
+  <div id="rerr" class="rerr"></div>
+</div></section>
+<script>
+// ── frozen atom JS 미러 (program_ast/transformation DSL 의 직역; parity 로 드리프트 감시) ──
+function _clone(g){return g.map(function(r){return r.slice();});}
+function W(g){return g[0].length;} function H(g){return g.length;}
+var ATOM = {
+  input_grid: null,
+  make_grid: function(size){var o=[];for(var r=0;r<size.height;r++){var row=[];for(var c=0;c<size.width;c++)row.push(0);o.push(row);}return o;},
+  coloring: function(g,pos,color){var o=_clone(g);o[pos[0]][pos[1]]=color;return o;},
+  set_grid_size: function(g,size){return ATOM.make_grid(size);},
+  set_grid_color: function(g,color){return g;},
+  set_grid_contents: function(g,contents){return contents==null?g:contents.map(function(r){return r.slice();});},
+  size: function(g){return {height:H(g),width:W(g)};},
+  height: function(g){return H(g);}, width: function(g){return W(g);},
+  color: function(g){var s={};for(var r=0;r<H(g);r++)for(var c=0;c<W(g);c++)s[g[r][c]]=true;return s;},
+  contents: function(g){return _clone(g);},
+  objects_of: function(g){throw new Error("objects_of: 러너 미지원(pixel/ grid 만)");},
+  pixels_of: function(g){var w=W(g),out=[];for(var i=0;i<H(g)*w;i++){out.push({coord:[Math.floor(i/w),i%w]});}return out;},
+  divmod: function(a,b){return [Math.floor(a/b),a%b];}
+};
+// body 실행: display_source 문법('g = fn(g,…)' 순차, for-loop 1종)만 해석. 미지원 구문 → 예외.
+function runBody(code, input){
+  ATOM.input_grid = input; var g = input;
+  var lines = code.split("\n"); var i=0;
+  function evalExpr(e){
+    // 안전 평가: ATOM/g/input_grid/숫자/배열/객체 리터럴만. new Function 은 로컬 스코프에 바인딩.
+    return (new Function("ATOM","g","input_grid","divmod",
+      "with(ATOM){return ("+e+");}"))(ATOM,g,ATOM.input_grid,ATOM.divmod);
+  }
+  for(i=0;i<lines.length;i++){
+    var ln = lines[i].trim();
+    if(!ln || ln[0]==="#") continue;
+    var mFor = ln.match(/^for\s+(\w+)\s+in\s+(.+):$/);
+    if(mFor){
+      var it = evalExpr(mFor[2]); var body = lines[i+1].trim();
+      var mb = body.match(/^g\s*=\s*(.+)$/); i++;
+      for(var k=0;k<it.length;k++){ (function(ix){ ATOM[mFor[1]]=ix; })(it[k]);
+        // 루프 변수는 ATOM 에 잠깐 얹어 with 로 참조
+        g = (new Function("ATOM","g","input_grid","divmod","with(ATOM){return ("+mb[1]+");}"))(ATOM,g,ATOM.input_grid,ATOM.divmod);
+      }
+      continue;
+    }
+    var m = ln.match(/^(\w+)\s*=\s*(.+)$/);
+    if(!m) throw new Error("해석 불가: "+ln);
+    var val = evalExpr(m[2]);
+    if(m[1]==="g"||m[1]==="output_grid") g=val; else ATOM[m[1]]=val;
+  }
+  return g;
+}
+function gridHTML(g){ if(!g) return '<span class="rerr">–</span>';
+  var w=g[0].length, cells=g.map(function(r){return r.map(function(v){
+    return '<i style="background:'+PAL_JS[v%10]+'"></i>';}).join("");}).join("");
+  return '<div class="thumb" style="grid-template-columns:repeat('+w+',10px)">'+cells+'</div>';
+}
+var PAL_JS=["#101010","#1E93FF","#F93C31","#4FCC30","#FFDC00","#999999","#E53AA3","#FF851B","#87D8F1","#921231"];
+function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+(function(){
+  var sel=document.getElementById("rsel");
+  RUNNER_DATA.forEach(function(d,i){var o=document.createElement("option");
+    o.value=i; o.text=d.tid+" · pair "+(d.pair+1); sel.appendChild(o);});
+  function load(){var d=RUNNER_DATA[sel.value]; document.getElementById("rcode").value=d.body;
+    document.getElementById("rgrid").innerHTML=""; document.getElementById("regrid").innerHTML=gridHTML(d.expected);
+    document.getElementById("rerr").textContent=""; document.getElementById("rbadge").textContent="";}
+  function run(){var d=RUNNER_DATA[sel.value]; var err=document.getElementById("rerr");
+    var badge=document.getElementById("rbadge"); err.textContent="";
+    try{ var out=runBody(document.getElementById("rcode").value, d.input);
+      document.getElementById("rgrid").innerHTML=gridHTML(out);
+      document.getElementById("regrid").innerHTML=gridHTML(d.expected);
+      var ok=eqGrid(out,d.expected); badge.textContent=ok?"✓ parity":"✗ 불일치";
+      badge.className="rbadge "+(ok?"rok":"rno");
+    }catch(e){ err.textContent=String(e.message||e); badge.textContent="✗ 실행오류"; badge.className="rbadge rno"; }}
+  sel.onchange=load; document.getElementById("rrun").onclick=run;
+  if(RUNNER_DATA.length){ load(); run(); }   // 로드 즉시 parity 확인
+})();
+</script>
+"""
 
 
 def build():
