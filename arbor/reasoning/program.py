@@ -146,20 +146,22 @@ def _color_map_search(train):
 
 def _global_recolor_program(g0grid, cmap):
     """전역 색맵을 **기존 coloring DSL** 만으로 표현(§1-1: 새 DSL 없이) — 목표색 t 로 바뀌는 입력셀
-    (색 s, cmap[s]=t≠s)을 묶어 apply_DSL(coloring). map 을 셀묶음 재채색으로 물질화한 level-1 program."""
+    (색 s, cmap[s]=t≠s)을 셀 단위로 재채색하는 AST 로 물질화(program_ast). 셀을 target 색별로 묶어
+    순서대로 낸다(전 색 그룹핑은 정렬 안정을 위한 것일 뿐, 실행 산출 grid 는 셀단위와 동일)."""
+    import json
+    from arbor.reasoning import program_ast as PA
     H, W = len(g0grid), len(g0grid[0])
+    body = []
     bytarget = {}
     for r in range(H):
         for c in range(W):
             s = g0grid[r][c]; t = cmap.get(s, s)
             if t != s:
-                bytarget.setdefault(t, []).append([r, c])
-    lines = ["in_px = pixels_of(input_grid)", "", "tfg0 = input_grid"]
-    for k, t in enumerate(sorted(bytarget)):
-        lines.append(f"# 전역 색맵: {len(bytarget[t])}개 셀 → 색 {t}")
-        lines.append(f"tfg{k + 1} = apply_DSL(tfg{k}, coloring, {bytarget[t]}, {t})")
-    lines.append(f"output_grid = tfg{len(bytarget)}")
-    return "\n".join(lines)
+                bytarget.setdefault(t, []).append((r, c))
+    for t in sorted(bytarget):
+        for (r, c) in bytarget[t]:
+            body.append(PA.step("coloring", target=PA.ref("pixel", PA.const(r * W + c)), color=PA.const(t)))
+    return json.dumps(PA.program(body))
 
 
 def _colorset(grid):
@@ -237,14 +239,13 @@ def _pixel_residual_program(g0, g1):
     """한 pair 의 per-pair program 을 **pixel 잔차**(G0≠G1 인 셀만 그 출력색으로 재채색)로 물질화한다 —
     pixel 경로(_op_hypothesize PIXEL + _op_coloring)가 P0 에 대해 만드는 것과 **동일 형식·동일 산물**.
     같은 크기 pair 에서만 유효(크기변화 → None). 정답을 아는 게 아니라 '달라진 셀을 출력색으로'라는
-    generic 재구성이라 §1-5 finder 아님(후보·기각이 없는 결정적 잔차)."""
+    generic 재구성이라 §1-5 finder 아님(후보·기각이 없는 결정적 잔차). AST-json 방출(program_ast)."""
     if len(g0) != len(g1) or len(g0[0]) != len(g1[0]):
         return None
+    import json
+    from arbor.reasoning import program_ast as PA
     H, W = len(g0), len(g0[0])
     changed = [(r, c) for r in range(H) for c in range(W) if g0[r][c] != g1[r][c]]
-    defs, body = ["in_px = pixels_of(input_grid)"], ["tfg0 = input_grid"]
-    for k, (r, c) in enumerate(changed):
-        defs.append(f"P{k} = in_px[{r * W + c}]")
-        body.append(f"tfg{k + 1} = apply_DSL(tfg{k}, coloring, P{k}.coord, {g1[r][c]})")
-    body.append(f"output_grid = tfg{len(changed)}")
-    return "\n".join(defs + [""] + body)
+    body = [PA.step("coloring", target=PA.ref("pixel", PA.const(r * W + c)), color=PA.const(g1[r][c]))
+            for (r, c) in changed]
+    return json.dumps(PA.program(body))

@@ -200,3 +200,15 @@ class TestMergeSource(unittest.TestCase):
         self.assertIn("tfg1 = apply_DSL(tfg0, coloring, O0.coord, 4)", src)
         self.assertIn("tfg2 = apply_DSL(tfg1, coloring, P1.coord, 5)", src)
         self.assertTrue(src.rstrip().endswith("output_grid = tfg2"))
+
+
+class TestEmitAst(unittest.TestCase):
+    def test_pixel_residual_emits_ast_json_that_rendersback(self):
+        from arbor.reasoning.program import _pixel_residual_program
+        g0 = [[0, 0], [0, 0]]
+        g1 = [[0, 3], [0, 0]]                       # index 1 → color 3
+        out = _pixel_residual_program(g0, g1)
+        import json
+        ast = json.loads(out)                       # 이제 AST-json 이어야
+        self.assertEqual(P.ops_of_ast(ast), [(1, 3)])
+        self.assertIn("apply_DSL(tfg0, coloring, P0.coord, 3)", P.as_source(out))
