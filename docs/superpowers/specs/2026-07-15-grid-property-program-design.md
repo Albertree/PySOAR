@@ -155,7 +155,11 @@ execute(set_gridsize(sz) ∘ set_gridcolor(c) ∘ set_gridcontents(ct), G0)
 
 별도 스펙. 우상단 "이 문제 anti-unification" 버튼 → **program 뷰어 companion 페이지**로 교체. PAIR.program 이
 처음 생기는 cycle 부터: (1) text(`to_source`+`render_header`), (2) AST 트리, (3) 시각화(Task 10 렌더러 재사용).
-focus 태스크의 per-pair program + task.solution. ③ Phase 1 완료 후 착수(3-property program 을 보여줌).
+per-pair program + task.solution.
+- **범위 = easy a–h 전부**(사용자 2026-07-15): 이 페이지에서 easy000a…easy000h **각 태스크의 program 을 모두
+  확인**할 수 있어야 한다. a/b 는 ③ Phase 1 의 3-property program, c–h 는 하강 pixel program. (i 는 미해결이라
+  program 없음 → "미합성/크기변화" 표식.) 태스크 선택 탭 + 각 태스크의 per-pair program·solution 렌더.
+- ③ Phase 1 완료 후 착수(그래야 a/b 도 실제 program 을 보여줄 수 있음).
 
 ## 13. Acceptance (Phase 1)
 
