@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from procedural_memory.operators.hypothesize import pair_cursor
-from arbor.reasoning.program_ast import as_source
 
 
 def _op_verify(ag):
@@ -23,9 +22,7 @@ def _op_verify(ag):
         ag.wm.add(sid, "hypothesized", "failed")
         return
     ag.wm.add(sid, "hypothesized", "yes")
-    code = as_source(next((v for (i, a, v) in ag.wm if i == sid and a == "program-code"), None))
-    if code == "{}":
-        code = "output_grid = input_grid"
+    code = next((v for (i, a, v) in ag.wm if i == sid and a == "program-code"), "output_grid = input_grid")
     if pid:
         ppid = f"{pid}.property"
         if ag.wm.contains(ppid, "program", "{}"):
