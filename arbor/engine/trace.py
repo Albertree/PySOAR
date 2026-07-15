@@ -261,10 +261,11 @@ class _Tracer:
         out = self._outlink()
         if out:
             attrs = ", ".join(f"^{a}" for (_i, a, _v) in out)
+            op_name = "apply_solution" if self.ag.kg.get("_focus") else "compose"
             self.emit("output", "output",
                       f"output-link: {attrs} → sent to environment",
                       highlight=[_wstr(t) for t in out],
-                      detail=_kg_detail(self.ag.kg, "apply_solution"))
+                      detail=_kg_detail(self.ag.kg, op_name))
         elif self.ag.wm.contains("S1", "declined", "yes"):
             self.emit("output", "output",
                       "output-link empty (declined: no answer produced)")
