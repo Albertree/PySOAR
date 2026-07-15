@@ -72,6 +72,8 @@ def _op_synthesize(ag):
                   f"contents={dec['contents']['decision']} → 미결={miss} 하강")
         gid = f"{parent}.goal"
         ag.wm.add(parent, "grid-descend", gid); ag.wm.add(gid, "produce", ",".join(miss) or "contents")
-        if dec["contents"]["note"] == "DESCEND":
-            ag.wm.add(parent, "transform-search-open", "yes")   # DSL transform 탐색 진입(Task6)
+        # NOTE(회귀수정): 여기서 transform-search-open 을 쓰면 grid-descend(기존 작동 경로)와
+        # transform_search 가 동시 제안되어 TIE impasse 로 하강이 막혀 easy000c-h 가 깨진다.
+        # DSL 흡수는 additive(어휘·엔진·operator 등록)로만 두고, transform_search 를 라이브 루프에
+        # 개입시키는 것은 회귀 없는 tie-resolution 을 갖춘 뒤(후속 스펙)에만 한다.
     ag.wm.add(h, "synthesized", "yes"); ag.wm.add(h, "hspace-done", "yes")   # 이 공간 종료 → 부모 복귀
