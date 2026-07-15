@@ -165,12 +165,10 @@ def _is_grid_literal(v):
     return isinstance(v, list) and bool(v) and isinstance(v[0], list)
 
 
-def _grid_leaf_repr(leaf):
-    """grid-arg leaf({const|var|expr|keep|delta}) → 시각화 박스에 넣을 짧은 라벨(표시 전용;
-    program_ast.to_source 의 완전한 텍스트는 ① text 뷰가 이미 보여준다). var 는 이미 '?size' 등
-    접두를 포함하는 program_ast 관례를 그대로 따른다(별도 '?' 첨가 없음)."""
+def _grid_leaf_repr(leaf, prop=""):
+    """grid-arg leaf → 시각화 박스 라벨(정직화). keep→`prop(input_grid)`, contents const→실 2D 배열."""
     if "keep" in leaf:
-        return "keep"
+        return f"{leaf['keep']}(input_grid)"          # size/color/contents(input_grid)
     if "delta" in leaf:
         d = leaf["delta"]
         return f"-{d['remove']}+{d['add']}"
@@ -181,10 +179,8 @@ def _grid_leaf_repr(leaf):
     if "const" in leaf:
         v = leaf["const"]
         if isinstance(v, dict) and "height" in v:
-            return f"{v['height']}×{v['width']}"
-        if _is_grid_literal(v):
-            return f"grid[{len(v)}×{len(v[0])}]"
-        return str(v)
+            return f"{{height:{v['height']}, width:{v['width']}}}"
+        return json.dumps(v)                          # color list / contents 2D 배열 실값(grid[NxN] 폐기)
     return str(leaf)
 
 
@@ -192,32 +188,53 @@ def _swatches(colors):
     return "".join(f'<i class="swatch" style="background:{EV.PAL[c % 10]}"></i>' for c in colors)
 
 
-def _grid_viz(ast, ex):
-    """grid(3-property) body → box-flow: G0 -> set_grid_size ∘ set_grid_color ∘ set_grid_contents -> G1.
-    contents 가 구체 grid(const) 면 그 값을 썸네일로도(실행 없이 — program 의 const 값 자체를 그림)."""
+def _endpoint_rows(ex):
+    """공통 끝점: (G0 행, G1 행) — input/output 썸네일 인라인."""
+    g0 = (f'<div class="row"><span class="bx grid">G0 = input_grid</span>{EV.grid(ex["input"])}'
+          f'</div><div class="v"></div>')
+    g1 = f'<div class="row"><span class="bx grid">G1 = output_grid</span>{EV.grid(ex["output"])}</div>'
+    return g0, g1
+
+
+def _grid_step_rows(ast):
     parts = {s["call"]: s["args"] for s in ast["body"]}
-    sz, co, ct = parts["set_grid_size"]["size"], parts["set_grid_color"]["color"], parts["set_grid_contents"]["contents"]
-    color_sw = _swatches(co["const"]) if isinstance(co.get("const"), list) and not _is_grid_literal(co["const"]) else ""
-    out_thumb = EV.grid(ct["const"]) if _is_grid_literal(ct.get("const")) else EV.grid(ex["output"])
-    rows = [
-        f'<div class="row"><span class="bx grid">G0 = input_grid</span>{EV.grid(ex["input"])}</div><div class="v"></div>',
-        f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz))}</div><div class="v"></div>',
-        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co))}{color_sw}</div><div class="v"></div>',
-        f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>{EV.colr(_grid_leaf_repr(ct))}</div><div class="v"></div>',
-        f'<div class="row"><span class="bx grid">G1 = output_grid</span>{out_thumb}</div>',
+    sz, co, ct = (parts["set_grid_size"]["size"], parts["set_grid_color"]["color"],
+                  parts["set_grid_contents"]["contents"])
+    color_sw = (_swatches(co["const"]) if isinstance(co.get("const"), list)
+                and not _is_grid_literal(co["const"]) else "")
+    return [
+        f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"))}</div><div class="v"></div>',
+        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co, "color"))}{color_sw}</div><div class="v"></div>',
+        f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>{EV.colr(_grid_leaf_repr(ct, "contents"))}</div><div class="v"></div>',
     ]
-    return f'<div class="flow">{"".join(rows)}</div>'
 
 
-def _pixel_viz(ast, ex):
-    """pixel/object/cellset body → easy_antiunify_viz 의 coloring box-flow 그대로 재사용(새 렌더 없음)."""
-    return EV.flow(EV._ast_rows(ast), EV.grid(ex["input"]) + EV.grid(ex["output"]))
+def _pixel_step_rows(ast):
+    rows = []
+    for s in ast["body"]:
+        tgt = s["args"]["target"]
+        ref = tgt.get("ref")
+        col_leaf = s["args"]["color"]
+        col = col_leaf.get("const")
+        sw = _swatches([col]) if isinstance(col, int) else ""
+        if ref in _ACCESSOR:
+            idx = _disp_leaf(tgt["index"])
+            label = f"{_ACCESSOR[ref]}(input_grid)[{idx}].coord"
+        elif ref == "cellset":
+            label = f"cells {_disp_leaf(tgt['cells'])}"
+        else:
+            label = "?"
+        rows.append(f'<div class="row">{EV.opb("coloring")}<span class="h"></span>'
+                    f'{EV.dest_box(label)}<span class="h"></span>{EV.colr(_disp_leaf(col_leaf))}{sw}</div>'
+                    f'<div class="v"></div>')
+    return rows
 
 
 def _viz(ast, ex):
-    if PA._is_grid_body(ast.get("body") or []):
-        return _grid_viz(ast, ex)
-    return _pixel_viz(ast, ex)
+    """두 계열 공통 box-flow: G0 썸네일 → 스텝들 → G1 썸네일."""
+    g0, g1 = _endpoint_rows(ex)
+    steps = _grid_step_rows(ast) if PA._is_grid_body(ast.get("body") or []) else _pixel_step_rows(ast)
+    return f'<div class="flow">{g0}{"".join(steps)}{g1}</div>'
 
 
 # program_ast.render_header 는 pixel/object body(step.args.target.ref)만 가정 — grid(3-property)
