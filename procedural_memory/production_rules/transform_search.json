@@ -1,0 +1,31 @@
+{
+  "operator": "transform_search",
+  "doc": "synthesize 의 contents-DESCEND 공백에서 DSL transform 을 effect 일치로 제안·검증. ^transform-search-open 로 발화",
+  "propose": [
+    {
+      "name": "propose*transform_search",
+      "order": 31,
+      "conditions": [
+        {"id": "<s>", "attr": "transform-search-open", "value": "yes", "negated": false},
+        {"id": "<s>", "attr": "transform-search-done", "value": "<x>", "negated": true}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "pref": "+", "referent": null},
+        {"id": "<o>", "attr": "name", "value": "transform_search", "pref": "+", "referent": null}
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*transform_search",
+      "order": 32,
+      "conditions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "negated": false},
+        {"id": "<o>", "attr": "name", "value": "transform_search", "negated": false}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "transform-search-step", "value": "yes", "pref": "+", "referent": null}
+      ]
+    }
+  ]
+}

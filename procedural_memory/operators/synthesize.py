@@ -72,4 +72,6 @@ def _op_synthesize(ag):
                   f"contents={dec['contents']['decision']} → 미결={miss} 하강")
         gid = f"{parent}.goal"
         ag.wm.add(parent, "grid-descend", gid); ag.wm.add(gid, "produce", ",".join(miss) or "contents")
+        if dec["contents"]["note"] == "DESCEND":
+            ag.wm.add(parent, "transform-search-open", "yes")   # DSL transform 탐색 진입(Task6)
     ag.wm.add(h, "synthesized", "yes"); ag.wm.add(h, "hspace-done", "yes")   # 이 공간 종료 → 부모 복귀
