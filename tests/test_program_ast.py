@@ -113,6 +113,49 @@ class TestBlobCellset(unittest.TestCase):
         self.assertEqual(out, [[0, 0], [0, 7]])             # idx 3 = (1,1)
 
 
+class TestAntiunify(unittest.TestCase):
+    def test_common_index_common_color_no_slots(self):
+        a = P.program([P.step("coloring", target=P.ref("pixel", P.const(5)), color=P.const(3))])
+        b = P.program([P.step("coloring", target=P.ref("pixel", P.const(5)), color=P.const(3))])
+        sk, slots = P.antiunify_ast([a, b])
+        self.assertEqual(slots, {})
+        self.assertEqual(P.ops_of_ast(sk), [(5, 3)])
+
+    def test_diff_color_becomes_color_slot(self):
+        a = P.program([P.step("coloring", target=P.ref("pixel", P.const(5)), color=P.const(3))])
+        b = P.program([P.step("coloring", target=P.ref("pixel", P.const(5)), color=P.const(8))])
+        sk, slots = P.antiunify_ast([a, b])
+        self.assertIn("?color0", slots)
+        self.assertEqual(slots["?color0"]["kind"], "color")
+        self.assertEqual(slots["?color0"]["values"], [3, 8])
+        # skeleton 의 color 는 var 로 승격
+        self.assertEqual(sk["body"][0]["args"]["color"], {"var": "?color0"})
+
+    def test_diff_index_becomes_src_slot(self):
+        a = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        b = P.program([P.step("coloring", target=P.ref("pixel", P.const(9)), color=P.const(3))])
+        sk, slots = P.antiunify_ast([a, b])
+        self.assertIn("?src0", slots)
+        self.assertEqual(slots["?src0"]["values"], [1, 9])
+        self.assertEqual(sk["body"][0]["args"]["target"]["index"], {"var": "?src0"})
+
+    def test_different_op_count_returns_none(self):
+        a = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])
+        b = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3)),
+                       P.step("coloring", target=P.ref("pixel", P.const(2)), color=P.const(4))])
+        sk, slots = P.antiunify_ast([a, b])
+        self.assertIsNone(sk)
+
+    def test_blob_diff_cellset_becomes_cellset_slot(self):
+        a = P.program([P.step("coloring", target=P.cellset(P.const([1, 2])), color=P.const(3))])
+        b = P.program([P.step("coloring", target=P.cellset(P.const([5, 6])), color=P.const(3))])
+        sk, slots = P.antiunify_ast([a, b])
+        self.assertIn("?cells0", slots)
+        self.assertEqual(slots["?cells0"]["kind"], "cellset")
+        self.assertEqual(slots["?cells0"]["values"], [[1, 2], [5, 6]])
+        self.assertEqual(sk["body"][0]["args"]["target"], {"ref": "cellset", "cells": {"var": "?cells0"}})
+
+
 class TestHeader(unittest.TestCase):
     def test_header_lists_used_op_and_input_grid(self):
         ast = P.program([P.step("coloring", target=P.ref("pixel", P.const(1)), color=P.const(3))])

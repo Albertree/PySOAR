@@ -168,3 +168,89 @@ def render_header(ast, grid_in) -> str:
     lines += [_sig(n) for n in ops + accs]
     lines += ["# --- input (this pair) ---", f"input_grid = {_json.dumps(grid_in)}"]
     return "\n".join(lines)
+
+
+# ── ops_of_ast / antiunify_ast ───────────────────────────
+def ops_of_ast(ast):
+    """concrete AST → [(target_value, color)]. pixel=idx, cellset=frozenset(cells). slot(var)=None."""
+    ops = []
+    for s in (ast.get("body") or []):
+        tgt = s["args"]["target"]
+        col_leaf = s["args"]["color"]
+        col = col_leaf.get("const") if "const" in col_leaf else None
+        if tgt.get("ref") == "cellset":
+            cl = tgt["cells"]
+            cells = frozenset(cl["const"]) if "const" in cl else None
+            ops.append((cells, col))
+        else:
+            idx_leaf = tgt["index"]
+            idx = idx_leaf.get("const") if "const" in idx_leaf else None
+            ops.append((idx, col))
+    return ops
+
+
+def antiunify_ast(asts):
+    """정렬된 per-pair AST 들 → (skeleton_ast, slots). 계열 판별: 전부 cellset body → blob 경로,
+    아니면 pixel 경로. 위치별 COMM=상수, DIFF=var 승격. op 수 다르면 (None, None)."""
+    valid = [a for a in asts if a and a.get("body")]
+    if len(valid) < 2:
+        return None, None
+    if all(_is_cellset_body(a["body"]) for a in valid):
+        return _antiunify_ast_blob(valid)
+    return _antiunify_ast_pixel(valid)
+
+
+def _antiunify_ast_pixel(asts):
+    from arbor.reasoning.antiunify import _align
+    progs = [ops_of_ast(a) for a in asts]
+    progs = [p for p in progs if p and all(o[0] is not None for o in p)]
+    if len(progs) < 2:
+        return None, None
+    n = len(progs[0])
+    if any(len(p) != n for p in progs):
+        return None, None
+    ref_ops = progs[0]
+    aligned = [ref_ops] + [_align(ref_ops, p) for p in progs[1:]]
+    body, slots = [], {}
+    for i in range(n):
+        idxs = [a[i][0] for a in aligned]
+        cols = [a[i][1] for a in aligned]
+        sk_idx = idxs[0] if len(set(idxs)) == 1 else None
+        sk_col = cols[0] if len(set(cols)) == 1 else None
+        idx_leaf = const(sk_idx) if sk_idx is not None else var(f"?src{i}")
+        col_leaf = const(sk_col) if sk_col is not None else var(f"?color{i}")
+        if sk_idx is None:
+            slots[f"?src{i}"] = {"kind": "src", "pos": i, "values": idxs}
+        if sk_col is None:
+            slots[f"?color{i}"] = {"kind": "color", "pos": i, "values": cols}
+        body.append(step("coloring", target=ref("pixel", idx_leaf), color=col_leaf))
+    return program(body, slots=slots), slots
+
+
+def _antiunify_ast_blob(asts):
+    """blob AST 들 → (skeleton, slots). _align_blobs(색 COMM 정렬) 재사용. cellset DIFF → cellset slot.
+    (antiunify.py::_antiunify_blobs 를 AST 로 mirror; 셀집합 비교는 tuple(sorted) 정규화.)"""
+    from arbor.reasoning.antiunify import _align_blobs
+    progs = [ops_of_ast(a) for a in asts]
+    progs = [p for p in progs if p and all(o[0] is not None for o in p)]   # concrete cells 만
+    if len(progs) < 2:
+        return None, None
+    n = len(progs[0])
+    if any(len(p) != n for p in progs):
+        return None, None
+    ref_ops = progs[0]
+    aligned = [ref_ops] + [_align_blobs(ref_ops, p) for p in progs[1:]]
+    body, slots = [], {}
+    for i in range(n):
+        cellsets = [a[i][0] for a in aligned]
+        cols = [a[i][1] for a in aligned]
+        sk_cells = cellsets[0] if len({tuple(sorted(c)) for c in cellsets}) == 1 else None
+        sk_col = cols[0] if len(set(cols)) == 1 else None
+        cells_leaf = const(sorted(sk_cells)) if sk_cells is not None else var(f"?cells{i}")
+        col_leaf = const(sk_col) if sk_col is not None else var(f"?color{i}")
+        if sk_cells is None:
+            slots[f"?cells{i}"] = {"kind": "cellset", "pos": i, "values": [sorted(c) for c in cellsets]}
+        if sk_col is None:
+            slots[f"?color{i}"] = {"kind": "color", "pos": i, "values": cols}
+        body.append(step("coloring", target=cellset(cells_leaf), color=col_leaf))
+    return program(body, slots=slots), slots
