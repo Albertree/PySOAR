@@ -40,7 +40,7 @@ _TYPE_TO_SYM = {v: k for k, v in SYMBOL_TO_TYPE.items()}
 
 
 def _wstr(t):
-    """Format a WME triple for the trace. A grid/array value (the compose ^answer,
+    """Format a WME triple for the trace. A grid/array value (the apply_solution ^answer,
     or ARCKG ^contents/^shape) is abbreviated to its SHAPE so the cycle-map row
     stays short -- the WM panel renders the grid itself. Other over-long scalar
     values are truncated with an ellipsis."""
@@ -230,7 +230,7 @@ class _Tracer:
 
     # -- output-link (^io.output-link = I3) ----------------------------------
     def _outlink(self):
-        """WMEs sitting on the output-link this cycle (id == I3). compose writes
+        """WMEs sitting on the output-link this cycle (id == I3). apply_solution writes
         the answer here via add_output_wme; empty otherwise."""
         return sorted((tuple(t) for t in self.ag.wm if t[0] == "I3"),
                       key=lambda t: (str(t[1]), str(t[2])))
@@ -256,7 +256,7 @@ class _Tracer:
     def _emit_output(self):
         """OUTPUT phase -- runs EVERY cycle (do_output_cycle). Emits whatever sits
         on ^io.output-link to the environment, EMPTY OR NOT, then the cycle loops
-        back to INPUT. The link stays empty until compose writes the answer."""
+        back to INPUT. The link stays empty until apply_solution writes the answer."""
         self.emit("output", "phase", f"cycle {self.cycle} — OUTPUT (do_output_cycle)")
         out = self._outlink()
         if out:
@@ -264,7 +264,7 @@ class _Tracer:
             self.emit("output", "output",
                       f"output-link: {attrs} → sent to environment",
                       highlight=[_wstr(t) for t in out],
-                      detail=_kg_detail(self.ag.kg, "compose"))
+                      detail=_kg_detail(self.ag.kg, "apply_solution"))
         elif self.ag.wm.contains("S1", "declined", "yes"):
             self.emit("output", "output",
                       "output-link empty (declined: no answer produced)")
@@ -439,7 +439,7 @@ class _Tracer:
     def _reject_and_retry(self, S):
         """현재 가설을 reject: 다음 후보(idx+1)로 넘기고, 풀이 substate 의 결과
         플래그(consistent/verified/answer-ready/done/predicted/hyps-exhausted)와
-        output-link 답을 지워 compose→submit(또는 predict→…→submit)이 다음 후보로 재발화."""
+        output-link 답을 지워 apply_solution→submit(또는 predict→…→submit)이 다음 후보로 재발화."""
         S["idx"] = S.get("idx", 0) + 1
         S["verified"] = None
 

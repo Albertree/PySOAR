@@ -9,16 +9,16 @@ class TestGridSchema(unittest.TestCase):
         ast = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[0, 2], [2, 0]]))
         self.assertTrue(P._is_grid_body(ast["body"]))
         self.assertEqual([s["call"] for s in ast["body"]],
-                         ["set_gridsize", "set_gridcolor", "set_gridcontents"])
+                         ["set_grid_size", "set_grid_color", "set_grid_contents"])
         self.assertEqual(ast["body"][0]["args"]["size"], {"keep": "size"})
         self.assertEqual(ast["body"][2]["args"]["contents"], {"const": [[0, 2], [2, 0]]})
 
     def test_to_source_grid_renders_setters(self):
         ast = P.grid_program(P.expr("H-1,W-1"), P.delta([5], [1, 2, 3, 4]), P.keep("contents"))
         src = P.to_source(ast)
-        self.assertIn("set_gridsize(H-1,W-1)", src)
-        self.assertIn("set_gridcolor(-[5]+[1, 2, 3, 4])", src)
-        self.assertIn("set_gridcontents(keep)", src)
+        self.assertIn("set_grid_size(H-1,W-1)", src)
+        self.assertIn("set_grid_color(-[5]+[1, 2, 3, 4])", src)
+        self.assertIn("set_grid_contents(keep)", src)
         self.assertTrue(src.rstrip().endswith("output_grid = G1"))
 
     def test_pixel_body_still_works(self):   # 회귀: 기존 pixel to_source 불변
@@ -67,7 +67,7 @@ class TestGridBuilder(unittest.TestCase):
 class TestGridDSLRegistered(unittest.TestCase):
     def test_three_setters_in_specs(self):
         from procedural_memory.dsl.registry import SPECS
-        for name in ("set_gridsize", "set_gridcolor", "set_gridcontents"):
+        for name in ("set_grid_size", "set_grid_color", "set_grid_contents"):
             self.assertIn(name, SPECS)
             self.assertEqual(SPECS[name]["kind"], "transformation")
     def test_frozen_atoms_still_two(self):   # make_grid·coloring 동결 불변

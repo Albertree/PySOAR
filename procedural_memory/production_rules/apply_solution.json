@@ -1,9 +1,9 @@
 {
-  "operator": "compose",
+  "operator": "apply_solution",
   "doc": "resolve 된 TASK.solution 을 test 입력에 실행 → 답 격자 → output-link + ^answer-ready → submit. version space ≤3 retry.",
   "propose": [
     {
-      "name": "propose*compose",
+      "name": "propose*apply_solution",
       "order": 27,
       "conditions": [
         {"id": "<s>", "attr": "resolved", "value": "yes", "negated": false},
@@ -11,20 +11,20 @@
       ],
       "actions": [
         {"id": "<s>", "attr": "operator", "value": "<o>", "pref": "+", "referent": null},
-        {"id": "<o>", "attr": "name", "value": "compose", "pref": "+", "referent": null}
+        {"id": "<o>", "attr": "name", "value": "apply_solution", "pref": "+", "referent": null}
       ]
     }
   ],
   "apply": [
     {
-      "name": "apply*compose",
+      "name": "apply*apply_solution",
       "order": 28,
       "conditions": [
         {"id": "<s>", "attr": "operator", "value": "<o>", "negated": false},
-        {"id": "<o>", "attr": "name", "value": "compose", "negated": false}
+        {"id": "<o>", "attr": "name", "value": "apply_solution", "negated": false}
       ],
       "actions": [
-        {"id": "<s>", "attr": "compose-step", "value": "yes", "pref": "+", "referent": null}
+        {"id": "<s>", "attr": "apply-solution-step", "value": "yes", "pref": "+", "referent": null}
       ]
     }
   ]

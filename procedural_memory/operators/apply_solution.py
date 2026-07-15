@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ARBOR operator body: compose (TASK.solution → test 답 조립·제출, procedural LTM leaf).
+"""ARBOR operator body: apply_solution (TASK.solution → test 답 조립·제출, procedural LTM leaf).
 
 resolve 된 `TASK.solution` 을 **test 입력(Pa.G0)에 실행**해 답 격자를 만들고 output-link 에
 얹어 `^answer-ready` → 기존 submit 이 발화·채점. version space 가 여럿이면 최대 3후보를
@@ -12,15 +12,15 @@ from arbor.reasoning.antiunify import solution_candidates        # 유지(versio
 from arbor.reasoning.program_ast import execute
 
 
-def _op_compose(ag):
+def _op_apply_solution(ag):
     sid = ag.stack[-1].id
     sol = ag.kg.get("solution")
     if not sol or "resolved" not in sol:
-        ag.wm.add(sid, "compose-failed", "yes")
+        ag.wm.add(sid, "apply-solution-failed", "yes")
         return
     cands = solution_candidates(sol)                     # version space 곱(≤3)
     if not cands:
-        ag.wm.add(sid, "compose-failed", "yes")
+        ag.wm.add(sid, "apply-solution-failed", "yes")
         return
     S = ag.kg.setdefault("solve", {})
     idx = S.get("idx", 0)                                 # retry 시 _reject_and_retry 가 idx+1
@@ -42,9 +42,9 @@ def _op_compose(ag):
             ag.wm.remove(ppid, "program", old)                # 실제 저장된 sentinel(None 또는 구 "{}") 제거
         test_ast = dict(sol["skeleton"]); test_ast["slots"] = sol["slots"]
         ag.wm.add(ppid, "program", json.dumps(test_ast))
-    # 3-attempt: version space 를 retry 후보로 (오답 시 _reject_and_retry 가 idx+1 → compose 재발화)
+    # 3-attempt: version space 를 retry 후보로 (오답 시 _reject_and_retry 가 idx+1 → apply_solution 재발화)
     S["mode"] = "antiunify"
     S["hyps"] = [{"label": l} for l, _ in cands]
     S["idx"] = idx
     S["verified"] = {"position": f"solution#{idx + 1}", "color": label}
-    ag.kg["compose"] = {"answer": grid, "label": label}
+    ag.kg["apply_solution"] = {"answer": grid, "label": label}

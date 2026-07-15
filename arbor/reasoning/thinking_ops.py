@@ -158,8 +158,8 @@ def _op_aggregate(ag):
 # (dashboard._kg_detail 이 kg.get("_focus") 를 보고 이걸 호출.)
 # ---------------------------------------------------------------------------
 def focus_detail(kg, op):
-    if op == "compose" and kg.get("compose"):            # anti-unify compose: 실행된 답 격자
-        return {"kind": "compose", "answer": kg["compose"]["answer"]}
+    if op == "apply_solution" and kg.get("apply_solution"):   # anti-unify apply_solution: 실행된 답 격자
+        return {"kind": "apply_solution", "answer": kg["apply_solution"]["answer"]}
     if op == "observe":
         return {"kind": "observe", "note": "focus 노드 property + 자식 존재 적재"}
     if op == "compare":

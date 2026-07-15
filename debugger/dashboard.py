@@ -682,7 +682,7 @@ function detail(e){
  if(d.kind=='verify'){ const o=d.info||{}; return `<div class=hint>최종 재확인:</div><div class=exprrow><span class=a>${esc(o.hyp||'')}</span> → ${o.ok?'✅ verified':'❌'}</div><hr style="border-color:var(--line)">`; }
  if(d.kind=='find'){ return `<div class=hint>role 로 대상 선택:</div><div class=exprrow>selected: <span class=a>${esc((d.selected||[]).join(', ')||'—')}</span></div><hr style="border-color:var(--line)">`; }
  if(d.kind=='generalize') return '<div class=hint>resolved expressions:</div>'+Object.entries(d.exprs).map(([k,v])=>`<div class=exprrow><span class=a>${esc(k)}</span>= ${esc(v)}</div>`).join('')+'<div class=hint>out=make_grid(size,fill)+coloring(pos,color)</div><hr style="border-color:var(--line)">';
- if(d.kind=='compose') return '<div class=hint>built:</div>'+(d.answer?grid(d.answer):'<div class=exprrow>declined</div>')+'<hr style="border-color:var(--line)">';
+ if(d.kind=='compose'||d.kind=='apply_solution') return '<div class=hint>built:</div>'+(d.answer?grid(d.answer):'<div class=exprrow>declined</div>')+'<hr style="border-color:var(--line)">';
  return '';
 }
 document.addEventListener('keydown',ev=>{

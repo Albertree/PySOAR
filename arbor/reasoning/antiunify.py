@@ -9,7 +9,7 @@ resolve(변수→G0 유래 식)는 **train pair 로만** 검증(§1-3/§4-1, tes
 program 포맷(coloring.py 생성, level-1 flat): P{i}=in_px[idx]; tfg=apply_DSL(...,P{i}.coord,color).
 op i = (pixel_index, color). 내부 표현 skeleton={'ops':[(idx|None, color|None)]}.
 
-Task 8 (program-ast 경로): `generalize`/`compose` operator 는 이제 정규식 파싱이 아니라
+Task 8 (program-ast 경로): `generalize`/`apply_solution` operator 는 이제 정규식 파싱이 아니라
 `arbor.reasoning.program_ast`(antiunify_ast/execute, AST-json 기반)를 쓴다. 아래 정규식 블록·
 `parse_program`·`_STEP`/`_DEF`/`_BLOB_DEF`/`_BLOB_STEP`·구 `antiunify()`·구 `render_skeleton()`은
 그 경로에서 더 이상 호출되지 않는다(DEPRECATED — 삭제 시 diff 가 커지므로 주석만 남김).
@@ -22,7 +22,7 @@ from __future__ import annotations
 import itertools
 import re
 
-# ── DEPRECATED (Task 8): 정규식 기반 flat-text 파서 — generalize/compose 는 program_ast(AST-json)
+# ── DEPRECATED (Task 8): 정규식 기반 flat-text 파서 — generalize/apply_solution 는 program_ast(AST-json)
 #    경로를 쓴다. parse_program 은 compress.py 가 여전히 호출(as_source 로 정규화된 flat 텍스트
 #    파싱용) — 삭제 금지. _STEP/_DEF/_BLOB_DEF/_BLOB_STEP 자체는 parse_program/_parse_blob_program
 #    내부에서만 쓰인다.
@@ -36,7 +36,7 @@ _BLOB_STEP = re.compile(r"apply_DSL\([^,]+,\s*coloring,\s*(\w+),\s*(\d+)\)")
 
 
 def parse_program(code: str):
-    """DEPRECATED (Task 8): generalize/compose 는 더 이상 이 정규식 파서를 쓰지 않는다
+    """DEPRECATED (Task 8): generalize/apply_solution 는 더 이상 이 정규식 파서를 쓰지 않는다
     (program_ast.antiunify_ast/execute 로 대체). compress.py(_blob_program)가 여전히 호출하므로
     삭제하지 않는다. flat program → ops=[(pixel_index, color)] (step 순서). 파싱 불가면 None."""
     if not code or code.strip() in ("{}", ""):
@@ -478,7 +478,7 @@ def solution_candidates(sol, limit=3):
 
 
 def execute_solution(skeleton, slots, choice, grid_in):   # DEPRECATED 위임
-    """DEPRECATED (Task 8): compose operator 는 이제 program_ast.execute 를 직접 쓴다(skeleton=AST).
+    """DEPRECATED (Task 8): apply_solution operator 는 이제 program_ast.execute 를 직접 쓴다(skeleton=AST).
     이 함수는 하위호환 위임 shim 만 남긴다 — slots 인자는 program_ast.execute 가 AST 에서 직접
     var/const leaf 를 읽으므로 쓰이지 않는다."""
     from arbor.reasoning.program_ast import execute
@@ -486,7 +486,7 @@ def execute_solution(skeleton, slots, choice, grid_in):   # DEPRECATED 위임
 
 
 def render_skeleton(skeleton, slots) -> str:
-    """DEPRECATED (Task 8): generalize/compose 는 이제 skeleton(AST-json) 을 json.dumps 로 직접
+    """DEPRECATED (Task 8): generalize/apply_solution 는 이제 skeleton(AST-json) 을 json.dumps 로 직접
     저장한다 — 호출자 없음(참고용으로만 유지). 골격+변수 → TASK.solution 문자열(대시보드·저장)."""
     if not skeleton:
         return "{}"

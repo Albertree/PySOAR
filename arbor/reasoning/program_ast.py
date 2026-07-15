@@ -33,20 +33,20 @@ def _is_pixel_body(body):
     return bool(body) and all(s["args"]["target"].get("ref") == "pixel" for s in body)
 
 
-# ── grid-property 생성자 (G1 = set_gridsize ∘ set_gridcolor ∘ set_gridcontents) ──
+# ── grid-property 생성자 (G1 = set_grid_size ∘ set_grid_color ∘ set_grid_contents) ──
 def keep(prop):                 return {"keep": prop}
 def delta(remove, add):         return {"delta": {"remove": list(remove), "add": list(add)}}
-def set_gridsize(size_leaf):    return {"call": "set_gridsize", "args": {"size": size_leaf}}
-def set_gridcolor(color_leaf):  return {"call": "set_gridcolor", "args": {"color": color_leaf}}
-def set_gridcontents(c_leaf):   return {"call": "set_gridcontents", "args": {"contents": c_leaf}}
+def set_grid_size(size_leaf):     return {"call": "set_grid_size", "args": {"size": size_leaf}}
+def set_grid_color(color_leaf):   return {"call": "set_grid_color", "args": {"color": color_leaf}}
+def set_grid_contents(c_leaf):    return {"call": "set_grid_contents", "args": {"contents": c_leaf}}
 
 
 def grid_program(size_leaf, color_leaf, contents_leaf, input_grid="G0"):
-    body = [set_gridsize(size_leaf), set_gridcolor(color_leaf), set_gridcontents(contents_leaf)]
+    body = [set_grid_size(size_leaf), set_grid_color(color_leaf), set_grid_contents(contents_leaf)]
     return program(body, input_grid=input_grid)
 
 
-_GRID_OPS = ("set_gridsize", "set_gridcolor", "set_gridcontents")
+_GRID_OPS = ("set_grid_size", "set_grid_color", "set_grid_contents")
 
 
 def _is_grid_body(body):
@@ -150,13 +150,13 @@ def to_source(ast) -> str:
 
 
 def _to_source_grid(body):
-    """grid body(set_gridsize/set_gridcolor/set_gridcontents) → G0/G1 소스."""
+    """grid body(set_grid_size/set_grid_color/set_grid_contents) → G0/G1 소스."""
     parts = {s["call"]: s["args"] for s in body}
-    sz = _grid_leaf_src(parts["set_gridsize"]["size"])
-    co = _grid_leaf_src(parts["set_gridcolor"]["color"])
-    ct = _grid_leaf_src(parts["set_gridcontents"]["contents"])
+    sz = _grid_leaf_src(parts["set_grid_size"]["size"])
+    co = _grid_leaf_src(parts["set_grid_color"]["color"])
+    ct = _grid_leaf_src(parts["set_grid_contents"]["contents"])
     return ("G0 = input_grid\n"
-            f"G1 = set_gridsize({sz}) ∘ set_gridcolor({co}) ∘ set_gridcontents({ct})\n"
+            f"G1 = set_grid_size({sz}) ∘ set_grid_color({co}) ∘ set_grid_contents({ct})\n"
             "output_grid = G1")
 
 
@@ -222,10 +222,10 @@ def execute(ast, grid_in, choice=None):
 
 
 def _execute_grid(body, grid_in, choice):
-    """set_gridsize/color/contents → make_grid+coloring lowering. contents 가 산출을 지배."""
+    """set_grid_size/color/contents → make_grid+coloring lowering. contents 가 산출을 지배."""
     from procedural_memory.dsl.transformation import make_grid, coloring
     parts = {s["call"]: s["args"] for s in body}
-    ct = parts["set_gridcontents"]["contents"]
+    ct = parts["set_grid_contents"]["contents"]
     if "keep" in ct:                      # 항등 = G0
         return [list(r) for r in grid_in]
     if "const" in ct:                     # 상수/결정된 grid = 그대로 산출
@@ -319,7 +319,7 @@ def _antiunify_ast_grid(asts):
     property key(size/color/contents) 별로 비교: leaf 동일=COMM(그대로 유지), 다르면
     DIFF → {"var":"?<prop>"} + slot."""
     import json as _json
-    props = [("set_gridsize", "size"), ("set_gridcolor", "color"), ("set_gridcontents", "contents")]
+    props = [("set_grid_size", "size"), ("set_grid_color", "color"), ("set_grid_contents", "contents")]
     body, slots = [], {}
     partsN = [{s["call"]: s["args"] for s in a["body"]} for a in asts]
     for call, key in props:

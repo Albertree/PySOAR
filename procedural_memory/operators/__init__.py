@@ -12,10 +12,10 @@ from procedural_memory.operators.grid_slots import _op_set_grid_size, _op_set_gr
 from procedural_memory.operators.generalize import _op_generalize
 from procedural_memory.operators.compress import _op_compress
 from procedural_memory.operators.resolve import _op_resolve
-from procedural_memory.operators.compose import _op_compose
+from procedural_memory.operators.apply_solution import _op_apply_solution
 
 OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select,
                    "hypothesize": _op_hypothesize, "coloring": _op_coloring, "verify": _op_verify,
                    "set_grid_size": _op_set_grid_size, "set_grid_color": _op_set_grid_color,
                    "synthesize": _op_synthesize, "generalize": _op_generalize,
-                   "compress": _op_compress, "resolve": _op_resolve, "compose": _op_compose}
+                   "compress": _op_compress, "resolve": _op_resolve, "apply_solution": _op_apply_solution}
