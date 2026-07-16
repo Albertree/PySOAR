@@ -287,6 +287,12 @@ def _swatches(colors):
     return "".join(f'<i class="swatch" style="background:{EV.PAL[c % 10]}"></i>' for c in colors)
 
 
+def _colorval(colr_html, swatch_html):
+    """색값 박스 + 색 스와치를 항상 한 줄에 붙는 non-breaking 단위로 묶는다 — flex-wrap 에서 스와치가
+    다음 줄로 갈라지지 않고 늘 색값 박스 우측에 붙도록(§색스와치 우측 고정 통일)."""
+    return f'<span class="cvwrap">{colr_html}{swatch_html}</span>'
+
+
 # ── §11 grid 썸네일 크리스프니스: 이 파일 로컬 렌더러 (EV.grid 는 다른 리포트와 공유 — 수정 금지) ──
 # 근본원인: EV.grid 는 CSS grid(각 셀 = <i>, gap:1px+border)로 그린다 — 브라우저가 비정수
 # device-pixel-ratio/줌(예: 133%)에서 grid-template-columns:repeat(W,6px) 의 각 컬럼 트랙을
@@ -334,7 +340,7 @@ def _coloring_flow_rows(body, outline=None):
         rows.append(
             f'<div class="row">{EV.opb("coloring")}<span class="h"></span>'
             f'{EV.dest_box(st["label"], o.get("idx", ""))}<span class="h"></span>'
-            f'{EV.colr(_disp_leaf(col_leaf), o.get("col", ""))}{sw}</div><div class="v"></div>')
+            f'{_colorval(EV.colr(_disp_leaf(col_leaf), o.get("col", "")), sw)}</div><div class="v"></div>')
     return rows
 
 
@@ -353,7 +359,7 @@ def _grid_step_rows(ast, outline=None):
     color_cls = outline["color"] if outline else ""
     top = [
         f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"), size_cls)}</div>',
-        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co, "color"), color_cls)}{color_sw}</div>',
+        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{_colorval(EV.colr(_grid_leaf_repr(co, "color"), color_cls), color_sw)}</div>',
     ]
     if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(①과 같은 재료)
         top.append(f'<div class="row">{EV.opb("set_grid_contents")}</div>')
@@ -390,7 +396,7 @@ def _pixel_step_rows(ast, outline=None):
         o = steps_outline[i] if (steps_outline and i < len(steps_outline)) else {}
         rows.append(f'<div class="row">{EV.opb("coloring")}<span class="h"></span>'
                     f'{EV.dest_box(label, o.get("idx", ""))}<span class="h"></span>'
-                    f'{EV.colr(_disp_leaf(col_leaf), o.get("col", ""))}{sw}</div>'
+                    f'{_colorval(EV.colr(_disp_leaf(col_leaf), o.get("col", "")), sw)}</div>'
                     f'<div class="v"></div>')
     return rows
 
@@ -644,6 +650,7 @@ CSS = """
  font:11px/1.35 ui-monospace,monospace;color:#e6c99a;white-space:pre}
 .swatch{display:inline-block;width:10px;height:10px;margin-left:2px;border-radius:2px;vertical-align:middle;
  border:1px solid rgba(255,255,255,.25)}
+.cvwrap{display:inline-flex;align-items:center;flex:0 0 auto}
 .pair{padding-top:0;margin-top:0}
 .pair + .pair{border-top:1px solid #232b36;padding-top:12px;margin-top:12px}
 /* §11 grid crispness: SVG 썸네일(사각 <i> 그리드 아님) — 줌/DPR 비정수배에서도 균일 스케일 */
