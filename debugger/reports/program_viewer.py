@@ -198,15 +198,16 @@ def _collect(tid, task):
     asts 의 리스트 위치가 train index 와 어긋나므로, 그 실제 index 를 나란히 carry 한다
     (T5 index-carry 가드 — false-green 방지: 다른 pair 의 input 과 program 이 잘못 짝지어지는 것 방지)."""
     try:
-        tr = _Tracer(task, tid, setup=setup_focus_agent)
-        tr.run(max_cycles=6000)                       # PIXEL 하강은 픽셀 개별관측으로 cycle 이 큼
+        from debugger.solve_cache import run_solve
+        r = run_solve(tid, task, max_cycles=500)      # 1회 solve(+캐시) — dashboard 와 공유(재실행 X)
     except Exception:                                 # noqa: BLE001 — 리포트 생성용, 한 태스크 예외가 전체를 죽이지 않게
         return [], [], None, []
+    wm, attempts = r["wm"], r["attempts"]
     T = f"T{tid}"
     asts = []
     pairs = []
     for k in range(len(task["train"])):
-        v = next((v for (i, a, v) in tr.ag.wm if i == f"{T}.P{k}.property" and a == "program"), None)
+        v = next((v for (i, a, v) in wm if i == f"{T}.P{k}.property" and a == "program"), None)
         if v in (None, "{}"):
             continue
         try:
@@ -216,7 +217,7 @@ def _collect(tid, task):
         if ast and ast.get("body"):
             asts.append(ast)
             pairs.append(k)
-    sol_v = next((v for (i, a, v) in tr.ag.wm if i == f"{T}.property" and a == "solution"), None)
+    sol_v = next((v for (i, a, v) in wm if i == f"{T}.property" and a == "solution"), None)
     solution = None
     if sol_v not in (None, "{}"):
         try:
@@ -225,7 +226,7 @@ def _collect(tid, task):
             sol = None
         if sol and sol.get("body"):
             solution = sol
-    return asts, pairs, solution, tr.attempts
+    return asts, pairs, solution, attempts
 
 
 # ── Step 2a: ② AST 트리 — 원본 dict/list(JSON) 를 그대로 nested 렌더 ──────────────────────────

@@ -60,19 +60,18 @@ def _cycle_tree(events):
     return nodes
 
 
-def _dash_data(task, tid="0a", max_cycles=1000):   # observe+compare+aggregate+find+solve+…×levels
-    from arbor.engine.trace import _Tracer
-    tr = _Tracer(task, tid, setup=setup_focus_agent)
-    events = tr.run(max_cycles=max_cycles)
-    wm_states = tr._wm_states           # emit 이 연속중복 병합해 이미 축소·인덱싱(events 는 wm_state 보유)
+def _dash_data(task, tid="0a", max_cycles=500):   # observe+compare+aggregate+find+solve+…×levels
+    from debugger.solve_cache import run_solve
+    r = run_solve(tid, task, max_cycles=max_cycles)      # 1회 solve(+캐시) — program report 와 공유
+    events, wm_states, attempts = r["events"], r["wm_states"], r["attempts"]
     # 제출 시도(3회 환경)를 대시보드 후보로: 각 시도의 답 격자 + 정답 여부.
     # HTML 은 c.answer 를 *테스트 pair 별 격자들의 리스트* 로 렌더(c.answer.map(grid)) →
     # 단일 test 답을 리스트로 감싼다.
     candidates = [{"answer": [a["answer"]] if a["answer"] else [],
                    "position": f"attempt {i + 1}: {a['hyp']}",
                    "color": "✓" if a["correct"] else "✗"}
-                  for i, a in enumerate(tr.attempts)]
-    correct_i = next((i for i, a in enumerate(tr.attempts) if a["correct"]), None)
+                  for i, a in enumerate(attempts)]
+    correct_i = next((i for i, a in enumerate(attempts) if a["correct"]), None)
     from debugger.dashboard import wm_deltas
     return {
         "id": tid, "events": events, "wm_states": wm_deltas(wm_states),
