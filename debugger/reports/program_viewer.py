@@ -400,51 +400,60 @@ program_ast.execute)와 대조 — JS↔Python 드리프트가 ✓/✗ 로 드�
 </div></section>
 <script>
 // ── frozen atom JS 미러 (program_ast/transformation DSL 의 직역; parity 로 드리프트 감시) ──
-function _clone(g){return g.map(function(r){return r.slice();});}
-function W(g){return g[0].length;} function H(g){return g.length;}
+// Grid 객체 헬퍼: size/color 는 contents 로부터 파생 — valid 검사(§ run())의 근거.
+function _arr(x){ return (x && x.contents) ? x.contents : x; }          // Grid 객체→2D array
+function _dims(c){ return {height:c.length, width:c[0].length}; }
+function _colorset(c){ var s={}; for(var r=0;r<c.length;r++)for(var k=0;k<c[r].length;k++)s[c[r][k]]=true; return s; }
+function _cloneObj(o){ return {size:o.size, color:o.color, contents:_arr(o).map(function(r){return r.slice();})}; }
+function _sameDims(a,b){ return a && b && a.height===b.height && a.width===b.width; }
+function _normColors(x){ // 배열[0,2] | present-set{0:true} → 정렬된 존재색 리스트
+  var ks = Array.isArray(x) ? x.slice() : Object.keys(x).filter(function(k){return x[k];}).map(Number);
+  return ks.map(Number).sort(function(a,b){return a-b;});
+}
+function _sameColors(a,b){ return JSON.stringify(_normColors(a))===JSON.stringify(_normColors(b)); }
 var ATOM = {
   input_grid: null,
   make_grid: function(size){var o=[];for(var r=0;r<size.height;r++){var row=[];for(var c=0;c<size.width;c++)row.push(0);o.push(row);}return o;},
-  coloring: function(g,pos,color){var o=_clone(g);o[pos[0]][pos[1]]=color;return o;},
-  set_grid_size: function(g,size){return ATOM.make_grid(size);},
-  set_grid_color: function(g,color){return g;},
-  set_grid_contents: function(g,contents){return contents==null?g:contents.map(function(r){return r.slice();});},
-  size: function(g){return {height:H(g),width:W(g)};},
-  height: function(g){return H(g);}, width: function(g){return W(g);},
-  color: function(g){var s={};for(var r=0;r<H(g);r++)for(var c=0;c<W(g);c++)s[g[r][c]]=true;return s;},
-  contents: function(g){return _clone(g);},
+  set_grid_size: function(s){ return s; },        // 객체 모델: 속성값 반환(size==dims(contents) 여부는 run() 이 검사)
+  set_grid_color: function(c){ return c; },
+  set_grid_contents: function(z){ return z; },
+  size: function(g){ return _dims(_arr(g)); },     // 2D array | Grid 객체 모두 처리
+  color: function(g){ return _colorset(_arr(g)); },
+  height: function(g){ return _arr(g).length; },
+  width: function(g){ return _arr(g)[0].length; },
+  contents: function(g){ return _arr(g).map(function(r){return r.slice();}); },
   objects_of: function(g){throw new Error("objects_of: 러너 미지원(pixel/ grid 만)");},
-  pixels_of: function(g){var w=W(g),out=[];for(var i=0;i<H(g)*w;i++){out.push({coord:[Math.floor(i/w),i%w]});}return out;},
+  pixels_of: function(g){ var c=_arr(g),w=c[0].length,out=[]; for(var i=0;i<c.length*w;i++) out.push({coord:[Math.floor(i/w),i%w]}); return out; },
+  coloring: function(g,pos,color){ var o=_arr(g).map(function(r){return r.slice();}); o[pos[0]][pos[1]]=color; return o; },
   divmod: function(a,b){return [Math.floor(a/b),a%b];}
 };
-// body 실행: display_source 문법('g = fn(g,…)' 순차, for-loop 1종)만 해석. 미지원 구문 → 예외.
+// body 실행: display_source 문법 — grid 객체형('g.prop = fn(…)') + pixel형('g = fn(g,…)') + for-loop 1종 해석. 미지원 구문 → 예외.
 function runBody(code, input){
-  ATOM.input_grid = input; var g = input;
-  var lines = code.split("\n"); var i=0;
+  var INPUT = {size:_dims(input), color:_colorset(input), contents:input.map(function(r){return r.slice();})};
+  ATOM.input_grid = INPUT;
+  var g = INPUT, output = null;
   function evalExpr(e){
     // 안전 평가: ATOM/g/input_grid/숫자/배열/객체 리터럴만. new Function 은 로컬 스코프에 바인딩.
     return (new Function("ATOM","g","input_grid","divmod",
-      "with(ATOM){return ("+e+");}"))(ATOM,g,ATOM.input_grid,ATOM.divmod);
+      "with(ATOM){return ("+e+");}"))(ATOM, g, INPUT, ATOM.divmod);
   }
-  for(i=0;i<lines.length;i++){
+  var lines = code.split("\n");
+  for(var i=0;i<lines.length;i++){
     var ln = lines[i].trim();
     if(!ln || ln[0]==="#") continue;
-    var mFor = ln.match(/^for\s+(\w+)\s+in\s+(.+):$/);
-    if(mFor){
-      var it = evalExpr(mFor[2]); var body = lines[i+1].trim();
-      var mb = body.match(/^g\s*=\s*(.+)$/); i++;
-      for(var k=0;k<it.length;k++){ (function(ix){ ATOM[mFor[1]]=ix; })(it[k]);
-        // 루프 변수는 ATOM 에 잠깐 얹어 with 로 참조
-        g = (new Function("ATOM","g","input_grid","divmod","with(ATOM){return ("+mb[1]+");}"))(ATOM,g,ATOM.input_grid,ATOM.divmod);
-      }
-      continue;
-    }
+    var mDot = ln.match(/^g\.(size|color|contents)\s*=\s*(.+)$/);   // 객체 속성 대입
+    if(mDot){ if(g===INPUT) g=_cloneObj(INPUT); g[mDot[1]] = evalExpr(mDot[2]); continue; }
+    var mFor = ln.match(/^for\s+(\w+)\s+in\s+(.+):$/);              // pixel cellset 루프
+    if(mFor){ var it=evalExpr(mFor[2]); var b=lines[i+1].trim(); var mb=b.match(/^g\s*=\s*(.+)$/); i++;
+      for(var k=0;k<it.length;k++){ ATOM[mFor[1]]=it[k];
+        g=(new Function("ATOM","g","input_grid","divmod","with(ATOM){return ("+mb[1]+");}"))(ATOM,g,INPUT,ATOM.divmod); }
+      continue; }
     var m = ln.match(/^(\w+)\s*=\s*(.+)$/);
     if(!m) throw new Error("해석 불가: "+ln);
     var val = evalExpr(m[2]);
-    if(m[1]==="g"||m[1]==="output_grid") g=val; else ATOM[m[1]]=val;
+    if(m[1]==="g") g=val; else if(m[1]==="output_grid") output=val; else ATOM[m[1]]=val;
   }
-  return g;
+  return output!==null ? output : g;
 }
 function gridHTML(g){ if(!g||!g.length) return '<span class="rerr">–</span>';
   var w=g[0].length, cells=g.map(function(r){return r.map(function(v){
@@ -462,9 +471,19 @@ function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
   function run(){var d=RUNNER_DATA[sel.value]; var err=document.getElementById("rerr");
     var badge=document.getElementById("rbadge"); err.textContent="";
     try{ var out=runBody(document.getElementById("rcode").value, d.input);
-      document.getElementById("rgrid").innerHTML=gridHTML(out);
+      var arr=_arr(out);
+      document.getElementById("rgrid").innerHTML=gridHTML(arr);
       document.getElementById("regrid").innerHTML=gridHTML(d.expected);
-      var ok=eqGrid(out,d.expected); badge.textContent=ok?"✓ parity":"✗ 불일치";
+      // (a) Grid 객체면 일관성(valid) 먼저
+      var invalid="";
+      if(out && out.contents){
+        if(out.size && !_sameDims(out.size,_dims(arr))) invalid="size";
+        else if(out.color && !_sameColors(out.color,_colorset(arr))) invalid="color";
+      }
+      if(invalid){ badge.textContent="✗ 모순("+invalid+")"; badge.className="rbadge rno";
+        err.textContent=invalid+" 선언이 완성 contents 와 불일치 — invalid grid"; return; }
+      // (b) 정답(contents==expected)
+      var ok=eqGrid(arr,d.expected); badge.textContent=ok?"✓ parity":"✗ 불일치";
       badge.className="rbadge "+(ok?"rok":"rno");
     }catch(e){ document.getElementById("rgrid").innerHTML='<span class="rerr">실행 불가</span>';  // stale 제거
       err.textContent=String(e.message||e); badge.textContent="✗ 실행오류"; badge.className="rbadge rno"; }}
