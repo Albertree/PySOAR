@@ -18,6 +18,7 @@ def const(v):                 return {"const": v}
 def var(name):                return {"var": name}
 def expr(e):                  return {"expr": e}
 def ref(level, index_leaf):   return {"ref": level, "index": index_leaf}
+def pending(prop):            return {"pending": prop}
 
 
 def cellset(cells_leaf):
@@ -80,20 +81,49 @@ def _color_leaf(d):
     return const(sorted(d["value"]))                       # 기본: 색집합 상수
 
 
+def _slot_leaf(dec, prop, leaf_fn):
+    """결정된 슬롯(size/color) → 실제 leaf. 미결(DESCEND/AMBIGUOUS) → pending placeholder(하강해서
+    채울 자리 — 버리지 않고 골격에 표시만 해둔다)."""
+    d = dec[prop]
+    if d["decision"] != "DECIDE":
+        return pending(prop)
+    return leaf_fn(d)
+
+
 def grid_program_from_decide(dec):
-    if any(dec[p]["decision"] != "DECIDE" for p in ("size", "color", "contents")):
-        return None
-    cnote = dec["contents"].get("note")
-    if cnote == "항등":
-        c_leaf = expr("contents(input_grid)")
-    elif cnote == "상수출력":
-        c_leaf = const(dec["contents"]["value"])          # 입력-무관 고정 grid → 검증된 const 로 정직
+    """size/color/contents 부분결정도 **skeleton** 으로 낸다(폐기 None 없음): 결정된 슬롯은 leaf,
+    미결 슬롯은 `pending(prop)` placeholder. 셋 다 결정되면 현행과 byte-identical 한 full program
+    (`is_full_grid_program` 로 판별) — a/b 는 이 경로. c–h 는 size/color leaf + contents=pending."""
+    size_leaf = _slot_leaf(dec, "size", _size_leaf)
+    color_leaf = _slot_leaf(dec, "color", _color_leaf)
+
+    cdec = dec["contents"]
+    if cdec["decision"] != "DECIDE":
+        c_leaf = pending("contents")
     else:
-        # 전역remap(등 입력-종속): dec["contents"]["value"] 는 test 입력에 remap 을 적용한 결과라, 이걸
-        # const 로 구워 전 pair 에 물질화하면 train pair 는 자기 출력을 재현 못 함(비정직 §6/§1-5).
-        # None 반환 → 호출측(hypothesize)이 하강해 기존 honest 경로(synthesize/_global_recolor_program)를 타게.
-        return None
-    return grid_program(_size_leaf(dec["size"]), _color_leaf(dec["color"]), c_leaf)
+        cnote = cdec.get("note")
+        if cnote == "항등":
+            c_leaf = expr("contents(input_grid)")
+        elif cnote == "상수출력":
+            c_leaf = const(cdec["value"])                  # 입력-무관 고정 grid → 검증된 const 로 정직
+        else:
+            # 전역remap(등 입력-종속): dec["contents"]["value"] 는 test 입력에 remap 을 적용한 결과라, 이걸
+            # const 로 구워 전 pair 에 물질화하면 train pair 는 자기 출력을 재현 못 함(비정직 §6/§1-5).
+            # pending 처리 → 호출측(hypothesize)이 하강해 기존 honest 경로(synthesize/_global_recolor_program)를 타게.
+            c_leaf = pending("contents")
+    return grid_program(size_leaf, color_leaf, c_leaf)
+
+
+def is_full_grid_program(gp):
+    """gp 의 body 어느 leaf 에도 `pending` 이 없으면 True(전 슬롯 결정 = 물질화 가능).
+    partial(하강 필요한 슬롯 있음) 이면 False. gp 가 falsy 면 False."""
+    if not gp:
+        return False
+    for s in gp.get("body") or []:
+        for leaf in (s.get("args") or {}).values():
+            if isinstance(leaf, dict) and "pending" in leaf:
+                return False
+    return True
 
 
 def step(op, **args):

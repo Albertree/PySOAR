@@ -57,11 +57,27 @@ class TestGridBuilder(unittest.TestCase):
         self.assertEqual(ast["body"][2]["args"]["contents"], {"const": fixed})   # 상수출력 → const grid
         self.assertEqual(P.execute(ast, [[9, 9, 9], [9, 9, 9]]), fixed)          # 실행하면 그 grid
 
-    def test_descend_returns_none(self):
-        dec = {"size": {"decision": "DECIDE", "value": (2, 2)},
-               "color": {"decision": "DECIDE", "value": frozenset({0})},
+    def test_descend_returns_partial_skeleton(self):
+        # c–h 형: size/color DECIDE, contents DESCEND → 버리지 않고 skeleton(pending contents) 유지.
+        dec = {"size": {"decision": "DECIDE", "value": (2, 2), "cands": [("KEEP", (2, 2), True)]},
+               "color": {"decision": "DECIDE", "value": frozenset({0}), "cands": [("KEEP", frozenset({0}), True)]},
                "contents": {"decision": "DESCEND", "value": None}}
-        self.assertIsNone(P.grid_program_from_decide(dec))
+        ast = P.grid_program_from_decide(dec)
+        self.assertIsNotNone(ast)
+        self.assertTrue(P._is_grid_body(ast["body"]))
+        self.assertEqual(ast["body"][2]["args"]["contents"], {"pending": "contents"})
+        self.assertFalse(P.is_full_grid_program(ast))
+
+    def test_all_decide_is_full_grid_program(self):
+        # a/b 형: 셋 다 DECIDE → pending 없음 = full.
+        fixed = [[0, 2, 0], [2, 0, 2]]
+        dec = {
+            "size":     {"decision": "DECIDE", "value": (2, 3), "cands": [("KEEP", (2, 3), True)]},
+            "color":    {"decision": "DECIDE", "value": frozenset({0, 2}), "cands": [("CONST", frozenset({0, 2}), True)]},
+            "contents": {"decision": "DECIDE", "value": fixed, "note": "상수출력", "cands": [("CONST", "상수출력", True)]},
+        }
+        ast = P.grid_program_from_decide(dec)
+        self.assertTrue(P.is_full_grid_program(ast))
 
 
 class TestGridDSLRegistered(unittest.TestCase):

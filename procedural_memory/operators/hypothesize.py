@@ -7,7 +7,7 @@ from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.perception.perception import _fg_correspondence, _obj_cc, objects_of
 from arbor.reasoning.program import _grid_decide
-from arbor.reasoning.program_ast import grid_program_from_decide
+from arbor.reasoning.program_ast import grid_program_from_decide, is_full_grid_program
 from procedural_memory.operators.coloring import _recolor_pending
 
 
@@ -44,16 +44,16 @@ def _op_hypothesize(ag):
         #    실행 불가 = "grid 를 예측했다"고 볼 수 없음(§P1 막혀야 하강).
         dec = _grid_decide(ag.task["train"], ag.task["test"][0]["input"])
         gp = grid_program_from_decide(dec)
-        if gp is not None:                                     # all-3 결정 → 3-property program
-            hn = 0          # a/b 탐색 후보를 WM 에 노출(spec §13/§1-5 visibility) — synthesize.py:27-44 미러
-            for prop in ("size", "color", "contents"):
-                for kind, pred, ok in dec[prop]["cands"]:      # 생성된 가설(시도·기각 후보) = H1,H2…
-                    hn += 1
-                    hh = f"{sid}.H{hn}"
-                    ag.wm.add(sid, "hypothesis", hh)
-                    ag.wm.add(hh, "slot", prop)
-                    ag.wm.add(hh, "rule", kind); ag.wm.add(hh, "predict", str(pred))
-                    ag.wm.add(hh, "verdict", "survive" if ok else "reject")
+        hn = 0              # 탐색 후보를 WM 에 노출(spec §13/§1-5 visibility) — synthesize.py:27-44 미러.
+        for prop in ("size", "color", "contents"):             # full(a/b)·partial(c-h) 공통 — 결정된 슬롯의
+            for kind, pred, ok in dec[prop]["cands"]:          # 근거(H1,H2…)는 부분 하강 때도 버리지 않는다.
+                hn += 1
+                hh = f"{sid}.H{hn}"
+                ag.wm.add(sid, "hypothesis", hh)
+                ag.wm.add(hh, "slot", prop)
+                ag.wm.add(hh, "rule", kind); ag.wm.add(hh, "predict", str(pred))
+                ag.wm.add(hh, "verdict", "survive" if ok else "reject")
+        if is_full_grid_program(gp):                           # all-3 결정 → 3-property program
             gpj = json.dumps(gp)
             for k2, pp in enumerate(root.example_pairs):       # per-pair 물질화 (같은 3속성 골격)
                 if k2 >= len(ag.task["train"]):
@@ -68,6 +68,9 @@ def _op_hypothesize(ag):
                       f"GRID 종결(3속성 program: size={dec['size']['decision']}·"
                       f"color={dec['color']['decision']}·contents={dec['contents']['note']})")
             return
+        # PARTIAL(주로 contents 미결) → 결정된 슬롯(size/color)을 담은 skeleton 을 parent GRID substate 에
+        # stash(버리지 않음). pending 슬롯은 T4(verify)가 하강 coloring 으로 채운다 — 여기선 PAIR.program 미기록.
+        ag.wm.add(sid, "grid-skeleton", json.dumps(gp))
         ag.create_hspace(ag.stack[-1], "GRID")                 # 부분 미결 → 하강(현행 synthesize 경로)
         return
     if ag.wm.contains(sid, "level", "PIXEL"):
