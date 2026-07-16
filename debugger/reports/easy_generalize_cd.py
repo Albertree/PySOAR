@@ -104,7 +104,7 @@ def sol_flow(dest, outl=None):
 
 
 def build():
-    paths = dict(list_tasks("easy_a"))
+    paths = dict(list_tasks("easy"))
     tc, td = load_task(paths["easy000c"]), load_task(paths["easy000d"])
     Tc, Td = task_dest(tc), task_dest(td)
 

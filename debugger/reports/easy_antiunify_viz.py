@@ -30,7 +30,7 @@ from arbor.reasoning import program_ast as PA
 PAL = ["#101010", "#1E93FF", "#F93C31", "#4FCC30", "#FFDC00",
        "#999999", "#E53AA3", "#FF851B", "#87D8F1", "#921231"]
 
-# easy_a 데이터셋 실물 9 태스크(list_tasks("easy_a") 와 일치): a·b = GRID-level 상수해(§ 아래
+# easy_a 데이터셋 실물 9 태스크(list_tasks("easy") 와 일치): a·b = GRID-level 상수해(§ 아래
 # task_section 참고), c~h = 단일픽셀 이동(PIXEL coloring AST), i = 격자 크기 변화(6x6→5x5).
 TIDS = [f"easy000{c}" for c in "abcdefgh"]
 
@@ -343,7 +343,7 @@ h1{font-size:18px;margin:10px 0 4px}.hs{color:#8b93a3;margin:0 0 14px;font-size:
 
 def build():
     tabs = "".join(f'<a href="#{t}" data-t="{t}">{t[-1].upper()}</a>' for t in TIDS)
-    paths = dict(list_tasks("easy_a"))
+    paths = dict(list_tasks("easy"))
     secs = "".join(task_section(t, load_task(paths[t])) for t in TIDS)
     js = ("<script>function sh(){var h=location.hash.slice(1);"
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(!h||s.id===h)?'':'none'});"

@@ -18,7 +18,7 @@ def _load_made_and_real():
     real = glob.glob(os.path.join(here, "data", "**", "08ed6ac7.json"), recursive=True)
     if real:
         tasks.append(("08ed6ac7", load_task(real[0])))
-    etid, epath = list_tasks("easy_a")[0]
+    etid, epath = list_tasks("easy")[0]
     tasks.append((etid, load_task(epath)))
     return tasks
 
@@ -32,7 +32,7 @@ def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, includ
     here = _REPO
     tasks = []
     if include_easy:
-        tasks += [(tid, load_task(p)) for tid, p in list_tasks("easy_a")]     # easy 9
+        tasks += [(tid, load_task(p)) for tid, p in list_tasks("easy")]      # easy a-h 8
     if include_made:
         for tid in ("made000a", "made000b"):                                 # made 2
             p = os.path.join(here, "data", "made", f"{tid}.json")

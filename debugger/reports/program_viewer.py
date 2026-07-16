@@ -913,7 +913,7 @@ function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
 
 def build():
     tabs = "".join(f'<a href="#{t}" data-t="{t}">{t[-1].upper()}</a>' for t in TIDS)
-    paths = dict(list_tasks("easy_a"))
+    paths = dict(list_tasks("easy"))
     tasks = {t: load_task(paths[t]) for t in TIDS}
     runner_data = []
     secs_list = []

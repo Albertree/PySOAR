@@ -21,7 +21,7 @@ from arbor.env.dataset import list_tasks, load_task     # noqa: E402
 def main() -> int:
     golden = json.load(open(os.path.join(ROOT, "tests", "golden_steps.json")))
     fails = []
-    tasks = list_tasks("easy_a")
+    tasks = list_tasks("easy")
     for tid, p in tasks:
         d = _dash_data(load_task(p), tid)
         want = golden.get(tid, {}).get("n_steps")

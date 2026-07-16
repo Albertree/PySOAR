@@ -241,7 +241,7 @@ h1{font-size:20px;margin:0 0 4px}.hsub{color:#8b93a3;margin:0 0 18px}
 
 def build():
     cards, toc = [], []
-    paths = dict(list_tasks("easy_a"))
+    paths = dict(list_tasks("easy"))
     for tid in TIDS:
         task = load_task(paths[tid])
         card, (ok, concept) = task_card(tid, task)

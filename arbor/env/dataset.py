@@ -14,12 +14,17 @@ import os
 # ~/Desktop/ARC-solver/data — external hook removed so the repo runs standalone.
 _ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
 
+# (2026-07-17 사용자 데이터 정리) ARC_easy_a → ARC_easy 로 rename(구 ARC_easy 삭제); made·multi 삭제;
+# ARC_human 은 사용자 제작 문제(flip/move/rotate 하위폴더)로 교체.
 DATASETS = {
-    "easy_a": os.path.join(_ROOT, "ARC_easy_a"),          # 9  single-pixel
-    "easy":   os.path.join(_ROOT, "ARC_easy"),            # 16 single-pixel
-    "human":  os.path.join(_ROOT, "ARC_human"),           # 8
-    "agi":    os.path.join(_ROOT, "ARC_AGI", "training"),       # full ARC-AGI-1 train
-    "agi2":   os.path.join(_ROOT, "ARC_AGI_v2", "training"),    # full ARC-AGI-2 train
+    "easy":   os.path.join(_ROOT, "ARC_easy"),                 # a-h 8 (구 easy_a; 폴더 rename)
+    "easy_a": os.path.join(_ROOT, "ARC_easy"),                 # 하위호환 alias (구 easy_a → easy)
+    "human":  os.path.join(_ROOT, "ARC_human"),                # (하위폴더 flip/move/rotate)
+    "move":   os.path.join(_ROOT, "ARC_human", "move"),        # 사용자 제작 move 문제
+    "flip":   os.path.join(_ROOT, "ARC_human", "flip"),
+    "rotate": os.path.join(_ROOT, "ARC_human", "rotate"),
+    "agi":    os.path.join(_ROOT, "ARC_AGI", "training"),      # full ARC-AGI-1 train
+    "agi2":   os.path.join(_ROOT, "ARC_AGI_v2", "training"),   # full ARC-AGI-2 train
 }
 
 
