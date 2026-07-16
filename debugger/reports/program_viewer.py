@@ -622,22 +622,26 @@ def task_section(tid, task, precomputed=None):
 
 
 CSS = """
-/* 가로스크롤 제거(2026-07-17): 이 문서 전체에 border-box 리셋 — max-width:100% 로 폭을 뷰포트에
-   맞춘 박스들(.view/.stepcard/.innerbox/.gflow/.nestedflow 등)이 padding/border 만큼 그 위로
-   삐져나오지 않게 한다(content-box 기본값이면 width/max-width 는 padding·border 를 포함하지 않아
-   합계가 100% 를 넘어 overflow 가 재발한다). EV.CSS 는 그대로 두고(수정 금지) — 이 CSS(program_viewer
-   local) 는 build() 가 만드는 style 태그 안에서 EV.CSS 뒤에 이어붙는 부분에만 적용 — easy_antiunify
-   _report.html 은 이 CSS 를 포함하지 않으므로 영향 없음.
+/* 영역 폭 고정(2026-07-17 반전 — 사용자 요청): 이전엔 max-width:100% 로 각 박스(.view/.stepcard/
+   .innerbox/.gflow/.nestedflow 등)를 뷰포트 폭에 맞춰 축소/줄바꿈시켰다(§2026-07-17 "가로스크롤
+   제거"). 사용자가 그 반대를 원함 — 뷰포트를 좁혀도(줌 축소·창 좁힘) 각 영역이 줄어들거나 reflow
+   되지 않고 원래(자연) 폭을 유지해야 하며, 대신 전체 폭이 넘치면 가로 스크롤바가 나타나는 편이
+   낫다. 그래서 그 max-width:100%/min-width:0(축소 훅)들을 여기서 되돌린다 — flex-shrink:0(=고정
+   폭, 줄어들지 않음)로 바꾸고, 넘친 폭은 페이지 레벨 가로 스크롤 하나로 받는다(중첩 스크롤바
+   방지 — 안쪽 .flow 의 개별 overflow-x:auto 도 함께 제거). box-sizing:border-box 는 자연폭 계산에
+   영향 없어 그대로 둔다. EV.CSS 는 그대로 두고(수정 금지) — 이 CSS(program_viewer local)는 build()
+   가 만드는 style 태그 안에서 EV.CSS 뒤에 이어붙는 부분에만 적용 — easy_antiunify_report.html 은
+   이 CSS 를 포함하지 않으므로 영향 없음.
    (주의: 이 주석/CSS 텍스트 안에 리터럴 "style 닫는 태그" 문자열을 쓰지 말 것 — HTML 파서는 <style>
    요소를 raw-text 로 취급해 그 문자열이 나오면 안의 내용이 주석이든 아니든 그 자리에서 즉시 스타일
    블록을 끝내버려, 그 뒤 CSS 전부가 화면에 그냥 텍스트로 노출되는 사고가 난다 — 실제로 한 번 냈던
    실수라 여기 남겨 재발 방지.) */
 *,*::before,*::after{box-sizing:border-box}
-.views{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin:6px 0 14px}
-.view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:1 1 260px;min-width:0;max-width:100%}
-/* ③ 시각화 pane 만 폭을 더 넓게(§row nowrap 수정 — 아래 .flow .row 참고): 색값 박스가 한 줄에서
-   안 밀려나려면 ③ pane 자체가 coloring 스텝 한 줄(op+target+color+swatch)을 담을 만큼 넓어야
-   한다. ①②(텍스트/AST 트리)는 원래 폭 그대로 — 그쪽은 이미 잘 줄바꿈되므로 건드릴 필요 없다. */
+.views{display:flex;gap:10px;align-items:flex-start;flex-wrap:nowrap;margin:6px 0 14px}
+.view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:0 0 auto}
+/* ③ 시각화 pane 만 폭을 더 넓게: 색값 박스가 한 줄에서 안 밀려나려면 ③ pane 자체가 coloring
+   스텝 한 줄(op+target+color+swatch)을 담을 만큼 넓어야 한다. ①②(텍스트/AST 트리)는 원래 폭
+   그대로 — 그쪽은 이미 잘 줄바꿈되므로 건드릴 필요 없다. */
 .view.viz{flex-basis:480px}
 .vt{font-size:11px;color:#8b93a3;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;font-weight:700}
 .src{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:8px 10px;
@@ -664,50 +668,44 @@ CSS = """
    set_grid_size→color→contents 사이가 끊기지 않는다. 중첩 coloring(.nestedflow)은 그 선 오른쪽으로
    더 들여써(margin-left) 겹치지 않는다 — 별도 CSS 요소가 아니라 "같은 선이 배경에서 이어지고,
    중첩 박스가 그 위에 오른쪽으로 얹힌다"는 하나의 레이아웃. */
-.flow{width:max-content;max-width:100%}
-.gflow{position:relative;display:flex;flex-direction:column;align-items:flex-start;max-width:100%}
+.flow{width:max-content}
+.gflow{position:relative;display:flex;flex-direction:column;align-items:flex-start}
 .gflow::before{content:"";position:absolute;left:48px;top:6px;bottom:6px;width:2px;background:#3b4657}
 .gflow>.row{margin-bottom:12px}
 .gflow>.row:last-of-type{margin-bottom:6px}
 .nestedflow{display:flex;flex-direction:column;align-items:flex-start;border-left:2px solid #3a5a7a;
- padding:6px 0 6px 12px;margin:0 0 0 82px;background:#101319;border-radius:0 6px 6px 0;width:max-content;max-width:calc(100% - 82px)}
+ padding:6px 0 6px 12px;margin:0 0 0 82px;background:#101319;border-radius:0 6px 6px 0;width:max-content}
 .nestedflow .row{margin-bottom:8px}
 .nestedflow .row:last-child{margin-bottom:0}
 .gvar{font:11px ui-monospace,monospace;color:#7fb2e0;background:#132030;border:1px solid #22384d;
  border-radius:5px;padding:2px 6px;margin-right:6px}
 .gvar-out{margin-right:0;margin-left:6px;color:#e6c99a;background:#241b12;border-color:#3a2c1a}
 .gnote{font-size:10.5px;color:#8fb0a0;font-style:italic}
-/* 가로스크롤 제거(2026-07-17): EV.CSS 의 .bx(공유·수정 금지)는 white-space:nowrap 로 라벨을 한
-   줄로 고정 — 이 문서(program_report_all.html)에서만 pixels_of(input_grid)[35].coord 같은 긴
-   accessor 라벨이 박스 폭을 강제로 늘려 ③ 시각화/Step 카드가 넓어지는 원인이었다. EV.CSS 뒤에
-   이 CSS 가 이어붙는 <style> 순서(build() 참고)를 이용해 같은 specificity(단일 클래스)로 override
-   — easy_antiunify_report.html(EV.CSS 단독 사용, 이 CSS 미포함)에는 영향 없음. */
-.bx{white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
-/* row wrap 버그 수정(2026-07-17 후속): 위 .row{flex-wrap:wrap} 가 ①②③ pane 이 좁을 때(.view
-   flex:1 1 260px) 세 pane 이 나란히 눌려 coloring 스텝 한 줄(op box + target box + 색값 박스 +
-   스와치)이 pane 폭을 넘기면, 그 줄 자체가 다음 줄로 접혀 색값 박스(.cvwrap)만 밑으로 떨어져
-   보였다(어긋나 보임 — 사용자 리포트). 고정: ③ pane(.view.viz, 위에서 폭을 480px 로 넓힘)이
-   coloring 한 줄을 담을 만큼 넓어지므로, 이제 .flow 안 각 .row 는 절대 내부에서 안 접히게
-   nowrap 으로 고정한다 — 대신 pane 들이 서로 나란히 들어갈 자리가 없으면 .views{flex-wrap:wrap}
-   (위 §636)가 pane 전체를 다음 줄로 내려(세로 stack) 대응한다. 그래도(아주 좁은 뷰포트) 한
-   줄이 pane 폭보다 넓으면 줄을 접는 대신 .flow 자체에 담긴 채로 가로 스크롤(overflow-x:auto,
-   페이지가 아니라 이 박스 안에서만)되게 한다 — 색값 박스가 다음 줄로 떨어지는 것보다 낫다는
-   판단(§요구사항). */
+/* 폭 고정 반전(2026-07-17): EV.CSS 의 .bx(공유·수정 금지) 기본값은 white-space:nowrap — 라벨을
+   한 줄로 고정하는 자연폭 그대로가 이제 원하는 동작이라(pixels_of(input_grid)[35].coord 같은 긴
+   accessor 라벨이 박스를 넓혀도 그게 정상 — §요구사항: 축소·줄바꿈 금지), 이전에 여기서 걸었던
+   white-space:normal/overflow-wrap/word-break/min-width:0 override(라벨을 강제로 줄바꿈해 박스를
+   좁게 유지하던 훅)를 제거한다 — 즉 이 문서도 EV.CSS 기본값(.bx nowrap)을 그대로 쓴다. */
+/* .row(coloring 한 줄 = op box+target box+색값 박스+스와치)는 pane 폭에 눌려도 다음 줄로 접히지
+   않고 한 줄을 유지한다(KEEP — 색값 박스가 다음 줄로 떨어지던 버그의 고정, §사용자 리포트).
+   폭 자체는 이제 pane(.view/.view.viz)이 축소되지 않으므로(위 .view flex:0 0 auto) 이 한 줄이
+   pane 보다 넓어질 일이 거의 없고, 설령 넓어져도 .flow 안에서 자체 가로 스크롤을 열지 않는다 —
+   중첩(이중) 스크롤바 대신 문서 전체를 담는 바깥 스크롤 하나로만 받는다(§한 개의 outer scroll). */
 .flow .row{flex-wrap:nowrap}
-.flow{overflow-x:auto}
-/* Step A/B/C 카드 레이아웃(2026-07-17, 가로스크롤 제거로 재조정): 셋을 색으로 구분된 카드에 담아
-   한 행에 나란히 두되, 예전처럼 overflow-x:auto 로 넘친 폭을 스크롤바로 가리는 대신 — 카드가
-   뷰포트에 안 맞으면 flex-wrap 으로 다음 줄에 감싸고(min-width:0 로 내부 컨텐츠도 실제로 줄바꿈/
-   축소되게), 그래도 넓은 컨텐츠(①②③ views, viz row)는 위의 .view/.flow/.bx 폭 수정으로 자체가
-   줄어든다 — 그 결과 보통 폭에서는 3 카드가 나란히, 좁은 뷰포트에서는 다음 줄로 감싸진다.
+/* Step A/B/C 카드 레이아웃(2026-07-17 재반전 — 사용자 요청): 셋을 색으로 구분된 카드에 담아
+   한 행에 나란히 두고, 뷰포트가 좁아져도 카드를 다음 줄로 감싸거나(flex-wrap) 축소하지 않는다
+   (flex-wrap:nowrap + .stepcard flex:0 0 auto = 고정폭) — 카드 내부(①②③ views, viz row)도 위의
+   .view/.flow 폭 수정으로 자연폭 그대로다. 그 결과 항상 A→B→C 3 카드가 한 줄로 나란히 있고,
+   전체 폭이 뷰포트를 넘치면 그 초과분은 카드가 줄어드는 대신 문서 전체의 가로 스크롤로 받는다
+   (§한 개의 outer scroll — 카드 안에 개별 스크롤바를 새로 만들지 않음).
    .stepsrow 는 align-items:stretch(기본값) 라 같은 줄의 카드들은 그 줄에서 가장 높은 카드와 같은
    높이로 맞춰진다 — Step B/C 는 그 안에서 "카드 안 수직 중앙"을 flex column + justify-content:
    center 로 구현. Step A 는 stepttl 다음에 innerbox 들이 top-aligned 순서로 그냥 쌓인다. */
-.stepsrow{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}
-.stepcard{flex:1 1 380px;display:flex;flex-direction:column;border-radius:12px;padding:14px 16px;
- min-width:0;max-width:100%;box-sizing:border-box}
+.stepsrow{display:flex;flex-wrap:nowrap;gap:14px;margin-top:10px}
+.stepcard{flex:0 0 auto;display:flex;flex-direction:column;border-radius:12px;padding:14px 16px;
+ box-sizing:border-box}
 .stepttl{font-size:12px;font-weight:700;letter-spacing:.02em;margin-bottom:10px;white-space:nowrap}
-.innerbox{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;max-width:100%;
+.innerbox{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;
  box-sizing:border-box}
 .innerbox + .innerbox{margin-top:12px}
 /* Step A/C(각 ①②③ views 3열 또는 PAIR 세로 stack)는 Step B(overlay 하나, 컨텐츠가 원래 좁음)보다
@@ -761,7 +759,7 @@ CSS = """
    풀어 자기 콘텐츠 크기 그대로(shrink-to-fit) 두고, 더 큰 대각선 translate 만 적용 — 그러면 두
    레이어의 높이가 서로 달라도 항상 벌어진 대각선으로 읽힌다. .ovl 컨테이너는 그 벌어진 ghost 를
    잘리지 않게 담을 만큼 넉넉한 padding(우/하)을 준다. */
-.stepB .ovl{position:relative;padding:6px 30px 30px 6px;width:max-content;max-width:100%}
+.stepB .ovl{position:relative;padding:6px 30px 30px 6px;width:max-content}
 .stepB .ovl .ghost{position:absolute;top:0;left:0;right:auto;bottom:auto;width:auto;height:auto;
  transform:translate(22px,22px);opacity:.4;pointer-events:none;filter:saturate(.7)}
 """
