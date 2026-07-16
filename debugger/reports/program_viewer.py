@@ -503,7 +503,7 @@ def _pair_block(label, ast, ex):
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
             f'<pre class="src">{html.escape(display_source(ast))}</pre></div>'
             f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast)}</div>'
-            f'<div class="view"><div class="vt">③ 시각화</div>{_viz(ast, ex)}</div>'
+            f'<div class="view viz"><div class="vt">③ 시각화</div>{_viz(ast, ex)}</div>'
             f'</div></div>')
 
 
@@ -635,6 +635,10 @@ CSS = """
 *,*::before,*::after{box-sizing:border-box}
 .views{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin:6px 0 14px}
 .view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:1 1 260px;min-width:0;max-width:100%}
+/* ③ 시각화 pane 만 폭을 더 넓게(§row nowrap 수정 — 아래 .flow .row 참고): 색값 박스가 한 줄에서
+   안 밀려나려면 ③ pane 자체가 coloring 스텝 한 줄(op+target+color+swatch)을 담을 만큼 넓어야
+   한다. ①②(텍스트/AST 트리)는 원래 폭 그대로 — 그쪽은 이미 잘 줄바꿈되므로 건드릴 필요 없다. */
+.view.viz{flex-basis:480px}
 .vt{font-size:11px;color:#8b93a3;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;font-weight:700}
 .src{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:8px 10px;
  font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#dfe3ea;white-space:pre-wrap;
@@ -679,7 +683,18 @@ CSS = """
    이 CSS 가 이어붙는 <style> 순서(build() 참고)를 이용해 같은 specificity(단일 클래스)로 override
    — easy_antiunify_report.html(EV.CSS 단독 사용, 이 CSS 미포함)에는 영향 없음. */
 .bx{white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
-.row{flex-wrap:wrap;row-gap:4px}
+/* row wrap 버그 수정(2026-07-17 후속): 위 .row{flex-wrap:wrap} 가 ①②③ pane 이 좁을 때(.view
+   flex:1 1 260px) 세 pane 이 나란히 눌려 coloring 스텝 한 줄(op box + target box + 색값 박스 +
+   스와치)이 pane 폭을 넘기면, 그 줄 자체가 다음 줄로 접혀 색값 박스(.cvwrap)만 밑으로 떨어져
+   보였다(어긋나 보임 — 사용자 리포트). 고정: ③ pane(.view.viz, 위에서 폭을 480px 로 넓힘)이
+   coloring 한 줄을 담을 만큼 넓어지므로, 이제 .flow 안 각 .row 는 절대 내부에서 안 접히게
+   nowrap 으로 고정한다 — 대신 pane 들이 서로 나란히 들어갈 자리가 없으면 .views{flex-wrap:wrap}
+   (위 §636)가 pane 전체를 다음 줄로 내려(세로 stack) 대응한다. 그래도(아주 좁은 뷰포트) 한
+   줄이 pane 폭보다 넓으면 줄을 접는 대신 .flow 자체에 담긴 채로 가로 스크롤(overflow-x:auto,
+   페이지가 아니라 이 박스 안에서만)되게 한다 — 색값 박스가 다음 줄로 떨어지는 것보다 낫다는
+   판단(§요구사항). */
+.flow .row{flex-wrap:nowrap}
+.flow{overflow-x:auto}
 /* Step A/B/C 카드 레이아웃(2026-07-17, 가로스크롤 제거로 재조정): 셋을 색으로 구분된 카드에 담아
    한 행에 나란히 두되, 예전처럼 overflow-x:auto 로 넘친 폭을 스크롤바로 가리는 대신 — 카드가
    뷰포트에 안 맞으면 flex-wrap 으로 다음 줄에 감싸고(min-width:0 로 내부 컨텐츠도 실제로 줄바꿈/
