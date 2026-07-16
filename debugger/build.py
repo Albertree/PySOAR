@@ -154,7 +154,7 @@ def build_move_dashboard():
     """arc_human/move 전 태스크 → move_dashboard.html (focus_dashboard 와 동일 구성)."""
     from arbor.env.dataset import list_tasks, load_task
     tasks = [(tid, load_task(p)) for tid, p in list_tasks("move")]
-    print(f"move dashboard: {len(tasks)} 태스크 — max_cycles=1000")
+    print(f"move dashboard: {len(tasks)} 태스크 — max_cycles=500")
     return make_dashboard(tasks, dataset="arc_human/move",
                           out_name="move_dashboard.html",
                           report_href="move_program_report.html")
@@ -173,7 +173,7 @@ if __name__ == "__main__":
         # 사용자 요청(2026-07-17): 시간 단축 — made 및 지정 ARC-AGI 5문제 제외. dashboard = easy a-h(8)
         # + 08ed6ac7(1) = 9. (easy000i 는 데이터셋에서 제거됨. made·나머지 AGI 는 풀이 시도조차 안 함.)
         tasks = _load_survey(agi_ids=SURVEY_AGI, include_made=False)     # 8 + 1 = 9
-        print(f"survey: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=1000")
+        print(f"survey: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=500")
         out = make_dashboard(tasks, dataset="survey = easy a-h(8) + 08ed6ac7")
         sz = os.path.getsize(out) / 1e6
         print(f"wrote {out}  ({sz:.1f} MB)")
