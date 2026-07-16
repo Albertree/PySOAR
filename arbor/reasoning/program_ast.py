@@ -340,7 +340,7 @@ def _reprefix_inner_vars(leaf, prefix):
         new_tgt = dict(tgt)
         if "index" in new_tgt:
             new_tgt["index"] = _fix_var(new_tgt["index"])
-        if "cells" in new_tgt:
+        if "cells" in new_tgt:                  # unreachable: _antiunify_ast_pixel emits only pixel targets
             new_tgt["cells"] = _fix_var(new_tgt["cells"])
         new_args = dict(s["args"], target=new_tgt, color=_fix_var(s["args"]["color"]))
         new_body.append({"call": s["call"], "args": new_args})
@@ -362,6 +362,8 @@ def _antiunify_ast_grid(asts):
         if call == "set_grid_contents" and all("program" in leaf for leaf in leaves):
             inner_asts = [program(leaf["program"]["body"]) for leaf in leaves]
             sk_inner, inner_slots = _antiunify_ast_pixel(inner_asts)
+            if sk_inner is None:                                # structural mismatch (op-count 불일치 등)
+                return None, None
             leaf = {"program": {"body": (sk_inner or {}).get("body", [])}}
             for nm, meta in (inner_slots or {}).items():        # top-level 로 승격(prefix)
                 slots[f"?c.{nm[1:]}"] = meta

@@ -53,6 +53,23 @@ class TestNestedAntiunify(unittest.TestCase):
         self.assertIn("?contents", slots)
         self.assertFalse(any(k.startswith("?c.") for k in slots))
 
+    def test_nested_program_op_count_mismatch_returns_none(self):
+        """nested 프로그램의 inner op-count 가 불일치하면 (None,None) 를 전파해야 함 —
+        빈 program 을 구워서 resolve 를 속이지 않도록."""
+        # Pair A: 1 coloring step in inner body
+        body_a = [PA.step("coloring", target=PA.ref("pixel", PA.const(7)), color=PA.const(1))]
+        a = PA.grid_program(PA.expr("size(input_grid)"), PA.const([0, 1]), PA.contents_program(body_a))
+        # Pair B: 2 coloring steps in inner body (different op count!)
+        body_b = [
+            PA.step("coloring", target=PA.ref("pixel", PA.const(35)), color=PA.const(2)),
+            PA.step("coloring", target=PA.ref("pixel", PA.const(42)), color=PA.const(3))
+        ]
+        b = PA.grid_program(PA.expr("size(input_grid)"), PA.const([0, 2]), PA.contents_program(body_b))
+        # antiunify should return (None, None) due to op-count mismatch
+        sk, slots = PA.antiunify_ast([a, b])
+        self.assertIsNone(sk)
+        self.assertIsNone(slots)
+
 
 if __name__ == "__main__":
     unittest.main()
