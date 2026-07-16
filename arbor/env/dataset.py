@@ -31,7 +31,10 @@ DATASETS = {
 def list_tasks(dataset: str, limit: int | None = None) -> list[tuple[str, str]]:
     """Return [(task_id, path), ...] for a named dataset."""
     d = DATASETS.get(dataset, dataset)
-    files = sorted(glob.glob(os.path.join(d, "*.json")))
+    # 자연 순서: 접미 길이 → 알파벳 (a,b,…,z,aa,ab,…). 문자열 정렬이면 a 다음 aa 가 와서 뒤섞임.
+    # 길이 균일한 데이터셋(easy/agi)은 알파벳 순과 동일 → 영향 없음.
+    files = sorted(glob.glob(os.path.join(d, "*.json")),
+                   key=lambda f: (len(os.path.basename(f)), os.path.basename(f)))
     if limit is not None:
         files = files[:limit]
     return [(os.path.basename(f).replace(".json", ""), f) for f in files]
