@@ -47,8 +47,8 @@ from arbor.env.dataset import list_tasks, load_task
 from arbor.reasoning import program_ast as PA
 from debugger.reports import easy_antiunify_viz as EV
 
-# easy_a 9 태스크 전부 다룬다: a-h = 필수 범위(스펙 §12), i = 미해결(격자 크기 변화) 참고용 표식.
-TIDS = [f"easy000{c}" for c in "abcdefghi"]
+# easy_a 8 태스크(a-h). (easy000i=격자 크기 변화 미해결은 데이터셋에서 제거됨.)
+TIDS = [f"easy000{c}" for c in "abcdefgh"]
 
 
 # ── display_source: 뷰어 로컬 통일 body (to_source[파싱계약]과 독립; 실 DSL·ARCKG accessor·실값) ──

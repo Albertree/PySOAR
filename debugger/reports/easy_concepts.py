@@ -22,7 +22,7 @@ from arbor.env.dataset import list_tasks, load_task
 PAL = ["#101010", "#1E93FF", "#F93C31", "#4FCC30", "#FFDC00",
        "#999999", "#E53AA3", "#FF851B", "#87D8F1", "#921231"]
 CELL = 16
-TIDS = ["easy000c", "easy000d", "easy000e", "easy000f", "easy000g", "easy000h", "easy000i"]
+TIDS = ["easy000c", "easy000d", "easy000e", "easy000f", "easy000g", "easy000h"]
 
 
 # ── extract single-pixel move material ──────────────────────────────────────

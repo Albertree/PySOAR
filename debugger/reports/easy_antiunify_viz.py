@@ -32,7 +32,7 @@ PAL = ["#101010", "#1E93FF", "#F93C31", "#4FCC30", "#FFDC00",
 
 # easy_a 데이터셋 실물 9 태스크(list_tasks("easy_a") 와 일치): a·b = GRID-level 상수해(§ 아래
 # task_section 참고), c~h = 단일픽셀 이동(PIXEL coloring AST), i = 격자 크기 변화(6x6→5x5).
-TIDS = [f"easy000{c}" for c in "abcdefghi"]
+TIDS = [f"easy000{c}" for c in "abcdefgh"]
 
 _REF_PREFIX = {"pixel": "in_px", "object": "in_objs"}   # program_ast._LEVEL 표시용 미러(읽기 전용)
 
