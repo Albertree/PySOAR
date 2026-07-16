@@ -413,7 +413,10 @@ def _antiunify_ast_grid(asts):
         leaves = [pn[call][key] for pn in partsN]
         if call == "set_grid_contents" and all("program" in leaf for leaf in leaves):
             inner_asts = [program(leaf["program"]["body"]) for leaf in leaves]
-            sk_inner, inner_slots = _antiunify_ast_pixel(inner_asts)
+            if all(_is_cellset_body(ia["body"]) for ia in inner_asts):
+                sk_inner, inner_slots = _antiunify_ast_blob(inner_asts)
+            else:
+                sk_inner, inner_slots = _antiunify_ast_pixel(inner_asts)
             if sk_inner is None:                                # structural mismatch (op-count 불일치 등)
                 return None, None
             leaf = {"program": {"body": (sk_inner or {}).get("body", [])}}
