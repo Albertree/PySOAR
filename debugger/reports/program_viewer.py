@@ -616,8 +616,19 @@ def task_section(tid, task, precomputed=None):
 
 
 CSS = """
+/* 가로스크롤 제거(2026-07-17): 이 문서 전체에 border-box 리셋 — max-width:100% 로 폭을 뷰포트에
+   맞춘 박스들(.view/.stepcard/.innerbox/.gflow/.nestedflow 등)이 padding/border 만큼 그 위로
+   삐져나오지 않게 한다(content-box 기본값이면 width/max-width 는 padding·border 를 포함하지 않아
+   합계가 100% 를 넘어 overflow 가 재발한다). EV.CSS 는 그대로 두고(수정 금지) — 이 CSS(program_viewer
+   local) 는 build() 가 만드는 style 태그 안에서 EV.CSS 뒤에 이어붙는 부분에만 적용 — easy_antiunify
+   _report.html 은 이 CSS 를 포함하지 않으므로 영향 없음.
+   (주의: 이 주석/CSS 텍스트 안에 리터럴 "style 닫는 태그" 문자열을 쓰지 말 것 — HTML 파서는 <style>
+   요소를 raw-text 로 취급해 그 문자열이 나오면 안의 내용이 주석이든 아니든 그 자리에서 즉시 스타일
+   블록을 끝내버려, 그 뒤 CSS 전부가 화면에 그냥 텍스트로 노출되는 사고가 난다 — 실제로 한 번 냈던
+   실수라 여기 남겨 재발 방지.) */
+*,*::before,*::after{box-sizing:border-box}
 .views{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin:6px 0 14px}
-.view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:1 1 300px;min-width:240px;overflow-x:auto}
+.view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:1 1 260px;min-width:0;max-width:100%}
 .vt{font-size:11px;color:#8b93a3;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;font-weight:700}
 .src{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:8px 10px;
  font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#dfe3ea;white-space:pre-wrap;
@@ -642,29 +653,46 @@ CSS = """
    set_grid_size→color→contents 사이가 끊기지 않는다. 중첩 coloring(.nestedflow)은 그 선 오른쪽으로
    더 들여써(margin-left) 겹치지 않는다 — 별도 CSS 요소가 아니라 "같은 선이 배경에서 이어지고,
    중첩 박스가 그 위에 오른쪽으로 얹힌다"는 하나의 레이아웃. */
-.flow{width:max-content}
-.gflow{position:relative;display:flex;flex-direction:column;align-items:flex-start}
+.flow{width:max-content;max-width:100%}
+.gflow{position:relative;display:flex;flex-direction:column;align-items:flex-start;max-width:100%}
 .gflow::before{content:"";position:absolute;left:48px;top:6px;bottom:6px;width:2px;background:#3b4657}
 .gflow>.row{margin-bottom:12px}
 .gflow>.row:last-of-type{margin-bottom:6px}
 .nestedflow{display:flex;flex-direction:column;align-items:flex-start;border-left:2px solid #3a5a7a;
- padding:6px 0 6px 12px;margin:0 0 0 82px;background:#101319;border-radius:0 6px 6px 0;width:max-content}
+ padding:6px 0 6px 12px;margin:0 0 0 82px;background:#101319;border-radius:0 6px 6px 0;width:max-content;max-width:calc(100% - 82px)}
 .nestedflow .row{margin-bottom:8px}
 .nestedflow .row:last-child{margin-bottom:0}
 .gvar{font:11px ui-monospace,monospace;color:#7fb2e0;background:#132030;border:1px solid #22384d;
  border-radius:5px;padding:2px 6px;margin-right:6px}
 .gvar-out{margin-right:0;margin-left:6px;color:#e6c99a;background:#241b12;border-color:#3a2c1a}
 .gnote{font-size:10.5px;color:#8fb0a0;font-style:italic}
-/* Step A/B/C 카드 레이아웃(2026-07-17): 한 컨테이너(가로 스크롤)에 색으로 구분된 3 카드.
-   .stepsrow 는 align-items:stretch(기본값) 라 세 카드가 전부 가장 높은 카드(대개 Step A, pair0+
-   pair1 세로 stack)와 같은 높이로 맞춰진다 — Step B/C 는 그 안에서 "카드 안 수직 중앙"을 flex
-   column + justify-content:center 로 구현(내용은 1개뿐이라 그게 곧 카드 중앙점). Step A 는
-   stepttl 다음에 innerbox 들이 기본 top-aligned 순서로 그냥 쌓인다(별도 wrapper 불필요). */
-.stepsrow{display:flex;gap:0;overflow-x:auto;padding-bottom:6px;margin-top:10px}
-.stepcard{flex:0 0 auto;display:flex;flex-direction:column;border-radius:12px;padding:14px 16px;min-width:280px}
+/* 가로스크롤 제거(2026-07-17): EV.CSS 의 .bx(공유·수정 금지)는 white-space:nowrap 로 라벨을 한
+   줄로 고정 — 이 문서(program_report_all.html)에서만 pixels_of(input_grid)[35].coord 같은 긴
+   accessor 라벨이 박스 폭을 강제로 늘려 ③ 시각화/Step 카드가 넓어지는 원인이었다. EV.CSS 뒤에
+   이 CSS 가 이어붙는 <style> 순서(build() 참고)를 이용해 같은 specificity(단일 클래스)로 override
+   — easy_antiunify_report.html(EV.CSS 단독 사용, 이 CSS 미포함)에는 영향 없음. */
+.bx{white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+.row{flex-wrap:wrap;row-gap:4px}
+/* Step A/B/C 카드 레이아웃(2026-07-17, 가로스크롤 제거로 재조정): 셋을 색으로 구분된 카드에 담아
+   한 행에 나란히 두되, 예전처럼 overflow-x:auto 로 넘친 폭을 스크롤바로 가리는 대신 — 카드가
+   뷰포트에 안 맞으면 flex-wrap 으로 다음 줄에 감싸고(min-width:0 로 내부 컨텐츠도 실제로 줄바꿈/
+   축소되게), 그래도 넓은 컨텐츠(①②③ views, viz row)는 위의 .view/.flow/.bx 폭 수정으로 자체가
+   줄어든다 — 그 결과 보통 폭에서는 3 카드가 나란히, 좁은 뷰포트에서는 다음 줄로 감싸진다.
+   .stepsrow 는 align-items:stretch(기본값) 라 같은 줄의 카드들은 그 줄에서 가장 높은 카드와 같은
+   높이로 맞춰진다 — Step B/C 는 그 안에서 "카드 안 수직 중앙"을 flex column + justify-content:
+   center 로 구현. Step A 는 stepttl 다음에 innerbox 들이 top-aligned 순서로 그냥 쌓인다. */
+.stepsrow{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}
+.stepcard{flex:1 1 380px;display:flex;flex-direction:column;border-radius:12px;padding:14px 16px;
+ min-width:0;max-width:100%;box-sizing:border-box}
 .stepttl{font-size:12px;font-weight:700;letter-spacing:.02em;margin-bottom:10px;white-space:nowrap}
-.innerbox{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;width:max-content}
+.innerbox{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;max-width:100%;
+ box-sizing:border-box}
 .innerbox + .innerbox{margin-top:12px}
+/* Step A/C(각 ①②③ views 3열 또는 PAIR 세로 stack)는 Step B(overlay 하나, 컨텐츠가 원래 좁음)보다
+   여분 폭을 더 받아야 같은 줄에서 ①②③ 이 세로로 다 눌리지 않고 최대한 나란히 남는다(flex-grow 만
+   다르게 — 기본 배분이면 Step B 도 필요 이상으로 넓어지고 A/C 는 좁아져 뷰가 1열로 눌린다). */
+.stepA,.stepC{flex-grow:3}
+.stepB{flex-grow:1}
 .stepA{background:#1a2036;border:1px solid #3a4a78}
 .stepA .stepttl{color:#9fb4e0}
 .stepB{background:#241a36;border:1px solid #4c3a78}
@@ -711,7 +739,7 @@ CSS = """
    풀어 자기 콘텐츠 크기 그대로(shrink-to-fit) 두고, 더 큰 대각선 translate 만 적용 — 그러면 두
    레이어의 높이가 서로 달라도 항상 벌어진 대각선으로 읽힌다. .ovl 컨테이너는 그 벌어진 ghost 를
    잘리지 않게 담을 만큼 넉넉한 padding(우/하)을 준다. */
-.stepB .ovl{position:relative;padding:6px 30px 30px 6px;width:max-content;min-width:max-content}
+.stepB .ovl{position:relative;padding:6px 30px 30px 6px;width:max-content;max-width:100%}
 .stepB .ovl .ghost{position:absolute;top:0;left:0;right:auto;bottom:auto;width:auto;height:auto;
  transform:translate(22px,22px);opacity:.4;pointer-events:none;filter:saturate(.7)}
 """
