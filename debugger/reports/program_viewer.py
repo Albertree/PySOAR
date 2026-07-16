@@ -911,13 +911,28 @@ function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
 """
 
 
-def build():
-    tabs = "".join(f'<a href="#{t}" data-t="{t}">{t[-1].upper()}</a>' for t in TIDS)
-    paths = dict(list_tasks("easy"))
-    tasks = {t: load_task(paths[t]) for t in TIDS}
+def _tab_label(tid):
+    """탭 라벨: 접두 소문자+0 제거한 꼬리(easy000a→A · move000aa→AA). 없으면 전체 대문자."""
+    i = 0
+    while i < len(tid) and tid[i].isalpha() and tid[i].islower():
+        i += 1
+    while i < len(tid) and tid[i] == "0":
+        i += 1
+    return (tid[i:] or tid).upper()
+
+
+def build(tids=None, dataset="easy", out_name="program_report_all.html",
+          title="easy a–h program 뷰어", back_href="focus_dashboard.html", back_label="focus_dashboard"):
+    """program 뷰어 HTML 생성(동일 구성 — 데이터셋만 갈아끼움). tids=None 이면 dataset 의 전 태스크."""
+    paths = dict(list_tasks(dataset))
+    if tids is None:
+        tids = [t for t, _ in list_tasks(dataset)]
+    tids = [t for t in tids if t in paths]                 # 존재하는 것만
+    tabs = "".join(f'<a href="#{t}" data-t="{t}">{_tab_label(t)}</a>' for t in tids)
+    tasks = {t: load_task(paths[t]) for t in tids}
     runner_data = []
     secs_list = []
-    for t in TIDS:
+    for t in tids:
         asts, pairs, solution, attempts = _collect(t, tasks[t])
         runner_data.extend(_runner_payload(t, asts, pairs, tasks[t]))
         secs_list.append(task_section(t, tasks[t], precomputed=(asts, pairs, solution, attempts)))
@@ -926,21 +941,29 @@ def build():
           "if(!document.getElementById(h))h=TIDS[0];"
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(s.id===h)?'':'none'});"
           "document.querySelectorAll('.tabs a').forEach(function(a){a.classList.toggle('on',a.dataset.t===h)});}"
-          "addEventListener('hashchange',sh);sh();</script>") % json.dumps(TIDS)
+          "addEventListener('hashchange',sh);sh();</script>") % json.dumps(tids)
     doc = (f'<!doctype html><meta charset="utf-8"><title>program 뷰어</title><style>{EV.CSS}{CSS}</style>'
-           f'<a class="back" href="focus_dashboard.html">← focus_dashboard</a>'
-           f'<h1>easy a–h program 뷰어</h1>'
+           f'<a class="back" href="{back_href}">← {back_label}</a>'
+           f'<h1>{html.escape(title)}</h1>'
            f'<p class="hs">solve 실행 → WM 의 PAIR.program 을 통일 body(실행형)·단일 box-flow 로 렌더.'
            f' 하단 코드 실행기에서 body 를 실행/검증(빌드타임 parity ✓/✗).</p>'
            f'<div class="tabs">{tabs}</div>{secs}'
            f'<script>var RUNNER_DATA={json.dumps(runner_data)};</script>'
            f'{_RUNNER_HTML}{js}')
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "traces", "program_report_all.html")
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "traces", out_name)
     with open(out, "w") as f:
         f.write(doc)
     return out
 
 
+def build_move():
+    """arc_human/move 전 태스크 → move_program_report.html (동일 구성)."""
+    return build(dataset="move", out_name="move_program_report.html",
+                 title="move program 뷰어 (arc_human/move)",
+                 back_href="move_dashboard.html", back_label="move_dashboard")
+
+
 if __name__ == "__main__":
-    p = build()
+    import sys
+    p = build_move() if (len(sys.argv) > 1 and sys.argv[1] == "move") else build()
     print("wrote", p, f"({os.path.getsize(p) / 1024:.0f} KB)")
