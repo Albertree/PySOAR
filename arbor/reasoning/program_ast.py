@@ -146,6 +146,8 @@ def _leaf_src(leaf):
         return leaf["var"]
     if "expr" in leaf:
         return leaf["expr"]
+    if "pending" in leaf:                       # 하강으로 아직 못 채운 슬롯(미결정) — 크래시 대신 정직 표기
+        return f"<{leaf['pending']}?>"
     raise ValueError(f"bad leaf: {leaf}")
 
 
