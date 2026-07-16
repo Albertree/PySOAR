@@ -55,6 +55,8 @@ def _disp_grid_leaf(leaf, prop):
     expr=식 그대로(forward). prop ∈ {size,color,contents}."""
     if "const" in leaf:
         return json.dumps(leaf["const"])             # size dict / color list / contents 2D 배열 실값
+    if "program" in leaf:                             # contents = 하강 coloring 합성(c–h, T4 carry-down)
+        return _contents_compose_src(leaf["program"]["body"])
     if "expr" in leaf:
         return str(leaf["expr"])                     # (forward: H/W 어휘 번역은 별건)
     if "delta" in leaf:
@@ -63,6 +65,28 @@ def _disp_grid_leaf(leaf, prop):
     if "var" in leaf:
         return str(leaf["var"])                       # TASK.solution slot (pair 간 값이 다른 grid property)
     return json.dumps(leaf)
+
+
+def _contents_compose_src(body):
+    """set_grid_contents 의 contents leaf 가 `program`(하강 coloring 합성)일 때 → 단일 실행형 식.
+    _display_pixel 과 같은 accessor 텍스트(pixels_of(input_grid)[idx].coord)를 재사용하되, 문장이
+    아니라 점-free 식 조각(coloring(pos, color) — grid 인자 생략, 러너가 순차 접기로 복원)으로 만들어
+    ∘ 로 이어붙인다(program_ast._contents_program_src 의 합성 관례와 동일: 왼쪽=먼저 실행, ∘ 는
+    구분자). 러너 JS(_evalComposition)가 이 문법을 그대로 파싱·실행 — 표시=실행 문법 일치(§5)."""
+    parts = []
+    for s in body:
+        tgt = s["args"]["target"]
+        col = _disp_leaf(s["args"]["color"])
+        ref = tgt.get("ref")
+        if ref in _ACCESSOR:
+            idx = _disp_leaf(tgt["index"])
+            parts.append(f"coloring({_ACCESSOR[ref]}(input_grid)[{idx}].coord, {col})")
+        elif ref == "cellset":                        # a-h 밖(정직 표기 — 러너 미지원, coloring 은 단일좌표만)
+            cells = _disp_leaf(tgt["cells"])
+            parts.append(f"coloring(cellset={cells}, color={col})")
+        else:
+            parts.append(f"coloring(? /* 해석 불가 target: {json.dumps(tgt)} */, {col})")
+    return " ∘ ".join(parts) if parts else "identity"
 
 
 def _display_grid(body):
@@ -238,11 +262,19 @@ def _grid_step_rows(ast):
                   parts["set_grid_contents"]["contents"])
     color_sw = (_swatches(co["const"]) if isinstance(co.get("const"), list)
                 and not _is_grid_literal(co["const"]) else "")
-    return [
+    rows = [
         f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"))}</div><div class="v"></div>',
         f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co, "color"))}{color_sw}</div><div class="v"></div>',
-        f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>{_contents_cell(ct)}</div><div class="v"></div>',
     ]
+    if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(pixel viz 재사용)
+        inner_rows = _pixel_step_rows({"body": ct["program"]["body"]})
+        rows.append(f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>'
+                    f'<span class="ntag">coloring 합성(하강 산출) ↓</span></div>'
+                    f'<div class="nestedflow">{"".join(inner_rows)}</div><div class="v"></div>')
+    else:
+        rows.append(f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>'
+                    f'{_contents_cell(ct)}</div><div class="v"></div>')
+    return rows
 
 
 def _pixel_step_rows(ast):
@@ -365,6 +397,10 @@ CSS = """
 .pair{padding-top:0;margin-top:0}
 .pair + .pair{border-top:1px solid #232b36;padding-top:12px;margin-top:12px}
 .solblock{border:1px solid #3a5a7a;border-radius:10px;padding:2px 12px 12px;margin-top:16px;background:#131a22}
+.ntag{font-size:10.5px;color:#8fb0a0;font-style:italic}
+.nestedflow{display:flex;flex-direction:column;align-items:flex-start;border-left:2px solid #3a5a7a;
+ padding:6px 0 6px 12px;margin:2px 0 2px 6px;background:#101319;border-radius:0 6px 6px 0}
+.nestedflow .row{transform:scale(.94);transform-origin:left center}
 """
 
 CSS += """
@@ -413,6 +449,17 @@ function _normColors(x){ // 배열[0,2] | present-set{0:true} → 정렬된 존�
 // 선언 색집합 == 완성 contents 의 '존재 색' 집합(엄격 일치, superset 팔레트는 의도적으로 불일치=모순).
 // 솔버는 _color_leaf 가 출력의 존재색으로 const 를 굽기에 항상 일치 — 이 검사는 러너 편집 시 모순을 잡는다.
 function _sameColors(a,b){ return JSON.stringify(_normColors(a))===JSON.stringify(_normColors(b)); }
+// 최상위 콤마 분리(괄호/대괄호 깊이 인식) — coloring(pos, color) 의 pos 식 안에 있을 수 있는
+// '(' '[' 는 건드리지 않고, depth 0 인 콤마에서만 자른다(program_ast._contents_program_src 의
+// ∘-합성 문법을 그대로 되받아 실행하기 위한 최소 파서).
+function _splitArgs(s){
+  var depth=0, cur="", out=[];
+  for(var i=0;i<s.length;i++){ var c=s[i];
+    if(c==="("||c==="[") depth++; else if(c===")"||c==="]") depth--;
+    if(c===","&&depth===0){ out.push(cur); cur=""; } else cur+=c; }
+  out.push(cur);
+  return out.map(function(x){return x.trim();});
+}
 var ATOM = {
   input_grid: null,
   make_grid: function(size){var o=[];for(var r=0;r<size.height;r++){var row=[];for(var c=0;c<size.width;c++)row.push(0);o.push(row);}return o;},
@@ -439,12 +486,39 @@ function runBody(code, input){
     return (new Function("ATOM","g","input_grid","divmod",
       "with(ATOM){return ("+e+");}"))(ATOM, g, INPUT, ATOM.divmod);
   }
+  // g.contents = <coloring 합성>(_display_grid._contents_compose_src 가 낸 점-free 합성: 각 항이
+  // 'coloring(pos, color)' — grid 인자 생략) 를 순차 접기로 실행. base 는 현재 g.contents(=하강
+  // 전 원본 input contents, size/color 대입이 먼저 끝나도 contents 필드는 아직 원본 그대로).
+  function _evalComposition(compStr, base){
+    var parts = compStr.split(" ∘ ");
+    var acc = base;
+    for(var pi=0; pi<parts.length; pi++){
+      var mm = parts[pi].trim().match(/^coloring\((.*)\)$/);
+      if(!mm) throw new Error("coloring 합성 파싱 불가: "+parts[pi]);
+      var args = _splitArgs(mm[1]);
+      if(args.length!==2) throw new Error("coloring 합성 인자 불일치: "+parts[pi]);
+      acc = ATOM.coloring(acc, evalExpr(args[0]), evalExpr(args[1]));
+    }
+    return acc;
+  }
   var lines = code.split("\n");
   for(var i=0;i<lines.length;i++){
     var ln = lines[i].trim();
     if(!ln || ln[0]==="#") continue;
     var mDot = ln.match(/^g\.(size|color|contents)\s*=\s*(.+)$/);   // 객체 속성 대입
-    if(mDot){ if(g===INPUT) g=_cloneObj(INPUT); g[mDot[1]] = evalExpr(mDot[2]); continue; }
+    if(mDot){
+      if(g===INPUT) g=_cloneObj(INPUT);
+      var rhs = mDot[2];
+      // set_grid_contents(<coloring 합성>) — 인자가 점-free coloring(...) 로 시작하면 합성으로 접기,
+      // 그 외(2D 배열 상수/expr/var)는 기존처럼 generic evalExpr 그대로.
+      var mSet = mDot[1]==="contents" && rhs.match(/^set_grid_contents\((.*)\)$/);
+      if(mSet && mSet[1].trim().indexOf("coloring(")===0){
+        g.contents = _evalComposition(mSet[1], _arr(g));
+      } else {
+        g[mDot[1]] = evalExpr(rhs);
+      }
+      continue;
+    }
     var mFor = ln.match(/^for\s+(\w+)\s+in\s+(.+):$/);              // pixel cellset 루프
     if(mFor){ var it=evalExpr(mFor[2]); var b=lines[i+1].trim(); var mb=b.match(/^g\s*=\s*(.+)$/); i++;
       for(var k=0;k<it.length;k++){ ATOM[mFor[1]]=it[k];
