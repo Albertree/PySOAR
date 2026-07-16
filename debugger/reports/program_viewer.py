@@ -433,34 +433,66 @@ def _pair_block(label, ast, ex):
             f'</div></div>')
 
 
-# ── §8 TASK.solution 가로 레이아웃: [pair0/pair1 program 세로 stack] → [①과 같은 ③ overlay] → ──
-#    [TASK.solution]. overlay 는 easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법
-#    재사용(반투명 겹침) — EV.CSS 에 이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
+# ── Step A/B/C 카드 레이아웃(2026-07-17 재구성): Step A(PAIR.program — pair 별 ①②③ 를 세로
+#    stack, top-aligned) → Step B(anti-unification — ①과 같은 ③ overlay, 카드 안에서 수직 중앙)
+#    → Step C(TASK.solution — 카드 안에서 박스 자체는 수직 중앙, 박스 내부 ①②③ 은 top-aligned
+#    그대로). 셋을 색으로 구분된 카드에 담아 한 컨테이너(가로 스크롤)에 나란히 놓는다. overlay 는
+#    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — EV.CSS 에
+#    이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
 def _solution_row(ast_ex_pairs, solution):
-    left = "".join(_pair_block(f"PAIR {p + 1}", a, ex) for a, ex, p in ast_ex_pairs)
-    cols = [f'<div class="col-pairs">{left}</div>']
+    pair_boxes = "".join(
+        f'<div class="innerbox">{_pair_block(f"PAIR {p + 1}", a, ex)}</div>'
+        for a, ex, p in ast_ex_pairs)
+    steps = [f'<div class="stepcard stepA"><div class="stepttl">Step A · PAIR.program</div>{pair_boxes}</div>']
 
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
         overlay = f'<div class="ovl">{_viz(a0, ex0)}{_viz(a1, ex1, ghost=True)}</div>'
-        cols.append(f'<div class="col-overlay"><div class="vt">③ overlay (PAIR 1 + PAIR 2 겹침, 반투명)</div>{overlay}</div>')
+        steps.append(f'<div class="stepcard stepB"><div class="stepttl">Step B · Anti-unification</div>'
+                     f'<div class="stepBcontent">{overlay}</div></div>')
 
     if solution is not None:
         sol_ex = ast_ex_pairs[0][1]
-        cols.append(f'<div class="col-solution">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex)}</div>')
+        sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex)}</div>'
+        steps.append(f'<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
+                      f'<div class="stepCcontent">{sol_box}</div></div>')
     else:
-        cols.append('<div class="col-solution"><p class="note">TASK.solution 미물질화(generalize 미도달)'
-                     ' — per-pair program 만 표시.</p></div>')
+        steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
+                      '<p class="note">TASK.solution 미물질화(generalize 미도달)'
+                      ' — per-pair program 만 표시.</p></div>')
 
-    arrow = '<div class="colarrow">→</div>'
-    return f'<div class="solrow">{arrow.join(cols)}</div>'
+    arrow = '<div class="steparrow">→</div>'
+    return f'<div class="stepsrow">{arrow.join(steps)}</div>'
+
+
+def _thumb_unit(label, inner):
+    return f'<div class="tunit"><span class="tlab">{html.escape(label)}</span>{inner}</div>'
+
+
+def _top_thumbs(task):
+    """상단 task 시각화: example(train) 그룹과 test 그룹을 라벨/구분선으로 나누고, 각 pair 를
+    input →(화살표) output 으로 보여준다. test pair 는 output 이 아직 미지(정답 칸 = '?' 빈 박스)
+    이므로 input → [?] 로 그리고, 실제 정답(tp['output'])이 있으면 그 옆에 '정답' 라벨로 덧붙인다
+    (grid 는 §11 크리스프 SVG _thumb 그대로 — 별도 렌더러 만들지 않음)."""
+    ex_rows = "".join(
+        f'<div class="trow">{_thumb_unit(f"pair {i + 1} · input", _thumb(ex["input"]))}'
+        f'<span class="tarrow">→</span>{_thumb_unit("output", _thumb(ex["output"]))}</div>'
+        for i, ex in enumerate(task["train"]))
+    tp = task["test"][0]
+    qbox = '<div class="tqbox">?</div>'
+    test_row = (f'<div class="trow">{_thumb_unit("input", _thumb(tp["input"]))}'
+                f'<span class="tarrow">→</span>'
+                f'{_thumb_unit("output?", qbox)}')
+    if tp.get("output"):
+        test_row += f'<span class="tsep"></span>{_thumb_unit("정답", _thumb(tp["output"]))}'
+    test_row += '</div>'
+    return (f'<div class="tgroup"><div class="tgrouplab">example</div>{ex_rows}</div>'
+            f'<div class="tgroup tgroup-test"><div class="tgrouplab">test</div>{test_row}</div>')
 
 
 def task_section(tid, task, precomputed=None):
-    thumbs = "".join(_thumb(ex["input"]) + _thumb(ex["output"]) for ex in task["train"])
-    tp = task["test"][0]
-    thumbs += _thumb(tp["input"]) + (_thumb(tp["output"]) if tp.get("output") else "")
+    thumbs = _top_thumbs(task)
 
     asts, pairs, solution, attempts = precomputed if precomputed else _collect(tid, task)
     if not asts:
@@ -525,15 +557,39 @@ CSS = """
  border-radius:5px;padding:2px 6px;margin-right:6px}
 .gvar-out{margin-right:0;margin-left:6px;color:#e6c99a;background:#241b12;border-color:#3a2c1a}
 .gnote{font-size:10.5px;color:#8fb0a0;font-style:italic}
-/* §8 TASK.solution 가로 레이아웃 */
-.solrow{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding-bottom:6px;margin-top:10px}
-.col-pairs{flex:0 0 auto;display:flex;flex-direction:column}
-.col-overlay{flex:0 0 auto;background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;min-width:260px}
-.col-solution{flex:0 0 auto;min-width:280px}
-/* col-pairs 는 pair0+pair1 stack 이라 훨씬 높다 — align-self:center 로 두면 화살표가 그 전체 높이의
-   중앙(대개 빈 배경)에 떠버리므로, overlay/solution 열의 눈높이(대략 첫 pair 한 개 높이의 중앙)에
-   가깝게 flex-start+고정 margin-top 으로 고정한다. */
-.colarrow{align-self:flex-start;margin-top:260px;font-size:22px;color:#5a6577;flex:0 0 auto;padding:0 2px}
+/* Step A/B/C 카드 레이아웃(2026-07-17): 한 컨테이너(가로 스크롤)에 색으로 구분된 3 카드.
+   .stepsrow 는 align-items:stretch(기본값) 라 세 카드가 전부 가장 높은 카드(대개 Step A, pair0+
+   pair1 세로 stack)와 같은 높이로 맞춰진다 — Step B/C 는 그 안에서 "카드 안 수직 중앙"을 flex
+   column + justify-content:center 로 구현(내용은 1개뿐이라 그게 곧 카드 중앙점). Step A 는
+   stepttl 다음에 innerbox 들이 기본 top-aligned 순서로 그냥 쌓인다(별도 wrapper 불필요). */
+.stepsrow{display:flex;gap:0;overflow-x:auto;padding-bottom:6px;margin-top:10px}
+.stepcard{flex:0 0 auto;display:flex;flex-direction:column;border-radius:12px;padding:14px 16px;min-width:280px}
+.stepttl{font-size:12px;font-weight:700;letter-spacing:.02em;margin-bottom:10px;white-space:nowrap}
+.innerbox{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;width:max-content}
+.innerbox + .innerbox{margin-top:12px}
+.stepA{background:#1a2036;border:1px solid #3a4a78}
+.stepA .stepttl{color:#9fb4e0}
+.stepB{background:#241a36;border:1px solid #4c3a78}
+.stepB .stepttl{color:#c8a8f0}
+.stepBcontent{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.stepC{background:#14271f;border:1px solid #2e5a44}
+.stepC .stepttl{color:#8fdcb8}
+.stepCcontent{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.steparrow{align-self:center;display:flex;align-items:center;justify-content:center;
+ font-size:22px;color:#5a6577;flex:0 0 auto;padding:0 10px}
+/* 상단 task 시각화(thumbs): example/test 그룹 분리 + pair 마다 input→(화살표)→output.
+   test 는 output 미지 → [?] 빈 박스, 실제 정답(tp.output)이 있으면 그 옆에 '정답' 라벨로 표시. */
+.thumbs{display:flex;gap:22px;margin:8px 0 14px;flex-wrap:wrap;align-items:flex-start}
+.tgroup{display:flex;flex-direction:column;gap:8px}
+.tgrouplab{font-size:10px;color:#8b93a3;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.tgroup-test{padding-left:16px;border-left:1px solid #2a3038}
+.trow{display:flex;align-items:flex-end;gap:8px}
+.tunit{display:flex;flex-direction:column;align-items:center;gap:3px}
+.tlab{font-size:9px;color:#7a8698}
+.tarrow{color:#5a6577;font-size:16px;margin-bottom:14px}
+.tsep{width:10px}
+.tqbox{width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+ background:#161b24;border:1px dashed #3a4150;border-radius:4px;color:#5a6577;font-size:18px;font-weight:700}
 """
 
 CSS += """
@@ -548,8 +604,9 @@ CSS += """
 .rok{background:#12281c;color:#a9e6c1;border:1px solid #2f5a41}
 .rno{background:#241417;color:#e0a3a4;border:1px solid #5a2f34}
 .rerr{color:#e0a3a4;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap}
-.rgridbox{display:inline-grid;gap:1px;background:#2a2e38;border:1px solid #3a4150;padding:1px;width:max-content}
-.rgridbox i{width:20px;height:20px;display:block}
+/* §11 grid crispness: 러너의 expected/출력 그리드도 _thumb 와 같은 SVG <rect> 렌더(JS gridHTML) */
+.rgridsvg{display:inline-block;vertical-align:middle;background:#2a2e38;border:1px solid #3a4150;
+ image-rendering:pixelated;image-rendering:crisp-edges}
 .rout{align-items:flex-start}.rlab{font-weight:700}
 """
 
@@ -630,10 +687,19 @@ function runBody(code, input){
   }
   return output!==null ? output : g;
 }
+// §11 grid crispness(Python _thumb 와 같은 근본원인/같은 픽스 — 모듈 상단 주석 참고): CSS-grid
+// 기반 렌더(<i> 셀 + grid-template-columns)는 비정수 DPR/줌에서 컬럼별 반올림이 누적돼 오른쪽
+// 열 경계선이 사라지는 경우가 있다. SVG <rect> 를 한 장의 벡터로(shape-rendering=crispEdges)
+// 그리면 전체가 하나의 좌표계로 스케일되어 반올림이 누적되지 않는다 — #rgrid/#regrid 공용.
 function gridHTML(g){ if(!g||!g.length) return '<span class="rerr">–</span>';
-  var w=g[0].length, cells=g.map(function(r){return r.map(function(v){
-    return '<i style="background:'+PAL_JS[((v%10)+10)%10]+'"></i>';}).join("");}).join("");
-  return '<div class="rgridbox" style="grid-template-columns:repeat('+w+',20px)">'+cells+'</div>';
+  var cell=20, gap=1, fill=cell-gap;
+  var H=g.length, W=g[0].length, w=W*cell, h=H*cell, rects="";
+  for(var r=0;r<H;r++){ for(var c=0;c<W;c++){
+    var v=((g[r][c]%10)+10)%10;
+    rects += '<rect x="'+(c*cell)+'" y="'+(r*cell)+'" width="'+fill+'" height="'+fill+'" fill="'+PAL_JS[v]+'"/>';
+  } }
+  return '<svg class="rgridsvg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" '
+    +'shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">'+rects+'</svg>';
 }
 var PAL_JS=["#101010","#1E93FF","#F93C31","#4FCC30","#FFDC00","#999999","#E53AA3","#FF851B","#87D8F1","#921231"];
 function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
