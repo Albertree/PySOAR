@@ -382,6 +382,9 @@ CSS += """
 .rno{background:#241417;color:#e0a3a4;border:1px solid #5a2f34}
 .rerr{color:#e0a3a4;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap}
 .rawsrc summary{color:#7a8698;font-size:10px;cursor:pointer;margin-top:6px}
+.rgridbox{display:inline-grid;gap:1px;background:#2a2e38;border:1px solid #3a4150;padding:1px;width:max-content}
+.rgridbox i{width:20px;height:20px;display:block}
+.rout{align-items:flex-start}.rlab{font-weight:700}
 """
 
 _RUNNER_HTML = r"""
@@ -445,10 +448,10 @@ function runBody(code, input){
   }
   return g;
 }
-function gridHTML(g){ if(!g) return '<span class="rerr">–</span>';
+function gridHTML(g){ if(!g||!g.length) return '<span class="rerr">–</span>';
   var w=g[0].length, cells=g.map(function(r){return r.map(function(v){
-    return '<i style="background:'+PAL_JS[v%10]+'"></i>';}).join("");}).join("");
-  return '<div class="thumb" style="grid-template-columns:repeat('+w+',10px)">'+cells+'</div>';
+    return '<i style="background:'+PAL_JS[((v%10)+10)%10]+'"></i>';}).join("");}).join("");
+  return '<div class="rgridbox" style="grid-template-columns:repeat('+w+',20px)">'+cells+'</div>';
 }
 var PAL_JS=["#101010","#1E93FF","#F93C31","#4FCC30","#FFDC00","#999999","#E53AA3","#FF851B","#87D8F1","#921231"];
 function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
@@ -457,8 +460,7 @@ function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
   RUNNER_DATA.forEach(function(d,i){var o=document.createElement("option");
     o.value=i; o.text=d.tid+" · pair "+(d.pair+1); sel.appendChild(o);});
   function load(){var d=RUNNER_DATA[sel.value]; document.getElementById("rcode").value=d.body;
-    document.getElementById("rgrid").innerHTML=""; document.getElementById("regrid").innerHTML=gridHTML(d.expected);
-    document.getElementById("rerr").textContent=""; document.getElementById("rbadge").textContent="";}
+    document.getElementById("regrid").innerHTML=gridHTML(d.expected); run();}   // load 후 즉시 실행
   function run(){var d=RUNNER_DATA[sel.value]; var err=document.getElementById("rerr");
     var badge=document.getElementById("rbadge"); err.textContent="";
     try{ var out=runBody(document.getElementById("rcode").value, d.input);
@@ -466,9 +468,11 @@ function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
       document.getElementById("regrid").innerHTML=gridHTML(d.expected);
       var ok=eqGrid(out,d.expected); badge.textContent=ok?"✓ parity":"✗ 불일치";
       badge.className="rbadge "+(ok?"rok":"rno");
-    }catch(e){ err.textContent=String(e.message||e); badge.textContent="✗ 실행오류"; badge.className="rbadge rno"; }}
+    }catch(e){ document.getElementById("rgrid").innerHTML='<span class="rerr">실행 불가</span>';  // stale 제거
+      err.textContent=String(e.message||e); badge.textContent="✗ 실행오류"; badge.className="rbadge rno"; }}
+  var _t; document.getElementById("rcode").oninput=function(){clearTimeout(_t);_t=setTimeout(run,250);}; // 편집즉시(debounce)
   sel.onchange=load; document.getElementById("rrun").onclick=run;
-  if(RUNNER_DATA.length){ load(); run(); }   // 로드 즉시 parity 확인
+  if(RUNNER_DATA.length){ load(); }
 })();
 </script>
 """
