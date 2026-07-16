@@ -546,22 +546,28 @@ def _thumb_unit(label, inner):
     return f'<div class="tunit"><span class="tlab">{html.escape(label)}</span>{inner}</div>'
 
 
-def _pair_unit(title, row_html):
+def _pair_unit(title_html, row_html):
     """상단 task 시각화 한 PAIR 유닛: 대문자 헤더 + 그 아래 grid 행(input→output 등). example/test
     를 나눈 두 그룹(.tgroup) 대신, 모든 pair(example + test)를 같은 형태의 카드로 한 가로 행에
-    나란히 놓기 위한 공통 단위(§4 top-viz restructure)."""
-    return f'<div class="punit"><div class="phead">{html.escape(title)}</div><div class="prow">{row_html}</div></div>'
+    나란히 놓기 위한 공통 단위(§4 top-viz restructure). title_html 은 이미 안전한(고정 포맷,
+    사용자 입력 아님) 헤더 마크업 그대로 삽입한다 — .phead 가 text-transform:uppercase 라 test
+    유닛의 "PAIR a" 처럼 일부러 소문자로 남길 글자는 <span class="lc"> 로 감싸 그 상속을
+    되돌린다(§2 PAIR a 표기)."""
+    return f'<div class="punit"><div class="phead">{title_html}</div><div class="prow">{row_html}</div></div>'
 
 
 def _top_thumbs(task):
     """상단 task 시각화: example(train) pair 들 + test pair 를 한 가로 행(PAIR 유닛들)으로 나란히
-    보여준다. 각 유닛 = 대문자 헤더("PAIR 0","PAIR 1",…, test 는 "PAIR A") + input →(화살표)→
+    보여준다. 각 유닛 = 대문자 헤더("PAIR 0","PAIR 1",…, test 는 "PAIR a") + input →(화살표)→
     output 행. test pair 는 output 이 아직 미지 → '?' 빈 박스(캡션 "output", "output?" 아님)로
     그리고, 실제 정답(tp['output'])이 있으면 그 뒤에 "Ground Truth" 라벨(정답 아님)로 이어 붙인다
     (grid 는 §11 크리스프 SVG _thumb 그대로 — 별도 렌더러 만들지 않음). 가로로 스크롤되는 Step
-    카드들과는 별개로 이 영역은 위쪽에 고정 — 한눈에 읽히게 한다."""
-    units = [
-        _pair_unit(f"PAIR {i}",
+    카드들과는 별개로 이 영역은 위쪽에 고정 — 한눈에 읽히게 한다.
+    example 유닛들과 test 유닛은 각각 "EXAMPLE"/"TEST" 섹션 라벨을 얹은 .tgroup 으로 묶고, 그 둘
+    사이에 얇은 세로 구분선(.tdivider)을 둔다 — 유닛 자체(.punit/.phead/.prow)는 그대로, 상위에
+    그룹 레이어 하나만 추가(§ EXAMPLE/TEST 라벨링)."""
+    example_units = [
+        _pair_unit(html.escape(f"PAIR {i}"),
                    f'{_thumb_unit("input", _thumb(ex["input"]))}'
                    f'<span class="tarrow">→</span>{_thumb_unit("output", _thumb(ex["output"]))}')
         for i, ex in enumerate(task["train"])
@@ -572,8 +578,15 @@ def _top_thumbs(task):
                 f'<span class="tarrow">→</span>{_thumb_unit("output", qbox)}')
     if tp.get("output"):
         test_row += f'<span class="tsep"></span>{_thumb_unit("Ground Truth", _thumb(tp["output"]))}'
-    units.append(_pair_unit("PAIR A", test_row))
-    return f'<div class="tunits">{"".join(units)}</div>'
+    # "PAIR a" — PAIR 는 대문자, 꼬리 a 는 소문자 그대로(§2). .phead 의 text-transform:uppercase 를
+    # 그 글자에서만 되돌려야 하므로 <span class="lc"> 로 감싼다(순수 텍스트로 두면 CSS 가 "PAIR A"
+    # 로 강제 대문자화해버려 시각적으로 §2 요구를 못 지킴).
+    test_unit = _pair_unit('PAIR <span class="lc">a</span>', test_row)
+    example_group = (f'<div class="tgroup"><div class="tglabel">EXAMPLE</div>'
+                      f'<div class="tgrow">{"".join(example_units)}</div></div>')
+    test_group = (f'<div class="tgroup"><div class="tglabel">TEST</div>'
+                   f'<div class="tgrow">{test_unit}</div></div>')
+    return f'<div class="tunits">{example_group}<div class="tdivider"></div>{test_group}</div>'
 
 
 def task_section(tid, task, precomputed=None):
@@ -668,10 +681,18 @@ CSS = """
    빈 박스(캡션 "output"), 실제 정답(tp.output)이 있으면 그 옆에 "Ground Truth" 라벨로 표시.
    가로 스크롤되는 Step 카드(.stepsrow)와는 별개 — 이 영역은 그 위에 고정, 한눈에 읽힌다. */
 .thumbs{margin:8px 0 14px}
-.tunits{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.tunits{display:flex;gap:0;flex-wrap:wrap;align-items:stretch}
+/* EXAMPLE/TEST 그룹핑: example pair 유닛들과 test pair 유닛을 각각 섹션 라벨(.tglabel) 을 얹은
+   .tgroup 으로 묶고, 그 사이에 얇은 세로 구분선(.tdivider) 을 둔다 — .punit/.phead/.prow(개별
+   유닛 렌더)는 그대로, 상위에 그룹 레이어 하나만 추가. */
+.tgroup{display:flex;flex-direction:column;gap:8px}
+.tglabel{font-size:10px;color:#6c7688;text-transform:uppercase;letter-spacing:.12em;font-weight:700}
+.tgrow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.tdivider{width:1px;align-self:stretch;background:#2a3038;margin:0 18px}
 .punit{display:flex;flex-direction:column;gap:8px;background:#12151b;border:1px solid #232a35;
  border-radius:9px;padding:9px 12px}
 .phead{font-size:10.5px;color:#8b93a3;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.phead .lc{text-transform:lowercase}
 .prow{display:flex;align-items:flex-end;gap:8px}
 .tunit{display:flex;flex-direction:column;align-items:center;gap:3px}
 .tlab{font-size:9px;color:#7a8698}
@@ -679,6 +700,20 @@ CSS = """
 .tsep{width:10px}
 .tqbox{width:40px;height:40px;display:flex;align-items:center;justify-content:center;
  background:#161b24;border:1px dashed #3a4150;border-radius:4px;color:#5a6577;font-size:18px;font-weight:700}
+/* Step B "PROGRAM COMPARISON" overlay — 로컬 오버라이드(easy000g 겹침 버그 수정). EV.CSS 의
+   .ovl/.ghost(다른 리포트와 공유, 수정 금지)를 그대로 두고, 여기서는 더 구체적인 선택자
+   (.stepB .ovl 등, .ovl 단독보다 specificity 가 높아 순서와 무관하게 이긴다)로만 위에 얹는다.
+   버그였던 것: ghost 를 inset:0 으로 solid 박스(.ovl) 크기에 강제로 늘리면(=absolute 요소가
+   top/right/bottom/left 를 모두 갖고 width/height 는 auto → 크기가 컨테이너로 stretch),
+   pair0/pair1 두 viz 의 총 높이가 다른 태스크(예: easy000g — 두 pair 의 grid 썸네일 크기가 달라
+   viz 높이가 다름)에서 ghost 가 solid 와 완전히 같은 폭/높이로 눌려 붙어 텍스트가 같은 칸에
+   포개진다(대각선 오프셋이 안 보임). 고정: ghost 는 top/left 만 고정하고 right/bottom 은 auto 로
+   풀어 자기 콘텐츠 크기 그대로(shrink-to-fit) 두고, 더 큰 대각선 translate 만 적용 — 그러면 두
+   레이어의 높이가 서로 달라도 항상 벌어진 대각선으로 읽힌다. .ovl 컨테이너는 그 벌어진 ghost 를
+   잘리지 않게 담을 만큼 넉넉한 padding(우/하)을 준다. */
+.stepB .ovl{position:relative;padding:6px 30px 30px 6px;width:max-content;min-width:max-content}
+.stepB .ovl .ghost{position:absolute;top:0;left:0;right:auto;bottom:auto;width:auto;height:auto;
+ transform:translate(22px,22px);opacity:.4;pointer-events:none;filter:saturate(.7)}
 """
 
 CSS += """
