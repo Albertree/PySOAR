@@ -6,19 +6,19 @@ from arbor.reasoning import program_ast as P
 
 class TestGridSchema(unittest.TestCase):
     def test_grid_program_shape(self):
-        ast = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[0, 2], [2, 0]]))
+        ast = P.grid_program(P.expr("size(input_grid)"), P.const([0, 2]), P.const([[0, 2], [2, 0]]))
         self.assertTrue(P._is_grid_body(ast["body"]))
         self.assertEqual([s["call"] for s in ast["body"]],
                          ["set_grid_size", "set_grid_color", "set_grid_contents"])
-        self.assertEqual(ast["body"][0]["args"]["size"], {"keep": "size"})
+        self.assertEqual(ast["body"][0]["args"]["size"], {"expr": "size(input_grid)"})
         self.assertEqual(ast["body"][2]["args"]["contents"], {"const": [[0, 2], [2, 0]]})
 
     def test_to_source_grid_renders_setters(self):
-        ast = P.grid_program(P.expr("H-1,W-1"), P.delta([5], [1, 2, 3, 4]), P.keep("contents"))
+        ast = P.grid_program(P.expr("H-1,W-1"), P.delta([5], [1, 2, 3, 4]), P.expr("contents(input_grid)"))
         src = P.to_source(ast)
         self.assertIn("set_grid_size(H-1,W-1)", src)
         self.assertIn("set_grid_color(-[5]+[1, 2, 3, 4])", src)
-        self.assertIn("set_grid_contents(keep)", src)
+        self.assertIn("set_grid_contents(contents(input_grid))", src)
         self.assertTrue(src.rstrip().endswith("output_grid = G1"))
 
     def test_pixel_body_still_works(self):   # 회귀: 기존 pixel to_source 불변
@@ -34,12 +34,12 @@ class TestGridExecute(unittest.TestCase):
 
     def test_keep_contents_is_identity(self):
         g0 = [[1, 0], [0, 1]]
-        ast = P.grid_program(P.keep("size"), P.keep("color"), P.keep("contents"))
+        ast = P.grid_program(P.expr("size(input_grid)"), P.expr("color(input_grid)"), P.expr("contents(input_grid)"))
         self.assertEqual(P.execute(ast, g0), g0)
 
-    def test_keep_size_const_contents(self):   # size=keep(=G0 dims), contents=const 같은 크기
+    def test_keep_size_const_contents(self):   # size=expr(=G0 dims), contents=const 같은 크기
         g0 = [[0, 0], [0, 0]]
-        ast = P.grid_program(P.keep("size"), P.const([0, 5]), P.const([[5, 0], [0, 5]]))
+        ast = P.grid_program(P.expr("size(input_grid)"), P.const([0, 5]), P.const([[5, 0], [0, 5]]))
         self.assertEqual(P.execute(ast, g0), [[5, 0], [0, 5]])
 
 
@@ -77,15 +77,15 @@ class TestGridDSLRegistered(unittest.TestCase):
 
 class TestGridAntiunify(unittest.TestCase):
     def test_identical_grid_programs_no_slots(self):
-        a = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[0, 2]]))
-        b = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[0, 2]]))
+        a = P.grid_program(P.expr("size(input_grid)"), P.const([0, 2]), P.const([[0, 2]]))
+        b = P.grid_program(P.expr("size(input_grid)"), P.const([0, 2]), P.const([[0, 2]]))
         sk, slots = P.antiunify_ast([a, b])
         self.assertEqual(slots, {})
         self.assertTrue(P._is_grid_body(sk["body"]))
 
     def test_diff_contents_becomes_slot(self):
-        a = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[0, 2]]))
-        b = P.grid_program(P.keep("size"), P.const([0, 2]), P.const([[2, 0]]))
+        a = P.grid_program(P.expr("size(input_grid)"), P.const([0, 2]), P.const([[0, 2]]))
+        b = P.grid_program(P.expr("size(input_grid)"), P.const([0, 2]), P.const([[2, 0]]))
         sk, slots = P.antiunify_ast([a, b])
         self.assertIn("?contents", slots)
         self.assertEqual(sk["body"][2]["args"]["contents"], {"var": "?contents"})

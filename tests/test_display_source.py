@@ -6,7 +6,7 @@ from debugger.reports.program_viewer import display_source
 
 class TestDisplaySource(unittest.TestCase):
     def test_grid_keep_and_const(self):
-        ast = PA.grid_program(PA.keep("size"),
+        ast = PA.grid_program(PA.expr("size(input_grid)"),
                               PA.const([0, 2]),
                               PA.const([[0, 0], [0, 2]]))
         src = display_source(ast)

@@ -34,7 +34,6 @@ def _is_pixel_body(body):
 
 
 # ── grid-property 생성자 (G1 = set_grid_size ∘ set_grid_color ∘ set_grid_contents) ──
-def keep(prop):                 return {"keep": prop}
 def delta(remove, add):         return {"delta": {"remove": list(remove), "add": list(add)}}
 def set_grid_size(size_leaf):     return {"call": "set_grid_size", "args": {"size": size_leaf}}
 def set_grid_color(color_leaf):   return {"call": "set_grid_color", "args": {"color": color_leaf}}
@@ -58,7 +57,7 @@ def _size_leaf(d):
     cands = d.get("cands") or []
     kinds = {k for k, _, ok in cands if ok}
     if "KEEP" in kinds:                    # 출력크기=입력크기
-        return keep("size")
+        return expr("size(input_grid)")
     for k, v, ok in cands:                 # MAP[H1=...] → expr
         if ok and k.startswith("MAP"):
             return expr(k[k.find("[") + 1:k.rfind("]")])
@@ -69,7 +68,7 @@ def _size_leaf(d):
 def _color_leaf(d):
     for k, v, ok in (d.get("cands") or []):
         if ok and k.startswith("KEEP"):
-            return keep("color")
+            return expr("color(input_grid)")
     # SET-MAP(-{rem}+{add}) 은 Phase 1 의 a/b(CONST) 가 안 타는 경로 → 구현 시 kind 문자열
     # "SET-MAP(-[..]+[..])" 를 파싱해 delta(remove, add) 로(또는 _grid_decide 가 remove/add 를
     # 구조로 노출하도록 값-파생 확장). 전역remap 태스크에서 골든으로 검증. Phase 1 필수 아님.
@@ -81,7 +80,7 @@ def grid_program_from_decide(dec):
         return None
     cnote = dec["contents"].get("note")
     if cnote == "항등":
-        c_leaf = keep("contents")
+        c_leaf = expr("contents(input_grid)")
     elif cnote == "상수출력":
         c_leaf = const(dec["contents"]["value"])          # 입력-무관 고정 grid → 검증된 const 로 정직
     else:
@@ -116,9 +115,7 @@ def _leaf_src(leaf):
 
 
 def _grid_leaf_src(leaf):
-    """grid-property leaf → 소스 조각. keep/delta 는 전용 렌더, 그 외(const/var/expr) 는 _leaf_src 재사용."""
-    if "keep" in leaf:
-        return "keep"
+    """grid-property leaf → 소스 조각. delta 는 전용 렌더, 그 외(const/var/expr) 는 _leaf_src 재사용."""
     if "delta" in leaf:
         return f"-{leaf['delta']['remove']}+{leaf['delta']['add']}"
     return _leaf_src(leaf)
@@ -231,11 +228,9 @@ def _execute_grid(body, grid_in, choice):
     from procedural_memory.dsl.transformation import make_grid, coloring
     parts = {s["call"]: s["args"] for s in body}
     ct = parts["set_grid_contents"]["contents"]
-    if "keep" in ct:                      # 항등 = G0
-        return [list(r) for r in grid_in]
     if "const" in ct:                     # 상수/결정된 grid = 그대로 산출
         return [list(r) for r in ct["const"]]
-    # 그 외(remap 등 leaf)는 Phase 1 범위 밖 → 항등 fallback (구현 확장 지점)
+    # 그 외(expr(항등 등)/remap 등 leaf)는 Phase 1 범위 밖 → 항등 fallback (구현 확장 지점)
     return [list(r) for r in grid_in]
 
 
