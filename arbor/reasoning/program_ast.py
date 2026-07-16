@@ -25,6 +25,11 @@ def cellset(cells_leaf):
     return {"ref": "cellset", "cells": cells_leaf}
 
 
+def contents_program(body):
+    """grid contents leaf — nested coloring 합성(하강 산출). body = pixel/object/cellset coloring step 들."""
+    return {"program": {"body": list(body)}}
+
+
 def _is_cellset_body(body):
     return bool(body) and all(s["args"]["target"].get("ref") == "cellset" for s in body)
 
@@ -193,15 +198,11 @@ def _leaf_value(leaf, grid_in, choice):
     raise ValueError(f"execute: unresolved leaf {leaf}")
 
 
-def execute(ast, grid_in, choice=None):
-    """AST 를 grid_in 에 실행 → 출력 grid. (숫자 처리 = antiunify.execute_solution 과 동일.)"""
-    if not ast or not ast.get("body"):
-        return [list(r) for r in grid_in]
-    if _is_grid_body(ast["body"]):
-        return _execute_grid(ast["body"], grid_in, choice)
+def _execute_pixel_body(body, grid_in, choice):
+    """pixel/object/cellset coloring body → 출력 grid. (기존 execute 의 for 문 그대로 이동.)"""
     H, W = len(grid_in), len(grid_in[0])
     grid = [list(r) for r in grid_in]
-    for s in ast["body"]:
+    for s in body:
         tgt = s["args"]["target"]
         col = _leaf_value(s["args"]["color"], grid_in, choice)
         if tgt.get("ref") == "cellset":                     # blob: 셀 집합 전체 채색 (execute_solution blob 분기)
@@ -223,6 +224,15 @@ def execute(ast, grid_in, choice=None):
     return grid
 
 
+def execute(ast, grid_in, choice=None):
+    """AST 를 grid_in 에 실행 → 출력 grid. (숫자 처리 = antiunify.execute_solution 과 동일.)"""
+    if not ast or not ast.get("body"):
+        return [list(r) for r in grid_in]
+    if _is_grid_body(ast["body"]):
+        return _execute_grid(ast["body"], grid_in, choice)
+    return _execute_pixel_body(ast["body"], grid_in, choice)
+
+
 def _execute_grid(body, grid_in, choice):
     """set_grid_size/color/contents → make_grid+coloring lowering. contents 가 산출을 지배."""
     from procedural_memory.dsl.transformation import make_grid, coloring
@@ -230,6 +240,8 @@ def _execute_grid(body, grid_in, choice):
     ct = parts["set_grid_contents"]["contents"]
     if "const" in ct:                     # 상수/결정된 grid = 그대로 산출
         return [list(r) for r in ct["const"]]
+    if "program" in ct:                                   # nested coloring 합성 = 하강 산출
+        return _execute_pixel_body(ct["program"]["body"], grid_in, choice)
     # 그 외(expr(항등 등)/remap 등 leaf)는 Phase 1 범위 밖 → 항등 fallback (구현 확장 지점)
     return [list(r) for r in grid_in]
 
