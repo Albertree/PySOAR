@@ -151,13 +151,11 @@ def make_dashboard(tasks, dataset="focus (slice 1)"):
 
 
 if __name__ == "__main__":
-    # 사용자 지정(2026-07-14): dashboard = **17-survey** (easy 9 + made 2 + ARC-AGI 6).
-    # 옛 seokki 대시보드(786369f→081463c)의 다양성 관찰 묶음을 복원 — 낯선 태스크에 현재
-    # 로직이 어떻게 적용되나 관찰(harness §2-4). easy000i·미해결·크래시도 하나의 데이터로 남긴다
-    # (_safe_dash_data 가 태스크당 타임아웃+예외 격리). easy 는 survey 안에 그대로 포함.
-    tasks = _load_survey(agi_ids=SURVEY_AGI)                 # 9 + 2 + 6 = 17
+    # 사용자 요청(2026-07-17): 시간 단축 — made 및 지정 ARC-AGI 5문제 제외. dashboard = easy a-h(8) +
+    # 08ed6ac7(1) = 9. (easy000i 는 데이터셋에서 제거됨. made·나머지 AGI 는 풀이 시도조차 안 함.)
+    tasks = _load_survey(agi_ids=SURVEY_AGI, include_made=False)     # 8 + 1 = 9
     print(f"survey: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=1000")
-    out = make_dashboard(tasks, dataset="survey 17 = easy 9 + made 2 + ARC-AGI 6")
+    out = make_dashboard(tasks, dataset="survey = easy a-h(8) + 08ed6ac7")
     sz = os.path.getsize(out) / 1e6
     print(f"wrote {out}  ({sz:.1f} MB)")
     # companion 페이지: easy a-h program 뷰어 (nav 링크 대상; 스펙 §12)

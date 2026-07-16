@@ -701,6 +701,9 @@ CSS = """
    .stepsrow 는 align-items:stretch(기본값) 라 같은 줄의 카드들은 그 줄에서 가장 높은 카드와 같은
    높이로 맞춰진다 — Step B/C 는 그 안에서 "카드 안 수직 중앙"을 flex column + justify-content:
    center 로 구현. Step A 는 stepttl 다음에 innerbox 들이 top-aligned 순서로 그냥 쌓인다. */
+/* 회색 박스(.task)는 EV.CSS 에서 block(폭=뷰포트)이라 가로스크롤 시 넘친 Step 을 안 감싼다.
+   내용(Step A/B/C 전체) 폭에 맞게 늘려 세 Step 을 다 감싸도록 override(최소 뷰포트 폭 보장). */
+.task{width:max-content;min-width:100%}
 .stepsrow{display:flex;flex-wrap:nowrap;gap:14px;margin-top:10px}
 .stepcard{flex:0 0 auto;display:flex;flex-direction:column;border-radius:12px;padding:14px 16px;
  box-sizing:border-box}

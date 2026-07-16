@@ -60,4 +60,6 @@ def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, includ
         picked += 1
     return tasks
 
-SURVEY_AGI = ["08ed6ac7", "0ca9ddb6", "009d5c81", "11852cab", "845d6e51", "868de0fa"]
+# 사용자 요청(2026-07-17): 시간 단축 위해 0ca9ddb6·009d5c81·11852cab·845d6e51·868de0fa 는 대시보드
+# 시각화·풀이에서 제외. 08ed6ac7 만 유지.
+SURVEY_AGI = ["08ed6ac7"]
