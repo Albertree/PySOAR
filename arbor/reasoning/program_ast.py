@@ -326,16 +326,48 @@ def antiunify_ast(asts):
     return _antiunify_ast_pixel(valid)
 
 
+def _reprefix_inner_vars(leaf, prefix):
+    """leaf(= {"program": {"body": [...]}}) 안의 모든 {"var":"?name"} 을 {"var":"<prefix>name[1:]"} 로
+    재바인딩. slots 승격(키 = prefix + name[1:])과 일관되도록 skeleton 쪽 var 이름도 맞춰준다."""
+    def _fix_var(v):
+        if isinstance(v, dict) and "var" in v and isinstance(v["var"], str) and v["var"].startswith("?"):
+            return {"var": f"{prefix}{v['var'][1:]}"}
+        return v
+
+    new_body = []
+    for s in leaf["program"]["body"]:
+        tgt = s["args"]["target"]
+        new_tgt = dict(tgt)
+        if "index" in new_tgt:
+            new_tgt["index"] = _fix_var(new_tgt["index"])
+        if "cells" in new_tgt:
+            new_tgt["cells"] = _fix_var(new_tgt["cells"])
+        new_args = dict(s["args"], target=new_tgt, color=_fix_var(s["args"]["color"]))
+        new_body.append({"call": s["call"], "args": new_args})
+    return {"program": {"body": new_body}}
+
+
 def _antiunify_ast_grid(asts):
     """grid(3-property) AST 들 → (skeleton, slots). pixel/blob 처럼 op 위치가 아니라
     property key(size/color/contents) 별로 비교: leaf 동일=COMM(그대로 유지), 다르면
-    DIFF → {"var":"?<prop>"} + slot."""
+    DIFF → {"var":"?<prop>"} + slot. 단 contents leaf 가 전 pair 에서 program(nested coloring)
+    이면 leaf 를 통째로 var 슬롯화하지 않고, inner body 를 _antiunify_ast_pixel 로 재귀 anti-unify
+    한 뒤 inner slot(?srcN/?colorN) 을 top-level 로 승격(prefix ?c.)한다."""
     import json as _json
     props = [("set_grid_size", "size"), ("set_grid_color", "color"), ("set_grid_contents", "contents")]
     body, slots = [], {}
     partsN = [{s["call"]: s["args"] for s in a["body"]} for a in asts]
     for call, key in props:
         leaves = [pn[call][key] for pn in partsN]
+        if call == "set_grid_contents" and all("program" in leaf for leaf in leaves):
+            inner_asts = [program(leaf["program"]["body"]) for leaf in leaves]
+            sk_inner, inner_slots = _antiunify_ast_pixel(inner_asts)
+            leaf = {"program": {"body": (sk_inner or {}).get("body", [])}}
+            for nm, meta in (inner_slots or {}).items():        # top-level 로 승격(prefix)
+                slots[f"?c.{nm[1:]}"] = meta
+            leaf = _reprefix_inner_vars(leaf, "?c.")             # inner body 의 var 이름도 재바인딩(일관)
+            body.append({"call": call, "args": {key: leaf}})
+            continue
         same = all(_json.dumps(x, sort_keys=True) == _json.dumps(leaves[0], sort_keys=True) for x in leaves)
         if same:
             leaf = leaves[0]
