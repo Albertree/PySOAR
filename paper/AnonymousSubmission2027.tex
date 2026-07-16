@@ -1,0 +1,406 @@
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+\usepackage[submission]{aaai2027}  % DO NOT CHANGE THIS
+% The serif, sans-serif, and monospaced fonts are loaded automatically by
+% aaai2027.sty (newtxtext, helvet, courier). DO NOT add \usepackage{times},
+% \usepackage{helvet}, \usepackage{courier}, or any other font package.
+\usepackage[hyphens]{url}  % DO NOT CHANGE THIS
+\usepackage{graphicx} % DO NOT CHANGE THIS
+\urlstyle{rm} % DO NOT CHANGE THIS
+\def\UrlFont{\rm}  % DO NOT CHANGE THIS
+\usepackage{natbib}  % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\usepackage{caption} % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\frenchspacing  % DO NOT CHANGE THIS
+%
+% These are recommended to typeset algorithms but not required.
+\usepackage{algorithm}
+\usepackage{algorithmic}
+%
+% Recommended for better-looking tables
+\usepackage{booktabs}
+%
+% Keep the \pdfinfo as shown here.
+\pdfinfo{
+/TemplateVersion (2027.1)
+}
+
+\setcounter{secnumdepth}{1} % section numbers on (technical paper)
+
+% ============================================================================
+% TITLE
+% 주의(익명성): "ARBOR"/"PySOAR" 라는 시스템 이름이 공개 저장소로 검색되면 double-blind
+% 위배가 될 수 있음. 최종 제출 전 중립 명칭 사용 여부를 결정할 것.
+% 대안 제목:
+%  - Discovering Skills from Few Examples: An Impasse-Driven Symbolic Mechanism
+%  - From Five Examples to a Skill: Program Synthesis and Anti-Unification over a
+%    Symbolic Knowledge Graph
+% ============================================================================
+\title{ARBOR: Deriving Task-General Transformations from a\\
+Handful of Examples by Impasse-Driven Search and Anti-Unification}
+
+\author{
+    Anonymous Submission
+}
+\affiliations{
+    %
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Humans acquire a new visual-reasoning skill from a handful of demonstrations,
+whereas contemporary neural systems remain strikingly data-inefficient: even
+frontier reasoning models score in the low single digits on novel few-example
+abstraction tasks that ordinary people solve at once. We argue that the missing
+ingredient is not more data or scale but a mechanism that \emph{derives}
+reusable, verifiable structure from two to five examples. We present ARBOR, a
+symbolic reasoning agent that treats each task as an analogy problem over a
+five-layer knowledge graph and runs on a fidelity-first reimplementation of the
+Soar decision cycle. Rather than executing a hand-written pipeline, ARBOR uses
+general operators whose firing order is decided by \emph{impasse}: it descends
+the knowledge-graph hierarchy only when it gets stuck, so different tasks yield
+different reasoning traces. Within a training pair it synthesizes a program over
+a deliberately minimal, frozen two-primitive space in which every argument is a
+general expression \emph{discovered by search and verified on the training
+pairs}; across pairs it aligns per-pair programs by a structure-mapping
+correspondence and \emph{anti-unifies} them into a task-general schema with
+typed variable slots. Consequently ``obvious'' notions---the largest object, the
+bottom-right corner, coordinate formulas such as $(H-1,W-1)$---are never
+hand-coded but emerge from a search whose tried-and-rejected hypotheses remain
+auditable in the trace, and when the evidence is insufficient the agent declines
+with an explicit impasse rather than silently fitting an answer. We describe the
+mechanism and illustrate it on a controlled curriculum, reporting its scope
+honestly; ARBOR is offered as a step toward data-efficient, interpretable skill
+acquisition, not as a state-of-the-art benchmark solver.
+\end{abstract}
+
+% Uncomment to link code/data/extended version, but NOT for anonymous submission
+% (a public repository link would de-anonymize the authors).
+% \begin{links}
+%     \link{Code}{...}
+% \end{links}
+
+% ============================================================================
+\section{Introduction}
+% [작성 완료 섹션] 흐름: (1) 인간 vs 기계 data efficiency + ARC → (2) 왜 스케일/ICL로
+% 안 되는지(진단) → (3) 우리가 만드는 것(ARBOR 메커니즘) → (4) 기여 + 정직한 포지셔닝.
+% ============================================================================
+
+A person shown three or four examples of an unfamiliar grid transformation can
+usually reproduce it on a new input immediately, inferring the underlying rule
+rather than memorizing the pairs. This capacity for efficient skill acquisition
+from minimal experience is what the Abstraction and Reasoning Corpus (ARC) was
+designed to measure, deliberately controlling for prior knowledge so that raw
+task accuracy cannot be ``bought'' with data or scale \cite{chollet2019measure}.
+By this yardstick, the gap between human and machine learning remains wide.
+Frontier reasoning systems that reach near-ceiling accuracy on the original
+ARC-AGI-1 collapse to the low single digits on ARC-AGI-2, whose tasks require
+composing several interacting rules from a few demonstrations, while typical
+humans still solve them \cite{chollet2025arcagi2,arcprize2025}. Analyses of
+large language models (LLMs) attribute this shortfall to a reliance on memorized
+parametric knowledge rather than fluid, on-the-fly abstraction
+\cite{wu2025fluid}, and even the newest interactive-reasoning benchmarks report
+frontier models below one percent against a perfect human baseline
+\cite{chollet2025arcagi2}. The bottleneck, in short, is not what these systems
+know but how efficiently they can \emph{acquire and transfer} new structure.
+
+Why does scale not close the gap? A growing body of work suggests that the
+learning mechanism itself is the obstacle. In-context learning, often cited as
+evidence of few-shot adaptation, behaves under distribution shift more like
+selecting and tuning a function already contained in the pretraining hypothesis
+space than like learning a genuinely new task \cite{wang2025icl}. Sequence
+models attain near-perfect in-distribution accuracy yet fail on systematic
+recombinations of familiar primitives \cite{lakebaroni2018scan,kim2020cogs}, and
+minimal, meaning-preserving perturbations of a problem's surface form sharply
+degrade even reasoning-tuned models, exposing template memorization rather than
+rule extraction \cite{mirzadeh2025gsm}. Reinforcement-learning post-training,
+meanwhile, has been shown to sharpen the base model's existing sampling
+distribution rather than expand its reasoning boundary \cite{yue2025rl}. Symbolic
+program induction offers the complementary strength---human-level generalization
+from one or a few examples via compositional programs
+\cite{lake2015human,ellis2021dreamcoder}---but existing systems pay for it with
+stochastic wake--sleep search, large-scale sampling with replay, or per-task
+gradient updates \cite{ellis2021dreamcoder,butt2024codeit,akyurek2024ttt}, and
+recent library-learning methods lean on an LLM in the loop
+\cite{grand2024lilo}. What is missing is a mechanism that extracts reusable,
+train-verifiable structure from a handful of examples without a per-task
+training loop.
+
+We present \textbf{ARBOR}, a symbolic reasoning agent built to be exactly such a
+mechanism. ARBOR treats every ARC task as an analogy problem and perceives it
+only through ARCKG, a five-layer knowledge graph
+(\textsc{task}$\rightarrow$\textsc{pair}$\rightarrow$\textsc{grid}$\rightarrow$%
+\textsc{object}$\rightarrow$\textsc{pixel}) whose nodes expose typed properties.
+It runs on a fidelity-first reimplementation of the Soar decision cycle
+\cite{newell1990unified,laird2012soar}, differentially validated against a
+reference Soar kernel. Crucially, ARBOR does not execute a scripted pipeline:
+its general operators (observe, compare, hypothesize, synthesize, verify,
+generalize, apply) are proposed by production rules and selected by the decision
+cycle, and the agent descends the ARCKG hierarchy only when it reaches an
+\emph{impasse}---an information gap it cannot resolve at the current level. As a
+result the reasoning trace, including its descent depth and step count, differs
+from task to task rather than following a fixed sequence. Within a single
+training pair ARBOR synthesizes a program over a deliberately minimal, frozen
+space of two primitives (a canvas constructor and a cell-coloring operator) in
+which meaning lives not in choosing among many transformations but in
+\emph{what expression each argument is}. Each argument is resolved as a general
+expression discovered by a generate--apply--compare--reject search over
+input-derived atoms and verified on the training pairs; thus a coordinate such
+as the bottom-right corner $(H-1,W-1)$, or a selector such as ``the largest
+object,'' is not assumed but \emph{emerges} from search, with the tried and
+discarded hypotheses left visible in the trace. Across the training pairs ARBOR
+aligns the per-pair programs by a structure-mapping correspondence and
+\emph{anti-unifies} them---computing their least general generalization---into a
+task-general schema whose differing positions become typed variable slots,
+themselves resolved to input-derived expressions verified on training data only,
+never on a test-label oracle. When the evidence underdetermines a slot, the
+agent surfaces an explicit impasse and, in the retry setting, offers ranked
+alternatives rather than silently committing to an unjustified answer.
+
+\noindent\textbf{Contributions.} We make four contributions.
+\begin{itemize}
+\item \textbf{An impasse-driven mechanism, not a script.} We show how a faithful
+Soar decision cycle over a symbolic knowledge graph produces a task-dependent
+reasoning trajectory---descent depth and operator sequence emerge from
+information gaps---so that a single set of general operators covers structurally
+different tasks (Sections~3--4).
+\item \textbf{Within-pair program synthesis with derived arguments.} Over a
+frozen two-primitive space, ARBOR discovers each program argument as a general,
+input-derived expression by search and train-verification, so notions such as
+``largest,'' ``corner,'' and formulas like $(H-1,W-1)$ are found and checked
+rather than hand-coded (Section~4).
+\item \textbf{Cross-pair anti-unification for few-example generalization.} We
+cast task-general skill acquisition as structure-mapping alignment followed by
+anti-unification of per-pair programs into a schema with typed slots, resolved
+from two to five examples without any per-task parameter update (Section~4).
+\item \textbf{Honesty as a design and evaluation criterion.} The agent declines
+via explicit impasse when information is insufficient, and its search is
+auditable; we use per-task divergence of the reasoning trace, rather than
+aggregate accuracy alone, as evidence that computation is genuine and not hidden
+inside hand-written functions (Sections~5--6).
+\end{itemize}
+
+We stress the paper's scope. ARBOR is a \emph{mechanism} demonstrated on a
+controlled curriculum of few-example tasks; it is not a state-of-the-art solver
+for the full ARC-AGI corpus, and we report its coverage and failures plainly
+(Section~6). Our aim is to make the components of efficient, transferable
+abstraction explicit and inspectable, complementing the data-efficiency critique
+of scaled neural learning with a concrete, interpretable alternative.
+
+% ============================================================================
+\section{Related Work}
+% [작성 완료 섹션] 5개 소절: (A) LLM data efficiency 한계, (B) systematic/compositional
+% generalization, (C) ARC/abstraction 벤치마크, (D) program synthesis & library
+% learning + LLM-guided, (E) 유추·structure mapping·anti-unification + 인지아키텍처.
+% 마지막에 ARBOR 차별화 문단.
+% 주의: 아래 인용은 모두 실존 확인분 위주. arXiv 리포트는 bib에서 @misc.
+% ============================================================================
+
+\subsection{Data Efficiency and the Limits of Scaled Learning}
+A recurring theme in recent analyses is that low test loss and strong
+in-distribution accuracy do not by themselves yield the transferable,
+sample-efficient behavior attributed to LLMs, and that a separate account beyond
+statistical generalization is needed \cite{reizinger2024position}. Controlled
+studies of in-context learning find that its apparent new-task learning holds
+only in the absence of distribution shift, and that out-of-distribution it
+resembles optimizing a function drawn from the pretraining hypothesis space
+rather than acquiring a new one \cite{wang2025icl}. On mathematical reasoning,
+perturbing only the surface form of otherwise identical problems degrades
+even reasoning-oriented models and reveals a template-memorization failure mode
+\cite{mirzadeh2025gsm}, and controllable-complexity puzzles show frontier
+reasoning models collapsing beyond a modest difficulty threshold
+\cite{shojaee2025illusion}. Reinforcement-learning post-training has likewise
+been shown to reweight rather than extend a base model's reasoning support
+\cite{yue2025rl}. These results motivate mechanisms that extract explicit,
+verifiable structure rather than interpolate within a learned prior.
+
+\subsection{Systematic and Compositional Generalization}
+The difficulty of recombining known primitives in novel ways is longstanding.
+The SCAN benchmark showed sequence-to-sequence networks failing on systematic
+recombinations despite near-perfect training accuracy \cite{lakebaroni2018scan},
+and COGS demonstrated a persistent structural-generalization gap in semantic
+parsing even with ample data \cite{kim2020cogs}. Meta-learning has narrowed this
+gap on controlled tasks \cite{lakebaroni2023}, but the challenge of reliably
+producing systematic behavior from few examples remains central and directly
+motivates a structure-mapping and anti-unification approach.
+
+\subsection{Abstract Reasoning Benchmarks}
+ARC operationalizes intelligence as skill-acquisition efficiency under strong
+priors and few examples \cite{chollet2019measure}. Its successor ARC-AGI-2
+raises the demand for multi-rule composition and symbol reuse, and reports
+frontier reasoning systems far below human performance
+\cite{chollet2025arcagi2,arcprize2025}. Analyses isolating fluid intelligence on
+ARC trace LLM failure to weak skill composition, unfamiliarity with abstract
+formats, and left-to-right decoding rather than to knowledge gaps
+\cite{wu2025fluid}. We adopt this few-example, novel-task framing as the setting
+our mechanism targets, while positioning our own evaluation on a controlled
+curriculum rather than as a leaderboard claim.
+
+\subsection{Program Synthesis and Library Learning}
+Symbolic program induction achieves data-efficient generalization by
+representing concepts as compositional programs, from Bayesian program learning
+for one-shot concept acquisition \cite{lake2015human} to wake--sleep library
+learning that discovers reusable abstractions from few-example tasks
+\cite{ellis2021dreamcoder}. Subsequent work makes abstraction extraction fast
+and corpus-guided \cite{bowers2023stitch}, adds LLM-guided synthesis with
+symbolic compression and documentation \cite{grand2024lilo}, and refactors
+LLM-generated programs into reusable libraries \cite{stengeleskin2024regal}.
+A parallel line uses LLMs to propose programs or hypotheses for ARC-style tasks,
+via natural-language hypothesis search \cite{wang2024hypothesis}, hindsight
+replay for program search \cite{butt2024codeit}, or ensembling program induction
+with direct transduction \cite{li2025induction}; test-time training closes much
+of the gap through per-instance gradient updates on augmented examples
+\cite{akyurek2024ttt}. ARBOR shares the goal of discovering reusable skills from
+few examples but differs in its engine: a deterministic structure-mapping and
+anti-unification core with no stochastic search loop, no LLM in the loop, and no
+per-task parameter update.
+
+\subsection{Analogy, Structure Mapping, and Cognitive Architectures}
+Our mechanism is grounded in structure-mapping theory, in which an analogy maps
+a system of relations by their syntactic structure rather than surface content,
+preferring interconnected relational systems \cite{gentner1983structure}. Its
+computational realization is anti-unification, the dual of unification that
+computes a least general generalization capturing shared structure across
+symbolic expressions \cite{cerna2023antiunification}. Melanie Mitchell's survey
+frames abstraction and analogy-making as a central unsolved problem for AI,
+noting that neither deep learning nor prior symbolic systems achieve human-like
+abstraction \cite{mitchell2021abstraction}. Finally, ARBOR is built on the Soar
+cognitive architecture and its impasse-driven, chunking-based problem solving
+\cite{newell1990unified,laird2012soar}, which supplies the decision cycle that
+turns our operators into a task-dependent reasoning trajectory rather than a
+fixed script.
+
+% ============================================================================
+% 이하 §3-7 은 [스켈레톤]. 문단당 한 줄로 "무엇이 들어갈지"만 표시(값/성능 없음).
+% 스토리텔링·구조 당위성 검토용. 실제 산문·수치는 나중에.
+% 각 item = 계획된 한 문단. (These bullets are one-line-per-paragraph placeholders.)
+% ============================================================================
+
+\section{Background: The Soar Kernel and ARCKG}
+\emph{[Skeleton --- one line per planned paragraph. Purpose: give the reader the
+two substrates the mechanism needs, so Section~4 can be read as forced by them,
+not chosen ad hoc. Ties back to Intro paragraph~3 and Related Work \S2.5.]}
+\begin{itemize}
+\item The reasoning substrate is a fidelity-first reimplementation of the Soar
+decision cycle; we recover exactly the parts ARBOR depends on (preference-based
+operator selection, impasses, truth maintenance, chunking).
+\item We validate that kernel differentially against a reference Soar so that
+the control layer is trustworthy rather than a bespoke loop.
+\item The perceptual substrate is ARCKG, a five-layer typed-property knowledge
+graph that is the agent's \emph{only} access to a task.
+\item Access is lazy: the agent inspects a deeper layer only when it cannot
+proceed at the current one, which is what makes descent meaningful rather than
+routine.
+\item The recursive \texttt{compare} operation supplies item-level and
+relation-level (second- and higher-order) COMM/DIFF comparisons that are the sole
+source of evidence downstream.
+\end{itemize}
+
+\section{The ARBOR Mechanism}
+\emph{[Skeleton. Purpose: show each component is the minimal thing needed to turn
+``few examples'' into a verified task-general transformation; organized by the
+descriptive/procedural $\times$ pair/task quadrants. Delivers Intro
+contributions~1--3; concrete alternative to Related Work \S2.4--2.5.]}
+
+\subsection{Impasse-Driven Control}
+\begin{itemize}
+\item The agent's default is to attempt a task-general solution; failing that
+raises an impasse that both diagnoses the missing information and triggers
+descent --- so control is emergent, not scripted.
+\item Because the trigger is an information gap, structurally different tasks
+induce different operator sequences and descent depths from one rule set.
+\end{itemize}
+
+\subsection{Within-Pair Program Synthesis}
+\begin{itemize}
+\item Output space is deliberately frozen to two primitives (canvas plus
+cell-coloring); expressive power is moved into \emph{what expression each
+argument is}, not into a growing transformation catalogue.
+\item Each argument is a general, input-derived expression found by a
+generate--apply--compare--reject search and kept only if it reproduces every
+training pair.
+\item Hence selectors (``the largest object'') and coordinate formulas
+(a bottom-right anchor) are \emph{discovered and verified}, never hand-coded, and
+the tried-and-rejected candidates remain visible in the trace.
+\item Surviving expressions are ranked by generality and simplicity so the agent
+prefers the most transferable explanation consistent with the examples.
+\end{itemize}
+
+\subsection{Structure Mapping and Anti-Unification}
+\begin{itemize}
+\item Across pairs, per-pair programs are first aligned by a correspondence that
+maximizes shared structure (structure mapping) --- the precondition for
+generalizing.
+\item Aligned programs are anti-unified position-by-position: agreeing parts stay
+constant, differing parts become typed variable slots, yielding a task-general
+schema.
+\item Slots are resolved to input-derived expressions verified on the training
+pairs only, with no appeal to a test-label oracle.
+\item When the examples underdetermine a slot, the version space yields ranked
+alternatives for the retry setting rather than a single unjustified commitment.
+\end{itemize}
+
+\subsection{Compression to Reusable Skills}
+\begin{itemize}
+\item When differing operation counts block anti-unification, pixel-level
+programs are compressed into object-level ones, recovering a shared schema and
+pointing toward reusable, accumulable skills.
+\end{itemize}
+
+\section{A Worked Example}
+\emph{[Skeleton --- one line per planned paragraph; a single task carries the
+whole pipeline so the reader sees the machinery actually run. Makes concrete the
+Intro claim that ``obvious'' notions are derived, not assumed.]}
+\begin{itemize}
+\item Setup: one curriculum task and why it is a minimal but non-trivial instance
+of the target capability.
+\item Descent: the first impasse and the ARCKG path the agent takes to resolve
+it, with the working-memory changes at each step.
+\item Search: the coordinate/selector expressions tried and rejected before the
+correct one survives --- the visible-search claim in action.
+\item Generalization: the per-pair programs, their alignment, and the
+anti-unified schema with its slots.
+\item Application: instantiating the schema on the held-out input. (Figure~1:
+trace/dashboard snapshot.)
+\end{itemize}
+
+\section{Demonstration and Honest Scope}
+\emph{[Skeleton. Purpose: substantiate the mechanism honestly on a controlled
+curriculum. No performance numbers here yet --- they are added later. Delivers
+Intro contribution~4; fulfils the ``not a leaderboard'' stance of \S2.3.]}
+\begin{itemize}
+\item Curriculum: what the few-example task families are and what capability each
+isolates.
+\item Primary evidence is qualitative-structural: whether descent depth and
+operator sequence \emph{diverge across tasks}, showing computation is real and
+not hidden inside hand-written functions. (To be filled; no numbers yet.)
+\item Interpretability: tried/rejected candidates and impasse-based declines are
+inspectable in the trace. (Figure~2: dashboard.)
+\item Scope stated plainly: task families covered, tasks declined, and the
+boundary of current coverage --- with quantitative results deferred.
+\item Contrast with scaled neural learning is drawn through the literature of
+\S2, not through new LLM experiments.
+\end{itemize}
+
+\section{Limitations, Discussion, and Conclusion}
+\emph{[Skeleton --- one line per planned paragraph.]}
+\begin{itemize}
+\item Limitation: coverage is bounded by the breadth of the expression space and
+by task families outside the current operators.
+\item Discussion: how compression toward reusable skills and richer relational
+expressions widen coverage without abandoning the frozen-primitive discipline.
+\item Outlook: extension to interactive settings (novel-environment adaptation
+from few rules) as a natural next target for the same mechanism.
+\item Conclusion: restate ARBOR as a concrete, interpretable, data-efficient
+alternative to the learning the introduction diagnoses.
+\end{itemize}
+
+% ============================================================================
+% References
+% aaai2027.bst 사용(스타일은 aaai2027.sty 가 지정). 아래 arbor.bib 에 실존 확인된
+% 항목만 수록. arXiv 리포트는 @misc(eprint/archivePrefix)로 표기(날조 venue 금지).
+% ============================================================================
+\bibliography{arbor}
+
+\end{document}

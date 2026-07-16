@@ -1,0 +1,213 @@
+% ARBOR references. Only verified, real works are included.
+% arXiv-only reports use @misc with eprint/archivePrefix (no fabricated venues).
+% Venue-confidence notes are in comments; verify before camera-ready.
+
+% ---- Abstraction / ARC benchmarks ----
+@misc{chollet2019measure,
+  title={On the Measure of Intelligence},
+  author={Chollet, Fran\c{c}ois},
+  year={2019},
+  eprint={1911.01547},
+  archivePrefix={arXiv}
+}
+
+@misc{chollet2025arcagi2,
+  title={{ARC-AGI-2}: A New Challenge for Frontier {AI} Reasoning Systems},
+  author={Chollet, Fran\c{c}ois and Knoop, Mike and Kamradt, Gregory and Landers, Bryan and Pinkard, Henry},
+  year={2025},
+  eprint={2505.11831},
+  archivePrefix={arXiv},
+  note={arXiv report; not a peer-reviewed venue}
+}
+
+@misc{arcprize2025,
+  title={{ARC} Prize 2025: Technical Report},
+  author={Chollet, Fran\c{c}ois and Knoop, Mike and Kamradt, Gregory and Landers, Bryan},
+  year={2026},
+  eprint={2601.10904},
+  archivePrefix={arXiv},
+  note={Official ARC Prize technical report}
+}
+
+@inproceedings{wu2025fluid,
+  title={Understanding {LLMs}' Fluid Intelligence Deficiency: An Analysis of the {ARC} Task},
+  author={Wu, Junjie and Yu, Mo and Liu, Lemao and Yeung, Dit-Yan and Zhou, Jie},
+  booktitle={Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics (NAACL)},
+  year={2025}
+}
+
+% ---- LLM data-efficiency / ICL / reasoning limits ----
+@inproceedings{reizinger2024position,
+  title={Position: Understanding {LLMs} Requires More Than Statistical Generalization},
+  author={Reizinger, Patrik and Ujv\'{a}ry, Szilvia and M\'{e}sz\'{a}ros, Anna and Kerekes, Anna and Brendel, Wieland and Husz\'{a}r, Ferenc},
+  booktitle={Proceedings of the 41st International Conference on Machine Learning (ICML)},
+  year={2024}
+}
+
+@inproceedings{wang2025icl,
+  title={Can In-context Learning Really Generalize to Out-of-distribution Tasks?},
+  author={Wang, Qixun and Wang, Yifei and Ying, Xianghua and Wang, Yisen},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2025}
+}
+
+@inproceedings{mirzadeh2025gsm,
+  title={{GSM-Symbolic}: Understanding the Limitations of Mathematical Reasoning in Large Language Models},
+  author={Mirzadeh, Iman and Alizadeh, Keivan and Shahrokhi, Hooman and Tuzel, Oncel and Bengio, Samy and Farajtabar, Mehrdad},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2025},
+  note={Widely cited as ICLR 2025; confirm before camera-ready}
+}
+
+@misc{shojaee2025illusion,
+  title={The Illusion of Thinking: Understanding the Strengths and Limitations of Reasoning Models via the Lens of Problem Complexity},
+  author={Shojaee, Parshin and Mirzadeh, Iman and Alizadeh, Keivan and Horton, Maxwell and Bengio, Samy and Farajtabar, Mehrdad},
+  year={2025},
+  eprint={2506.06941},
+  archivePrefix={arXiv},
+  note={Venue debated; cite as arXiv}
+}
+
+@inproceedings{yue2025rl,
+  title={Does Reinforcement Learning Really Incentivize Reasoning Capacity in {LLMs} Beyond the Base Model?},
+  author={Yue, Yang and Chen, Zhiqi and Lu, Rui and Zhao, Andrew and Wang, Zhaokai and Song, Shiji and Huang, Gao},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  year={2025},
+  note={NeurIPS 2025 (Best Paper Runner-Up)}
+}
+
+% ---- Systematic / compositional generalization ----
+@inproceedings{lakebaroni2018scan,
+  title={Generalization without Systematicity: On the Compositional Skills of Sequence-to-Sequence Recurrent Networks},
+  author={Lake, Brenden M. and Baroni, Marco},
+  booktitle={Proceedings of the 35th International Conference on Machine Learning (ICML)},
+  year={2018}
+}
+
+@inproceedings{kim2020cogs,
+  title={{COGS}: A Compositional Generalization Challenge Based on Semantic Interpretation},
+  author={Kim, Najoung and Linzen, Tal},
+  booktitle={Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)},
+  year={2020}
+}
+
+@article{lakebaroni2023,
+  title={Human-like Systematic Generalization through a Meta-learning Neural Network},
+  author={Lake, Brenden M. and Baroni, Marco},
+  journal={Nature},
+  volume={623},
+  pages={115--121},
+  year={2023}
+}
+
+% ---- Program synthesis / library learning ----
+@article{lake2015human,
+  title={Human-level Concept Learning through Probabilistic Program Induction},
+  author={Lake, Brenden M. and Salakhutdinov, Ruslan and Tenenbaum, Joshua B.},
+  journal={Science},
+  volume={350},
+  number={6266},
+  pages={1332--1338},
+  year={2015}
+}
+
+@inproceedings{ellis2021dreamcoder,
+  title={{DreamCoder}: Bootstrapping Inductive Program Synthesis with Wake-Sleep Library Learning},
+  author={Ellis, Kevin and Wong, Catherine and Nye, Maxwell and Sabl\'{e}-Meyer, Mathias and Morales, Lucas and Hewitt, Luke and Cary, Luc and Solar-Lezama, Armando and Tenenbaum, Joshua B.},
+  booktitle={Proceedings of the 42nd ACM SIGPLAN International Conference on Programming Language Design and Implementation (PLDI)},
+  year={2021}
+}
+
+@article{bowers2023stitch,
+  title={Top-Down Synthesis for Library Learning},
+  author={Bowers, Matthew and Olausson, Theo X. and Wong, Lionel and Grand, Gabriel and Tenenbaum, Joshua B. and Ellis, Kevin and Solar-Lezama, Armando},
+  journal={Proceedings of the ACM on Programming Languages (POPL)},
+  year={2023}
+}
+
+@inproceedings{grand2024lilo,
+  title={{LILO}: Learning Interpretable Libraries by Compressing and Documenting Code},
+  author={Grand, Gabriel and Wong, Lionel and Bowers, Maddy and Olausson, Theo X. and Liu, Muxin and Tenenbaum, Joshua B. and Andreas, Jacob},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2024}
+}
+
+@inproceedings{stengeleskin2024regal,
+  title={{ReGAL}: Refactoring Programs to Discover Generalizable Abstractions},
+  author={Stengel-Eskin, Elias and Prasad, Archiki and Bansal, Mohit},
+  booktitle={Proceedings of the 41st International Conference on Machine Learning (ICML)},
+  year={2024}
+}
+
+@inproceedings{wang2024hypothesis,
+  title={Hypothesis Search: Inductive Reasoning with Language Models},
+  author={Wang, Ruocheng and Zelikman, Eric and Poesia, Gabriel and Pu, Yewen and Haber, Nick and Goodman, Noah D.},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2024}
+}
+
+@inproceedings{butt2024codeit,
+  title={{CodeIt}: Self-Improving Language Models with Prioritized Hindsight Replay},
+  author={Butt, Natasha and Manczak, Blazej and Wiggers, Auke and Rainone, Corrado and Zhang, David W. and Defferrard, Micha\"{e}l and Cohen, Taco},
+  booktitle={Proceedings of the 41st International Conference on Machine Learning (ICML)},
+  year={2024}
+}
+
+@inproceedings{li2025induction,
+  title={Combining Induction and Transduction for Abstract Reasoning},
+  author={Li, Wen-Ding and Hu, Keya and Larsen, Carter and Wu, Yuqing and Alford, Simon and Woo, Caleb and Dunn, Spencer M. and Tang, Hao and Naim, Michelangelo and Nguyen, Dat and Zheng, Wei-Long and Tavares, Zenna and Pu, Yewen and Ellis, Kevin},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2025}
+}
+
+@misc{akyurek2024ttt,
+  title={The Surprising Effectiveness of Test-Time Training for Abstract Reasoning},
+  author={Aky\"{u}rek, Ekin and Damani, Mehul and Qiu, Linlu and Guo, Han and Kim, Yoon and Andreas, Jacob},
+  year={2024},
+  eprint={2411.07279},
+  archivePrefix={arXiv}
+}
+
+% ---- Analogy / structure mapping / anti-unification / cognitive architectures ----
+@article{gentner1983structure,
+  title={Structure-Mapping: A Theoretical Framework for Analogy},
+  author={Gentner, Dedre},
+  journal={Cognitive Science},
+  volume={7},
+  number={2},
+  pages={155--170},
+  year={1983}
+}
+
+@inproceedings{cerna2023antiunification,
+  title={Anti-unification and Generalization: A Survey},
+  author={Cerna, David M. and Kutsia, Temur},
+  booktitle={Proceedings of the Thirty-Second International Joint Conference on Artificial Intelligence (IJCAI)},
+  year={2023}
+}
+
+@article{mitchell2021abstraction,
+  title={Abstraction and Analogy-Making in Artificial Intelligence},
+  author={Mitchell, Melanie},
+  journal={Annals of the New York Academy of Sciences},
+  volume={1505},
+  number={1},
+  pages={79--101},
+  year={2021}
+}
+
+@book{newell1990unified,
+  title={Unified Theories of Cognition},
+  author={Newell, Allen},
+  year={1990},
+  publisher={Harvard University Press},
+  address={Cambridge, MA}
+}
+
+@book{laird2012soar,
+  title={The {Soar} Cognitive Architecture},
+  author={Laird, John E.},
+  year={2012},
+  publisher={MIT Press},
+  address={Cambridge, MA}
+}
