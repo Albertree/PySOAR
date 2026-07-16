@@ -149,10 +149,30 @@ def _leaf_src(leaf):
     raise ValueError(f"bad leaf: {leaf}")
 
 
+def _contents_program_src(body):
+    """contents leaf `program`(nested coloring 합성 — T4 하강 산출) → 소스 조각. 기존 pixel/object
+    coloring step 표기를 재사용(파싱 계약은 안 늘림 — 표시 전용, `parse_program` 은 이 형태를 못
+    읽고 None 을 내면 그걸로 충분: compressible()/legacy 경로는 grid AST 를 대상으로 하지 않는다)."""
+    parts = []
+    for s in body:
+        tgt = s["args"]["target"]
+        col = _leaf_src(s["args"]["color"])
+        if tgt.get("ref") == "cellset":
+            cl = tgt["cells"]
+            cells = str(cl["const"]) if "const" in cl else _leaf_src(cl)
+            parts.append(f"coloring(cellset={cells}, color={col})")
+        else:
+            parts.append(f"coloring({tgt.get('ref')}[{_leaf_src(tgt['index'])}], color={col})")
+    return " ∘ ".join(parts) if parts else "identity"
+
+
 def _grid_leaf_src(leaf):
-    """grid-property leaf → 소스 조각. delta 는 전용 렌더, 그 외(const/var/expr) 는 _leaf_src 재사용."""
+    """grid-property leaf → 소스 조각. delta 는 전용 렌더, program(하강 coloring 합성) 은
+    `_contents_program_src`, 그 외(const/var/expr) 는 _leaf_src 재사용."""
     if "delta" in leaf:
         return f"-{leaf['delta']['remove']}+{leaf['delta']['add']}"
+    if "program" in leaf:
+        return _contents_program_src(leaf["program"]["body"])
     return _leaf_src(leaf)
 
 

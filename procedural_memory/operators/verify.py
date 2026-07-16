@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """ARBOR operator body: verify (procedural LTM leaf). focus_solver 분리."""
 from __future__ import annotations
+import json
 
 from procedural_memory.operators.hypothesize import pair_cursor
+from arbor.reasoning import program_ast as PA
 
 
 def _op_verify(ag):
@@ -28,8 +30,44 @@ def _op_verify(ag):
         old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
         if old in (None, "{}"):
             ag.wm.remove(ppid, "program", old)                # 실제 저장된 sentinel(None 또는 구 "{}") 제거
-        ag.wm.add(ppid, "program", code)                      # 실행가능 flat Python (level-1)
+        # grid-skeleton(hypothesize 가 parent GRID substate 에 stash — §4-2) 이 있으면 하강 coloring 을
+        # 그 contents 슬롯으로 감싼 grid body(3슬롯)를, 없으면(순수 pixel 문제) 현행 pixel body 를 기록.
+        ag.wm.add(ppid, "program", _assemble_pair_program(ag, code))
     _advance_or_finish(ag, sid, k)
+
+
+def _find_grid_skeleton(ag):
+    """PAIR.program 조립 직전, `grid-skeleton`(hypothesize.py 가 GRID substate 에 stash — §4-2)을
+    조상 substate 체인에서 조회. OBJECT/PIXEL 로 하강해도 그 GRID substate 자체는 `ag.stack` 에
+    남아 있다(H-space 만 purge) — 몇 hop 위인지는 하강 깊이에 따라 달라지므로 스택을 거슬러 올라가며
+    찾는다(현재 substate 부터 역순 — hop 수를 가정하지 않는다)."""
+    for g in reversed(ag.stack):
+        v = next((v for (i, a, v) in ag.wm if i == g.id and a == "grid-skeleton"), None)
+        if v is not None:
+            return v
+    return None
+
+
+def _assemble_pair_program(ag, code):
+    """grid-skeleton 이 있으면 그 skeleton 의 `set_grid_contents` pending 슬롯을 하강 coloring
+    body(`code`)로 감싼 grid body(3슬롯)를 PAIR.program 으로 반환. skeleton 없으면(순수 pixel
+    문제) `code` 그대로(현행 pixel body)."""
+    sk = _find_grid_skeleton(ag)
+    if sk is None:
+        return code
+    gp = json.loads(sk)
+    try:
+        coloring_body = json.loads(code)["body"]
+    except (ValueError, TypeError, KeyError):
+        coloring_body = []                             # 하강 재채색 없었음(항등) → 빈 합성(=identity)
+    body = []
+    for s in gp.get("body") or []:
+        if s.get("call") == "set_grid_contents":
+            leaf = (s.get("args") or {}).get("contents")
+            if isinstance(leaf, dict) and "pending" in leaf:
+                s = PA.set_grid_contents(PA.contents_program(coloring_body))
+        body.append(s)
+    return json.dumps(dict(gp, body=body))
 
 
 def _advance_or_finish(ag, sid, k):
