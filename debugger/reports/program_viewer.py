@@ -66,14 +66,16 @@ def _disp_grid_leaf(leaf, prop):
 
 
 def _display_grid(body):
+    """grid body → Grid 객체 3속성 개별 대입 형태(정직: size/color 는 완성 contents 와
+    일관해야 valid). 실행 의미는 러너가 Grid 객체 모델로 재현."""
     parts = {s["call"]: s["args"] for s in body}
     sz = _disp_grid_leaf(parts["set_grid_size"]["size"], "size")
     co = _disp_grid_leaf(parts["set_grid_color"]["color"], "color")
     ct = _disp_grid_leaf(parts["set_grid_contents"]["contents"], "contents")
     return ("g = input_grid\n"
-            f"g = set_grid_size(g, {sz})\n"
-            f"g = set_grid_color(g, {co})\n"
-            f"g = set_grid_contents(g, {ct})\n"
+            f"g.size = set_grid_size({sz})\n"
+            f"g.color = set_grid_color({co})\n"
+            f"g.contents = set_grid_contents({ct})\n"
             "output_grid = g")
 
 
