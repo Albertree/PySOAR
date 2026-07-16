@@ -51,10 +51,8 @@ def _disp_leaf(leaf):
 
 
 def _disp_grid_leaf(leaf, prop):
-    """grid-property leaf → 실행형 소스. keep→`prop(input_grid)`(ARCKG 투영), const=실값,
+    """grid-property leaf → 실행형 소스. const=실값,
     expr=식 그대로(forward). prop ∈ {size,color,contents}."""
-    if "keep" in leaf:
-        return f"{prop}(input_grid)"                 # size/color/contents(input_grid)
     if "const" in leaf:
         return json.dumps(leaf["const"])             # size dict / color list / contents 2D 배열 실값
     if "expr" in leaf:
@@ -196,9 +194,7 @@ def _is_grid_literal(v):
 
 
 def _grid_leaf_repr(leaf, prop=""):
-    """grid-arg leaf → 시각화 박스 라벨(정직화). keep→`prop(input_grid)`, contents const→실 2D 배열."""
-    if "keep" in leaf:
-        return f"{prop or leaf['keep']}(input_grid)"  # size/color/contents(input_grid)
+    """grid-arg leaf → 시각화 박스 라벨(정직화). contents const→실 2D 배열."""
     if "delta" in leaf:
         d = leaf["delta"]
         return f"-{d['remove']}+{d['add']}"
