@@ -482,7 +482,7 @@ def task_section(tid, task, precomputed=None):
     solrow = _solution_row(ast_ex_pairs, solution)
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
-            f'<div class="thumbs">{thumbs}</div>{solrow}{EV._attempts_block(attempts, tp)}</section>')
+            f'<div class="thumbs">{thumbs}</div>{solrow}</section>')
 
 
 CSS = """
