@@ -273,12 +273,14 @@ def _grid_leaf_repr(leaf, prop=""):
     return str(leaf)
 
 
-def _contents_cell(leaf):
-    """set_grid_contents leaf → 시각화 셀. const 2D 배열이면 줄바꿈 matrix(<pre>), 아니면 콤팩트 라벨."""
+def _contents_cell(leaf, cls=""):
+    """set_grid_contents leaf → 시각화 셀. const 2D 배열이면 줄바꿈 matrix(<pre>), 아니면 콤팩트 라벨.
+    cls(선택) = Step B overlay COMM/DIFF outline class(§_compare_asts)."""
     if "const" in leaf and _is_grid_literal(leaf["const"]):
         mat = "\n".join(" ".join(str(x) for x in row) for row in leaf["const"])
-        return f'<pre class="cmat">{html.escape(mat)}</pre>'
-    return EV.colr(_grid_leaf_repr(leaf, "contents"))
+        cls_attr = f" {cls}" if cls else ""
+        return f'<pre class="cmat{cls_attr}">{html.escape(mat)}</pre>'
+    return EV.colr(_grid_leaf_repr(leaf, "contents"), cls)
 
 
 def _swatches(colors):
@@ -314,53 +316,65 @@ def _endpoint_rows(ex):
     return g0, g1
 
 
-def _coloring_flow_rows(body):
+def _coloring_flow_rows(body, outline=None):
     """③ 중첩 coloring 시각화 — ①(_coloring_seq_lines)과 정확히 같은 _coloring_steps(공통 재료)를
-    소비해, g0 = g.contents / gN-1 → coloring(...) → gN / result = gN 을 ①과 같은 순서·같은 개수의
-    노드로 그린다(§①②③ 공통소스 원칙 — 모듈 docstring 참고). 텍스트 캡션 없이 박스만."""
+    소비해, 각 coloring 스텝을 op box + target label + color value(+swatch) 노드로 그린다
+    (§①②③ 공통소스 원칙 — 모듈 docstring 참고). g0/result 캡션과 g_from/g_to 변수 라벨은 ①(텍스트)
+    전용 배관(순차 대입 threading)이라 ③(시각화)에는 굳이 필요 없어 표시하지 않는다 — ①③ 이 같은
+    _coloring_steps 재료를 소비하는 사실 자체는 그대로 유지, 포맷팅만 이 계층에서 덜어낸다.
+    outline(선택) = Step B anti-unification overlay 용 포지션별 {'idx','col'} outline class
+    (§Step B COMM/DIFF — _compare_asts 가 만든 결과를 그대로 소비, 여기서 새로 판정하지 않는다)."""
     steps = _coloring_steps(body)
-    rows = ['<div class="row"><span class="gnote">g0 = g.contents</span></div><div class="v"></div>']
-    for st in steps:
+    rows = []
+    for i, st in enumerate(steps):
         col_leaf = st["color"]
         col = col_leaf.get("const")
         sw = _swatches([col]) if isinstance(col, int) else ""
+        o = outline[i] if (outline and i < len(outline)) else {}
         rows.append(
-            f'<div class="row"><span class="gvar">{html.escape(st["g_from"])}</span>'
-            f'{EV.opb("coloring")}<span class="h"></span>{EV.dest_box(st["label"])}<span class="h"></span>'
-            f'{EV.colr(_disp_leaf(col_leaf))}{sw}<span class="h"></span>'
-            f'<span class="gvar gvar-out">{html.escape(st["g_to"])}</span></div><div class="v"></div>')
-    last = steps[-1]["g_to"] if steps else "g0"
-    rows.append(f'<div class="row"><span class="gnote">result = {html.escape(last)}</span></div>')
+            f'<div class="row">{EV.opb("coloring")}<span class="h"></span>'
+            f'{EV.dest_box(st["label"], o.get("idx", ""))}<span class="h"></span>'
+            f'{EV.colr(_disp_leaf(col_leaf), o.get("col", ""))}{sw}</div><div class="v"></div>')
     return rows
 
 
-def _grid_step_rows(ast):
+def _grid_step_rows(ast, outline=None):
     """set_grid_size→set_grid_color→set_grid_contents 3-property box-flow. 중첩 coloring(있으면)은
     .nestedflow 로 더 오른쪽에 들여쓰되(§5), 메인 세로선(.gflow::before)은 끊기지 않고 한 줄로
-    이어진다 — 서로 다른 CSS 요소가 아니라 같은 .gflow 컨테이너 높이 전체를 덮는 절대배치 선."""
+    이어진다 — 서로 다른 CSS 요소가 아니라 같은 .gflow 컨테이너 높이 전체를 덮는 절대배치 선.
+    outline(선택) = {'size','color','contents'} — Step B overlay 용 COMM/DIFF class(§_compare_asts).
+    """
     parts = {s["call"]: s["args"] for s in ast["body"]}
     sz, co, ct = (parts["set_grid_size"]["size"], parts["set_grid_color"]["color"],
                   parts["set_grid_contents"]["contents"])
     color_sw = (_swatches(co["const"]) if isinstance(co.get("const"), list)
                 and not _is_grid_literal(co["const"]) else "")
+    size_cls = outline["size"] if outline else ""
+    color_cls = outline["color"] if outline else ""
     top = [
-        f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"))}</div>',
-        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co, "color"))}{color_sw}</div>',
+        f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"), size_cls)}</div>',
+        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co, "color"), color_cls)}{color_sw}</div>',
     ]
     if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(①과 같은 재료)
         top.append(f'<div class="row">{EV.opb("set_grid_contents")}</div>')
-        inner_rows = _coloring_flow_rows(ct["program"]["body"])
+        step_outline = outline["contents"]["steps"] if outline else None
+        inner_rows = _coloring_flow_rows(ct["program"]["body"], step_outline)
         body_html = "".join(top) + f'<div class="nestedflow">{"".join(inner_rows)}</div>'
     else:
+        contents_cls = outline["contents"]["cls"] if outline else ""
         top.append(f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>'
-                    f'{_contents_cell(ct)}</div>')
+                    f'{_contents_cell(ct, contents_cls)}</div>')
         body_html = "".join(top)
     return [f'<div class="gflow">{body_html}</div><div class="v"></div>']
 
 
-def _pixel_step_rows(ast):
+def _pixel_step_rows(ast, outline=None):
+    """outline(선택) = {'steps':[{'idx','col'},...]} — top-level pixel/object body 가 실제로 쓰일
+    경우를 위한 Step B COMM/DIFF 대응(현 a-h 데이터는 전부 grid body — §확인됨 — 이지만 스키마상
+    가능한 형태이므로 _grid_step_rows 와 대칭으로 지원)."""
+    steps_outline = outline.get("steps") if outline else None
     rows = []
-    for s in ast["body"]:
+    for i, s in enumerate(ast["body"]):
         tgt = s["args"]["target"]
         ref = tgt.get("ref")
         col_leaf = s["args"]["color"]
@@ -373,20 +387,74 @@ def _pixel_step_rows(ast):
             label = f"cells {_disp_leaf(tgt['cells'])}"
         else:
             label = "?"
+        o = steps_outline[i] if (steps_outline and i < len(steps_outline)) else {}
         rows.append(f'<div class="row">{EV.opb("coloring")}<span class="h"></span>'
-                    f'{EV.dest_box(label)}<span class="h"></span>{EV.colr(_disp_leaf(col_leaf))}{sw}</div>'
+                    f'{EV.dest_box(label, o.get("idx", ""))}<span class="h"></span>'
+                    f'{EV.colr(_disp_leaf(col_leaf), o.get("col", ""))}{sw}</div>'
                     f'<div class="v"></div>')
     return rows
 
 
-def _viz(ast, ex, ghost=False):
+def _viz(ast, ex, ghost=False, outline=None):
     """두 계열 공통 box-flow: input_grid 썸네일 → 스텝들 → output_grid 썸네일.
     ghost=True 면 overlay(§8 TASK.solution 가로 레이아웃 중간 열)용 반투명 사본
-    (easy_antiunify_viz.flow(ghost=True) 와 같은 클래스 이름 재사용 — .ovl/.ghost CSS 는 EV.CSS 것)."""
+    (easy_antiunify_viz.flow(ghost=True) 와 같은 클래스 이름 재사용 — .ovl/.ghost CSS 는 EV.CSS 것).
+    outline(선택) = _compare_asts() 가 낸 Step B COMM/DIFF class dict — 끝점(input_grid/output_grid)
+    행에는 적용하지 않는다(§Step B — 끝점은 비교/표기 대상 밖)."""
     g0, g1 = _endpoint_rows(ex)
-    steps = _grid_step_rows(ast) if PA._is_grid_body(ast.get("body") or []) else _pixel_step_rows(ast)
+    steps = (_grid_step_rows(ast, outline) if PA._is_grid_body(ast.get("body") or [])
+             else _pixel_step_rows(ast, outline))
     cls = "flow ghost" if ghost else "flow"
     return f'<div class="{cls}">{g0}{"".join(steps)}{g1}</div>'
+
+
+# ── Step B COMM/DIFF: pair0 vs pair1 program 을 step-by-step 비교(끝점 grid 는 비교 대상 밖) ──────
+def _eq_json(x, y):
+    return json.dumps(x, sort_keys=True) == json.dumps(y, sort_keys=True)
+
+
+def _compare_step_lists(body0, body1):
+    """coloring step 리스트(program contents 하강, 또는 top-level pixel/object body) 를 포지션별로
+    target/color 비교 → [{'idx':'comm'|'diff','col':'comm'|'diff'}, ...]. 개수가 다르면 넘치는
+    포지션은 diff(다른 pair 에 대응 스텝 자체가 없음 = 어긋남)."""
+    n = max(len(body0), len(body1))
+    out = []
+    for i in range(n):
+        if i >= len(body0) or i >= len(body1):
+            out.append({"idx": "diff", "col": "diff"})
+            continue
+        t0, t1 = body0[i]["args"]["target"], body1[i]["args"]["target"]
+        c0, c1 = body0[i]["args"]["color"], body1[i]["args"]["color"]
+        out.append({"idx": "comm" if _eq_json(t0, t1) else "diff",
+                     "col": "comm" if _eq_json(c0, c1) else "diff"})
+    return out
+
+
+def _compare_asts(a0, a1):
+    """pair0/pair1 의 실제 PAIR.program(AST) 을 step-by-step 비교(json.dumps(sort_keys=True) 값
+    비교 — antiunify_ast() 를 재구현하는 게 아니라 Step B overlay 전용 순수 표시 비교, §근거=compare
+    COMM/DIFF). grid body(a-h 전부 해당 — 확인됨): set_grid_size leaf, set_grid_color leaf,
+    set_grid_contents content(program 이면 coloring 스텝별 target+color, const 면 값 그대로) 비교.
+    pixel/object top-level body(현재 데이터엔 없으나 스키마상 가능)는 {'steps':[...]} 만 반환.
+    반환 shape 은 항상 a0(렌더 대상=pair0 solid layer)의 실제 구조를 따른다."""
+    b0, b1 = a0.get("body") or [], a1.get("body") or []
+    if not (PA._is_grid_body(b0) and PA._is_grid_body(b1)):
+        return {"steps": _compare_step_lists(b0, b1)}
+    p0 = {s["call"]: s["args"] for s in b0}
+    p1 = {s["call"]: s["args"] for s in b1}
+    out = {
+        "size": "comm" if _eq_json(p0["set_grid_size"]["size"], p1["set_grid_size"]["size"]) else "diff",
+        "color": "comm" if _eq_json(p0["set_grid_color"]["color"], p1["set_grid_color"]["color"]) else "diff",
+    }
+    ct0 = p0["set_grid_contents"]["contents"]
+    ct1 = p1["set_grid_contents"]["contents"]
+    if "program" in ct0:
+        body1 = ct1["program"]["body"] if "program" in ct1 else []
+        out["contents"] = {"kind": "steps", "steps": _compare_step_lists(ct0["program"]["body"], body1)}
+    else:
+        out["contents"] = {"kind": "const",
+                            "cls": "comm" if ("program" not in ct1 and _eq_json(ct0, ct1)) else "diff"}
+    return out
 
 
 # program_ast.render_header 는 pixel/object body(step.args.target.ref)만 가정 — grid(3-property)
@@ -448,9 +516,17 @@ def _solution_row(ast_ex_pairs, solution):
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
-        overlay = f'<div class="ovl">{_viz(a0, ex0)}{_viz(a1, ex1, ghost=True)}</div>'
+        # pair0(solid layer) vs pair1(ghost) 을 step-by-step 비교(끝점 grid 는 비교 밖 — _viz 의
+        # outline 은 gflow/nestedflow 스텝에만 적용되고 _endpoint_rows 는 outline 인자를 받지 않는다)
+        # → COMM(녹색 .comm)/DIFF(빨강 .diff) outline 을 solid layer 에 입힌다(EV.CSS 재사용, 신규
+        # 색 정의 없음). solid+ghost 겹침 자체는 기존 .ovl/.ghost 그대로.
+        outline = _compare_asts(a0, a1)
+        overlay = (f'<div class="ovl">{_viz(a0, ex0, outline=outline)}{_viz(a1, ex1, ghost=True)}</div>'
+                   f'<div class="legend"><span class="lg comm">COMM(일치) = 녹색</span>'
+                   f'<span class="lg diff">DIFF(어긋남) = 빨강</span></div>')
+        box = f'<div class="innerbox"><div class="lab">PROGRAM COMPARISON</div>{overlay}</div>'
         steps.append(f'<div class="stepcard stepB"><div class="stepttl">Step B · Anti-unification</div>'
-                     f'<div class="stepBcontent">{overlay}</div></div>')
+                     f'<div class="stepBcontent">{box}</div></div>')
 
     if solution is not None:
         sol_ex = ast_ex_pairs[0][1]
@@ -470,25 +546,34 @@ def _thumb_unit(label, inner):
     return f'<div class="tunit"><span class="tlab">{html.escape(label)}</span>{inner}</div>'
 
 
+def _pair_unit(title, row_html):
+    """상단 task 시각화 한 PAIR 유닛: 대문자 헤더 + 그 아래 grid 행(input→output 등). example/test
+    를 나눈 두 그룹(.tgroup) 대신, 모든 pair(example + test)를 같은 형태의 카드로 한 가로 행에
+    나란히 놓기 위한 공통 단위(§4 top-viz restructure)."""
+    return f'<div class="punit"><div class="phead">{html.escape(title)}</div><div class="prow">{row_html}</div></div>'
+
+
 def _top_thumbs(task):
-    """상단 task 시각화: example(train) 그룹과 test 그룹을 라벨/구분선으로 나누고, 각 pair 를
-    input →(화살표) output 으로 보여준다. test pair 는 output 이 아직 미지(정답 칸 = '?' 빈 박스)
-    이므로 input → [?] 로 그리고, 실제 정답(tp['output'])이 있으면 그 옆에 '정답' 라벨로 덧붙인다
-    (grid 는 §11 크리스프 SVG _thumb 그대로 — 별도 렌더러 만들지 않음)."""
-    ex_rows = "".join(
-        f'<div class="trow">{_thumb_unit(f"pair {i + 1} · input", _thumb(ex["input"]))}'
-        f'<span class="tarrow">→</span>{_thumb_unit("output", _thumb(ex["output"]))}</div>'
-        for i, ex in enumerate(task["train"]))
+    """상단 task 시각화: example(train) pair 들 + test pair 를 한 가로 행(PAIR 유닛들)으로 나란히
+    보여준다. 각 유닛 = 대문자 헤더("PAIR 0","PAIR 1",…, test 는 "PAIR A") + input →(화살표)→
+    output 행. test pair 는 output 이 아직 미지 → '?' 빈 박스(캡션 "output", "output?" 아님)로
+    그리고, 실제 정답(tp['output'])이 있으면 그 뒤에 "Ground Truth" 라벨(정답 아님)로 이어 붙인다
+    (grid 는 §11 크리스프 SVG _thumb 그대로 — 별도 렌더러 만들지 않음). 가로로 스크롤되는 Step
+    카드들과는 별개로 이 영역은 위쪽에 고정 — 한눈에 읽히게 한다."""
+    units = [
+        _pair_unit(f"PAIR {i}",
+                   f'{_thumb_unit("input", _thumb(ex["input"]))}'
+                   f'<span class="tarrow">→</span>{_thumb_unit("output", _thumb(ex["output"]))}')
+        for i, ex in enumerate(task["train"])
+    ]
     tp = task["test"][0]
     qbox = '<div class="tqbox">?</div>'
-    test_row = (f'<div class="trow">{_thumb_unit("input", _thumb(tp["input"]))}'
-                f'<span class="tarrow">→</span>'
-                f'{_thumb_unit("output?", qbox)}')
+    test_row = (f'{_thumb_unit("input", _thumb(tp["input"]))}'
+                f'<span class="tarrow">→</span>{_thumb_unit("output", qbox)}')
     if tp.get("output"):
-        test_row += f'<span class="tsep"></span>{_thumb_unit("정답", _thumb(tp["output"]))}'
-    test_row += '</div>'
-    return (f'<div class="tgroup"><div class="tgrouplab">example</div>{ex_rows}</div>'
-            f'<div class="tgroup tgroup-test"><div class="tgrouplab">test</div>{test_row}</div>')
+        test_row += f'<span class="tsep"></span>{_thumb_unit("Ground Truth", _thumb(tp["output"]))}'
+    units.append(_pair_unit("PAIR A", test_row))
+    return f'<div class="tunits">{"".join(units)}</div>'
 
 
 def task_section(tid, task, precomputed=None):
@@ -577,13 +662,17 @@ CSS = """
 .stepCcontent{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;align-items:center}
 .steparrow{align-self:center;display:flex;align-items:center;justify-content:center;
  font-size:22px;color:#5a6577;flex:0 0 auto;padding:0 10px}
-/* 상단 task 시각화(thumbs): example/test 그룹 분리 + pair 마다 input→(화살표)→output.
-   test 는 output 미지 → [?] 빈 박스, 실제 정답(tp.output)이 있으면 그 옆에 '정답' 라벨로 표시. */
-.thumbs{display:flex;gap:22px;margin:8px 0 14px;flex-wrap:wrap;align-items:flex-start}
-.tgroup{display:flex;flex-direction:column;gap:8px}
-.tgrouplab{font-size:10px;color:#8b93a3;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
-.tgroup-test{padding-left:16px;border-left:1px solid #2a3038}
-.trow{display:flex;align-items:flex-end;gap:8px}
+/* 상단 task 시각화(thumbs, §4 재구성): example pair + test pair 를 모두 같은 형태의 PAIR 유닛
+   (.punit = 대문자 헤더 .phead + 그 아래 grid 행 .prow) 카드로 한 가로 행(.tunits)에 나란히 놓는다
+   (더 이상 example/test 두 그룹으로 분리하지 않음 — 한 레이어). test 유닛은 output 미지 → [?]
+   빈 박스(캡션 "output"), 실제 정답(tp.output)이 있으면 그 옆에 "Ground Truth" 라벨로 표시.
+   가로 스크롤되는 Step 카드(.stepsrow)와는 별개 — 이 영역은 그 위에 고정, 한눈에 읽힌다. */
+.thumbs{margin:8px 0 14px}
+.tunits{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.punit{display:flex;flex-direction:column;gap:8px;background:#12151b;border:1px solid #232a35;
+ border-radius:9px;padding:9px 12px}
+.phead{font-size:10.5px;color:#8b93a3;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.prow{display:flex;align-items:flex-end;gap:8px}
 .tunit{display:flex;flex-direction:column;align-items:center;gap:3px}
 .tlab{font-size:9px;color:#7a8698}
 .tarrow{color:#5a6577;font-size:16px;margin-bottom:14px}
