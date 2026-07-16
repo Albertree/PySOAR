@@ -214,6 +214,14 @@ def _grid_leaf_repr(leaf, prop=""):
     return str(leaf)
 
 
+def _contents_cell(leaf):
+    """set_grid_contents leaf → 시각화 셀. const 2D 배열이면 줄바꿈 matrix(<pre>), 아니면 콤팩트 라벨."""
+    if "const" in leaf and _is_grid_literal(leaf["const"]):
+        mat = "\n".join(" ".join(str(x) for x in row) for row in leaf["const"])
+        return f'<pre class="cmat">{html.escape(mat)}</pre>'
+    return EV.colr(_grid_leaf_repr(leaf, "contents"))
+
+
 def _swatches(colors):
     return "".join(f'<i class="swatch" style="background:{EV.PAL[c % 10]}"></i>' for c in colors)
 
@@ -235,7 +243,7 @@ def _grid_step_rows(ast):
     return [
         f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"))}</div><div class="v"></div>',
         f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co, "color"))}{color_sw}</div><div class="v"></div>',
-        f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>{EV.colr(_grid_leaf_repr(ct, "contents"))}</div><div class="v"></div>',
+        f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>{_contents_cell(ct)}</div><div class="v"></div>',
     ]
 
 
@@ -293,7 +301,11 @@ def _pair_block(label, ast, ex):
             f'<pre class="src">{html.escape(display_source(ast))}</pre>'
             f'<details class="rawsrc"><summary>canonical to_source (파싱계약·참조용)</summary>'
             f'<pre class="src">{html.escape(PA.to_source(ast))}</pre></details></div>'
-            f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast)}</div>'
+            f'<div class="view"><div class="vt">② AST 트리</div>'
+            + ('<div class="astnote">grid 스텝은 첫 인자 grid(<code>g</code>)를 파이프라인으로 암묵 전달 — '
+               'AST 엔 property arg 만. leaf <code>{"expr":"size(input_grid)"}</code>=ARCKG 식, '
+               '<code>{"const":…}</code>=고정값.</div>' if PA._is_grid_body(ast.get("body") or []) else '')
+            + f'{ast_tree(ast)}</div>'
             f'<div class="view"><div class="vt">③ 시각화</div>{_viz(ast, ex)}</div>'
             f'</div></div>')
 
@@ -346,6 +358,10 @@ CSS = """
 .leaf{color:#e6c99a}
 .astmat{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 8px;margin:2px 0 2px 14px;
  font:11px/1.4 ui-monospace,monospace;color:#e6c99a}
+.cmat{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 9px;margin:0;
+ font:11px/1.35 ui-monospace,monospace;color:#e6c99a;white-space:pre}
+.astnote{font-size:10px;color:#8b93a3;background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 8px;margin-bottom:8px;line-height:1.5}
+.astnote code{color:#7fb2e0}
 .swatch{display:inline-block;width:10px;height:10px;margin-left:2px;border-radius:2px;vertical-align:middle;
  border:1px solid rgba(255,255,255,.25)}
 .pair{padding-top:0;margin-top:0}
