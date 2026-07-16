@@ -5,13 +5,14 @@
 솔버(_Tracer+setup_focus_agent)를 실제로 돌려 WM 에 남은 값만 그대로 읽는다(재계산·재해석 없음).
 각 태스크의 example(train) pair 마다 PAIR.program 을:
 
-  ① text    — display_source(ast)(뷰어 로컬 통일 실행형 body) + render_header(ast, 그 pair 의 실제
-              input_grid); canonical program_ast.to_source(ast)(파싱 계약 원본)는 접힌 <details> 로 참조용 병기
+  ① text    — display_source(ast)(뷰어 로컬 통일 실행형 body) + _render_header_safe(ast, 그 pair 의
+              실제 input_grid; body 가 실제 쓰는 호출 형태와 시그니처를 맞춘 헤더)
   ② AST 트리 — 원본 typed-arg dict(JSON)을 그대로 nested 렌더 (leaf 값 재해석 없음)
-  ③ 시각화  — grid(a/b) = 3-property setter box-flow(G0→set_grid_size∘set_grid_color∘set_grid_contents→G1),
-              pixel/object(c–h) = coloring box-flow(easy_antiunify_viz 의 원자 box 헬퍼 재사용)
+  ③ 시각화  — grid(3-property) = input_grid→set_grid_size∘set_grid_color∘set_grid_contents→output_grid
+              box-flow(easy_antiunify_viz 의 원자 box 헬퍼 재사용), pixel/object(c–h) = coloring box-flow
 
-로 보여주고, 마지막에 TASK.solution(anti-unify 골격 — COMM=상수 유지·DIFF=slot 변수)을 같은 3-뷰로 보여준다.
+로 보여주고, 마지막엔 TASK.solution(anti-unify 골격 — COMM=상수 유지·DIFF=slot 변수)을 pair0/pair1
+program(세로 stack) → 그 둘의 ③ overlay(반투명 겹침) → TASK.solution 순의 가로 레이아웃으로 보여준다.
 program 이 없는 태스크(i: 격자 크기 변화 등 미해결)는 플레이스홀더만 표시.
 
 Python 빌드 쪽은 표시만 한다 — eval/exec 없음(program_ast.to_source/display_source 텍스트 그대로,
@@ -19,6 +20,18 @@ RUNNER_DATA 는 build 시점에 미리 계산한 값을 JSON 으로 굽는다). 
 코드 실행기가 있다 — body 를 JS atom 미러(ATOM, new Function 기반 안전 평가)로 브라우저에서 직접
 실행하고, 그 결과를 build 시점에 구운 program_ast.execute 결과와 대조해 parity ✓/✗ 배지로 보여준다
 (JS↔Python 드리프트 감시 — §7 honesty 가드).
+
+── ①②③ 공통소스 원칙(2026-07-16 정리 — 이 파일을 고칠 때 반드시 지킬 것) ──────────────────
+① text(display_source) · ② AST 트리(ast_tree) · ③ 시각화(_viz)는 서로 다른 산출물이 아니라
+"같은 AST"의 세 표현이다. 유일한 물질은 AST 그 자체 — ①은 그 AST 의 canonical 코드 텍스트
+(진짜 실행형 body, 줄 단위 statement), ②는 그 AST 를 재해석 없이 그대로 펼친 원본 트리,
+③은 ①과 "같은 statement 시퀀스"를 박스로 그린 것이다. 예: set_grid_contents 의 coloring 합성을
+①이 g0 = g.contents; g1 = coloring(g0,…); …; result = gN 순차 대입으로 풀어 쓰면, ③도 같은 개수·
+같은 순서·같은 g_i 이름의 노드로 그린다 — 이 매핑을 손으로 두 번(①에 한 번, ③에 한 번) 구현하지
+않고, _coloring_steps() 하나가 그 공통 재료(어느 target/accessor/color 인지)를 뽑아내면 ①(텍스트
+포매팅)과 ③(박스 포매팅)은 그 결과를 포맷만 다르게 소비한다 — 그래야 ①③ 이 구조적으로 드리프트할
+수 없다. 새 표현 계열을 추가하거나 표시 방식을 고칠 때도 이 원칙(추출은 한 곳, 포맷팅만 갈래)을
+유지할 것 — ①②를 보고 ③을 손으로 새로 그리거나, 그 반대로 하지 말 것.
 
     python -m debugger.reports.program_viewer   # -> debugger/traces/program_report_all.html
 """
@@ -66,31 +79,41 @@ def _disp_grid_leaf(leaf, prop):
     return json.dumps(leaf)
 
 
-def _coloring_seq_lines(body):
-    """set_grid_contents 의 contents leaf 가 `program`(하강 coloring 합성, c–h)일 때 → 순차 대입
-    라인들. g0 = g.contents(하강 전 원본 contents) 로 시작해, 각 coloring 스텝을 gN = coloring(gN-1,
-    accessor, color) 로 threading(∘ 합성 폐기 — 사고 단위를 한 줄씩 순차 statement 로). accessor
-    텍스트는 _display_pixel 과 동일(pixels_of/objects_of(input_grid)[idx].coord). 빈 body(0 스텝)도
-    러너-안전한 identity(g0→result)로 남긴다."""
-    lines = ["g0 = g.contents"]
+def _coloring_steps(body):
+    """set_grid_contents 의 contents leaf 가 `program`(하강 coloring 합성, c–h)일 때의 순차 스텝
+    재료 — ①(_coloring_seq_lines, 텍스트) 과 ③(_coloring_flow_rows, 시각화)가 이 SAME 리스트를
+    소비한다(모듈 docstring §①②③ 공통소스 원칙). 각 스텝 = {g_from, g_to, ref, label, color}.
+    label 은 두 표현 모두에서 문자 그대로 재사용되는 target 텍스트(accessor 식 또는 cellset)."""
+    steps = []
     prev = "g0"
     for j, s in enumerate(body, start=1):
         tgt = s["args"]["target"]
-        col = _disp_leaf(s["args"]["color"])
         ref = tgt.get("ref")
         cur = f"g{j}"
         if ref in _ACCESSOR:
             idx = _disp_leaf(tgt["index"])
-            acc = f"{_ACCESSOR[ref]}(input_grid)[{idx}].coord"
-            lines.append(f"{cur} = coloring({prev}, {acc}, {col})")
+            label = f"{_ACCESSOR[ref]}(input_grid)[{idx}].coord"
         elif ref == "cellset":                        # a-h 밖(정직 표기 — 러너 미지원, coloring 은 단일좌표만)
-            cells = _disp_leaf(tgt["cells"])
-            lines.append(f"{cur} = coloring({prev}, cellset={cells}, color={col})  "
-                         f"# 해석 불가(다중좌표 — 러너 미지원)")
+            label = f"cellset={_disp_leaf(tgt['cells'])}"
         else:
-            lines.append(f"{cur} = coloring({prev}, ? /* 해석 불가 target: {json.dumps(tgt)} */, {col})")
+            label = f"? /* 해석 불가 target: {json.dumps(tgt)} */"
+        steps.append({"g_from": prev, "g_to": cur, "ref": ref, "label": label,
+                      "color": s["args"]["color"]})
         prev = cur
-    lines.append(f"result = {prev}")
+    return steps
+
+
+def _coloring_seq_lines(body):
+    """_coloring_steps(공통 재료) → 순차 대입 텍스트 라인들. g0 = g.contents(하강 전 원본 contents)
+    로 시작해, 각 coloring 스텝을 gN = coloring(gN-1, label, color) 로 threading(∘ 합성 폐기 —
+    사고 단위를 한 줄씩 순차 statement 로). 빈 body(0 스텝)도 러너-안전한 identity(g0→result)로 남긴다."""
+    lines = ["g0 = g.contents"]
+    steps = _coloring_steps(body)
+    for st in steps:
+        col = _disp_leaf(st["color"])
+        suffix = ("  # 해석 불가(다중좌표 — 러너 미지원)" if st["ref"] == "cellset" else "")
+        lines.append(f"{st['g_to']} = coloring({st['g_from']}, {st['label']}, {col}){suffix}")
+    lines.append(f"result = {steps[-1]['g_to'] if steps else 'g0'}")
     return lines
 
 
@@ -262,33 +285,77 @@ def _swatches(colors):
     return "".join(f'<i class="swatch" style="background:{EV.PAL[c % 10]}"></i>' for c in colors)
 
 
+# ── §11 grid 썸네일 크리스프니스: 이 파일 로컬 렌더러 (EV.grid 는 다른 리포트와 공유 — 수정 금지) ──
+# 근본원인: EV.grid 는 CSS grid(각 셀 = <i>, gap:1px+border)로 그린다 — 브라우저가 비정수
+# device-pixel-ratio/줌(예: 133%)에서 grid-template-columns:repeat(W,6px) 의 각 컬럼 트랙을
+# *독립적으로* 정수 물리픽셀에 반올림한다. 칸 수(W)가 많을수록(=큰 grid 일수록) 컬럼별 반올림
+# 오차가 누적돼 칸 폭이 들쭉날쭉해지고(어떤 칸은 넓고 어떤 칸은 좁음) "stretched/sparse" 하게
+# 보인다(재현: headless Chrome --force-device-scale-factor=1.33 로 실측). 고정 fix: 여러 개의
+# 독립 레이아웃 박스 대신 SVG <rect> 를 한 장의 벡터로(shape-rendering=crispEdges) 그려 — 전체가
+# 하나의 좌표계로 균일 스케일되므로 반올림이 누적되지 않는다(칸 수·줌 배율과 무관하게 크리스프).
+def _thumb(gr, cell=9, gap=1):
+    H, W = len(gr), len(gr[0])
+    fill = cell - gap
+    w, h = W * cell, H * cell
+    rects = "".join(
+        f'<rect x="{c * cell}" y="{r * cell}" width="{fill}" height="{fill}" fill="{EV.PAL[v % 10]}"/>'
+        for r, row in enumerate(gr) for c, v in enumerate(row))
+    return (f'<svg class="vthumb" width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
+            f'shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">{rects}</svg>')
+
+
 def _endpoint_rows(ex):
-    """공통 끝점: (G0 행, G1 행) — input/output 썸네일 인라인."""
-    g0 = (f'<div class="row"><span class="bx grid">G0 = input_grid</span>{EV.grid(ex["input"])}'
+    """공통 끝점: (input_grid 행, output_grid 행) — input/output 썸네일 인라인(G0/G1 개념 없음 —
+    ①③ 이 실제로 쓰는 이름 그대로 input_grid/output_grid). 썸네일은 EV.grid(다른 리포트와 공유,
+    수정 금지) 대신 이 파일 로컬 _thumb(§11 grid crispness)."""
+    g0 = (f'<div class="row"><span class="bx grid">input_grid</span>{_thumb(ex["input"])}'
           f'</div><div class="v"></div>')
-    g1 = f'<div class="row"><span class="bx grid">G1 = output_grid</span>{EV.grid(ex["output"])}</div>'
+    g1 = f'<div class="row"><span class="bx grid">output_grid</span>{_thumb(ex["output"])}</div>'
     return g0, g1
 
 
+def _coloring_flow_rows(body):
+    """③ 중첩 coloring 시각화 — ①(_coloring_seq_lines)과 정확히 같은 _coloring_steps(공통 재료)를
+    소비해, g0 = g.contents / gN-1 → coloring(...) → gN / result = gN 을 ①과 같은 순서·같은 개수의
+    노드로 그린다(§①②③ 공통소스 원칙 — 모듈 docstring 참고). 텍스트 캡션 없이 박스만."""
+    steps = _coloring_steps(body)
+    rows = ['<div class="row"><span class="gnote">g0 = g.contents</span></div><div class="v"></div>']
+    for st in steps:
+        col_leaf = st["color"]
+        col = col_leaf.get("const")
+        sw = _swatches([col]) if isinstance(col, int) else ""
+        rows.append(
+            f'<div class="row"><span class="gvar">{html.escape(st["g_from"])}</span>'
+            f'{EV.opb("coloring")}<span class="h"></span>{EV.dest_box(st["label"])}<span class="h"></span>'
+            f'{EV.colr(_disp_leaf(col_leaf))}{sw}<span class="h"></span>'
+            f'<span class="gvar gvar-out">{html.escape(st["g_to"])}</span></div><div class="v"></div>')
+    last = steps[-1]["g_to"] if steps else "g0"
+    rows.append(f'<div class="row"><span class="gnote">result = {html.escape(last)}</span></div>')
+    return rows
+
+
 def _grid_step_rows(ast):
+    """set_grid_size→set_grid_color→set_grid_contents 3-property box-flow. 중첩 coloring(있으면)은
+    .nestedflow 로 더 오른쪽에 들여쓰되(§5), 메인 세로선(.gflow::before)은 끊기지 않고 한 줄로
+    이어진다 — 서로 다른 CSS 요소가 아니라 같은 .gflow 컨테이너 높이 전체를 덮는 절대배치 선."""
     parts = {s["call"]: s["args"] for s in ast["body"]}
     sz, co, ct = (parts["set_grid_size"]["size"], parts["set_grid_color"]["color"],
                   parts["set_grid_contents"]["contents"])
     color_sw = (_swatches(co["const"]) if isinstance(co.get("const"), list)
                 and not _is_grid_literal(co["const"]) else "")
-    rows = [
-        f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"))}</div><div class="v"></div>',
-        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co, "color"))}{color_sw}</div><div class="v"></div>',
+    top = [
+        f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"))}</div>',
+        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{EV.colr(_grid_leaf_repr(co, "color"))}{color_sw}</div>',
     ]
-    if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(pixel viz 재사용)
-        inner_rows = _pixel_step_rows({"body": ct["program"]["body"]})
-        rows.append(f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>'
-                    f'<span class="ntag">coloring 합성(하강 산출) ↓</span></div>'
-                    f'<div class="nestedflow">{"".join(inner_rows)}</div><div class="v"></div>')
+    if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(①과 같은 재료)
+        top.append(f'<div class="row">{EV.opb("set_grid_contents")}</div>')
+        inner_rows = _coloring_flow_rows(ct["program"]["body"])
+        body_html = "".join(top) + f'<div class="nestedflow">{"".join(inner_rows)}</div>'
     else:
-        rows.append(f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>'
-                    f'{_contents_cell(ct)}</div><div class="v"></div>')
-    return rows
+        top.append(f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>'
+                    f'{_contents_cell(ct)}</div>')
+        body_html = "".join(top)
+    return [f'<div class="gflow">{body_html}</div><div class="v"></div>']
 
 
 def _pixel_step_rows(ast):
@@ -312,29 +379,47 @@ def _pixel_step_rows(ast):
     return rows
 
 
-def _viz(ast, ex):
-    """두 계열 공통 box-flow: G0 썸네일 → 스텝들 → G1 썸네일."""
+def _viz(ast, ex, ghost=False):
+    """두 계열 공통 box-flow: input_grid 썸네일 → 스텝들 → output_grid 썸네일.
+    ghost=True 면 overlay(§8 TASK.solution 가로 레이아웃 중간 열)용 반투명 사본
+    (easy_antiunify_viz.flow(ghost=True) 와 같은 클래스 이름 재사용 — .ovl/.ghost CSS 는 EV.CSS 것)."""
     g0, g1 = _endpoint_rows(ex)
     steps = _grid_step_rows(ast) if PA._is_grid_body(ast.get("body") or []) else _pixel_step_rows(ast)
-    return f'<div class="flow">{g0}{"".join(steps)}{g1}</div>'
+    cls = "flow ghost" if ghost else "flow"
+    return f'<div class="{cls}">{g0}{"".join(steps)}{g1}</div>'
 
 
 # program_ast.render_header 는 pixel/object body(step.args.target.ref)만 가정 — grid(3-property)
 # body 는 target 이 없어(set_grid_* 는 size/color/contents 인자) KeyError('target'). program_ast.py
 # 는 solver 쪽 파일이라 수정하지 않고(하네스: 표시 전용, arbor/reasoning/* read-only), 여기서만
-# grid body 를 위한 동등한 헤더를 만든다(같은 포맷: 쓰인 DSL 시그니처 + 이 pair 의 input_grid).
+# grid body 를 위한 동등한 헤더를 만든다 — 단 PA._sig(n) 의 2-인자 구식(grid,size)이 아니라, 실제
+# body 가 쓰는 1-인자 object-model 호출 형태(g.size = set_grid_size(size(input_grid)) 등)와
+# "형태가 일치"하는 시그니처를 직접 적는다(§1 — 헤더가 body 와 다른 문법을 보이면 안 됨).
+_GRID_SIG = {
+    "set_grid_size": "set_grid_size(size) -> size   (g.size 에 대입; size=ARCKG GRID.size)",
+    "set_grid_color": "set_grid_color(color) -> color   (g.color 에 대입; color=ARCKG GRID.color)",
+    "set_grid_contents": "set_grid_contents(contents) -> contents   (g.contents 에 대입; contents=ARCKG GRID.contents)",
+}
+_COLORING_SIG = "coloring(grid, position, color) -> grid   (contents 합성 시)"
+
+
 def _render_header_safe(ast, g0):
     body = ast.get("body") or []
     if not PA._is_grid_body(body):
         return PA.render_header(ast, g0)
-    ops = [s["call"] for s in body]
+    parts = {s["call"]: s["args"] for s in body}
     lines = ["# --- DSL (used) ---"]
-    lines += [PA._sig(n) for n in ops]
+    for name in ("set_grid_size", "set_grid_color", "set_grid_contents"):
+        if name in parts:
+            lines.append(f"# {_GRID_SIG[name]}")
+    ct = parts.get("set_grid_contents", {}).get("contents", {})
+    if "program" in ct:                        # contents 가 하강 coloring 합성일 때만(§1) 병기
+        lines.append(f"# {_COLORING_SIG}")
     lines += ["# --- input (this pair) ---", f"input_grid = {json.dumps(g0)}"]
     return "\n".join(lines)
 
 
-# ── 3-뷰 한 pair(또는 TASK.solution) 블록 ────────────────────────────────────────────────────
+# ── 3-뷰 한 pair(또는 TASK.solution) 블록 (①②③ 은 같은 AST 의 세 표현 — 모듈 docstring 참고) ──
 def _pair_block(label, ast, ex):
     g0 = ex["input"]
     return (f'<div class="pair">'
@@ -342,22 +427,40 @@ def _pair_block(label, ast, ex):
             f'<div class="views">'
             f'<div class="view"><div class="vt">① text (통일 body · 실행형)</div>'
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
-            f'<pre class="src">{html.escape(display_source(ast))}</pre>'
-            f'<details class="rawsrc"><summary>canonical to_source (파싱계약·참조용)</summary>'
-            f'<pre class="src">{html.escape(PA.to_source(ast))}</pre></details></div>'
-            f'<div class="view"><div class="vt">② AST 트리</div>'
-            + ('<div class="astnote">grid 스텝은 첫 인자 grid(<code>g</code>)를 파이프라인으로 암묵 전달 — '
-               'AST 엔 property arg 만. leaf <code>{"expr":"size(input_grid)"}</code>=ARCKG 식, '
-               '<code>{"const":…}</code>=고정값.</div>' if PA._is_grid_body(ast.get("body") or []) else '')
-            + f'{ast_tree(ast)}</div>'
+            f'<pre class="src">{html.escape(display_source(ast))}</pre></div>'
+            f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast)}</div>'
             f'<div class="view"><div class="vt">③ 시각화</div>{_viz(ast, ex)}</div>'
             f'</div></div>')
 
 
+# ── §8 TASK.solution 가로 레이아웃: [pair0/pair1 program 세로 stack] → [①과 같은 ③ overlay] → ──
+#    [TASK.solution]. overlay 는 easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법
+#    재사용(반투명 겹침) — EV.CSS 에 이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
+def _solution_row(ast_ex_pairs, solution):
+    left = "".join(_pair_block(f"PAIR {p + 1}", a, ex) for a, ex, p in ast_ex_pairs)
+    cols = [f'<div class="col-pairs">{left}</div>']
+
+    if len(ast_ex_pairs) >= 2:
+        a0, ex0, _p0 = ast_ex_pairs[0]
+        a1, ex1, _p1 = ast_ex_pairs[1]
+        overlay = f'<div class="ovl">{_viz(a0, ex0)}{_viz(a1, ex1, ghost=True)}</div>'
+        cols.append(f'<div class="col-overlay"><div class="vt">③ overlay (PAIR 1 + PAIR 2 겹침, 반투명)</div>{overlay}</div>')
+
+    if solution is not None:
+        sol_ex = ast_ex_pairs[0][1]
+        cols.append(f'<div class="col-solution">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex)}</div>')
+    else:
+        cols.append('<div class="col-solution"><p class="note">TASK.solution 미물질화(generalize 미도달)'
+                     ' — per-pair program 만 표시.</p></div>')
+
+    arrow = '<div class="colarrow">→</div>'
+    return f'<div class="solrow">{arrow.join(cols)}</div>'
+
+
 def task_section(tid, task, precomputed=None):
-    thumbs = "".join(EV.grid(ex["input"]) + EV.grid(ex["output"]) for ex in task["train"])
+    thumbs = "".join(_thumb(ex["input"]) + _thumb(ex["output"]) for ex in task["train"])
     tp = task["test"][0]
-    thumbs += EV.grid(tp["input"]) + (EV.grid(tp["output"]) if tp.get("output") else "")
+    thumbs += _thumb(tp["input"]) + (_thumb(tp["output"]) if tp.get("output") else "")
 
     asts, pairs, solution, attempts = precomputed if precomputed else _collect(tid, task)
     if not asts:
@@ -375,22 +478,16 @@ def task_section(tid, task, precomputed=None):
         return (f'<section class="task" id="{tid}"><h2>{tid}<span class="na">미합성/크기변화</span></h2>'
                 f'<div class="thumbs">{thumbs}</div><p class="note">{html.escape(why + done)}</p>{extra}</section>')
 
-    kind = ("3-property grid program (set_grid_size∘set_grid_color∘set_grid_contents)"
-            if PA._is_grid_body(asts[0]["body"]) else "pixel/object coloring program")
     ast_ex_pairs = [(a, task["train"][p], p) for a, p in zip(asts, pairs)]
-    pairs_html = "".join(_pair_block(f"PAIR {p + 1}", a, ex) for a, ex, p in ast_ex_pairs)
-    if solution is not None:
-        sol_html = f'<div class="solblock">{_pair_block("TASK.solution (anti-unify 골격)", solution, task["train"][0])}</div>'
-    else:
-        sol_html = '<p class="note">TASK.solution 미물질화(generalize 미도달) — per-pair program 만 표시.</p>'
+    solrow = _solution_row(ast_ex_pairs, solution)
 
-    return (f'<section class="task" id="{tid}"><h2>{tid}<span class="tag2">{html.escape(kind)}</span></h2>'
-            f'<div class="thumbs">{thumbs}</div>{pairs_html}{sol_html}{EV._attempts_block(attempts, tp)}</section>')
+    return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
+            f'<div class="thumbs">{thumbs}</div>{solrow}{EV._attempts_block(attempts, tp)}</section>')
 
 
 CSS = """
 .views{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin:6px 0 14px}
-.view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:1 1 300px;min-width:240px}
+.view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:1 1 300px;min-width:240px;overflow-x:auto}
 .vt{font-size:11px;color:#8b93a3;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;font-weight:700}
 .src{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:8px 10px;
  font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#dfe3ea;white-space:pre-wrap;
@@ -404,17 +501,39 @@ CSS = """
  font:11px/1.4 ui-monospace,monospace;color:#e6c99a}
 .cmat{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 9px;margin:0;
  font:11px/1.35 ui-monospace,monospace;color:#e6c99a;white-space:pre}
-.astnote{font-size:10px;color:#8b93a3;background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 8px;margin-bottom:8px;line-height:1.5}
-.astnote code{color:#7fb2e0}
 .swatch{display:inline-block;width:10px;height:10px;margin-left:2px;border-radius:2px;vertical-align:middle;
  border:1px solid rgba(255,255,255,.25)}
 .pair{padding-top:0;margin-top:0}
 .pair + .pair{border-top:1px solid #232b36;padding-top:12px;margin-top:12px}
-.solblock{border:1px solid #3a5a7a;border-radius:10px;padding:2px 12px 12px;margin-top:16px;background:#131a22}
-.ntag{font-size:10.5px;color:#8fb0a0;font-style:italic}
+/* §11 grid crispness: SVG 썸네일(사각 <i> 그리드 아님) — 줌/DPR 비정수배에서도 균일 스케일 */
+.vthumb{display:inline-block;vertical-align:middle;background:#2a2e38;border:1px solid #2a2e38;
+ image-rendering:pixelated;image-rendering:crisp-edges}
+/* §5/§6/§7/§8 grid 3-property flow: 메인 세로선(::before, 절대배치)이 gflow 전체 높이를 관통해서
+   set_grid_size→color→contents 사이가 끊기지 않는다. 중첩 coloring(.nestedflow)은 그 선 오른쪽으로
+   더 들여써(margin-left) 겹치지 않는다 — 별도 CSS 요소가 아니라 "같은 선이 배경에서 이어지고,
+   중첩 박스가 그 위에 오른쪽으로 얹힌다"는 하나의 레이아웃. */
+.flow{width:max-content}
+.gflow{position:relative;display:flex;flex-direction:column;align-items:flex-start}
+.gflow::before{content:"";position:absolute;left:48px;top:6px;bottom:6px;width:2px;background:#3b4657}
+.gflow>.row{margin-bottom:12px}
+.gflow>.row:last-of-type{margin-bottom:6px}
 .nestedflow{display:flex;flex-direction:column;align-items:flex-start;border-left:2px solid #3a5a7a;
- padding:6px 0 6px 12px;margin:2px 0 2px 6px;background:#101319;border-radius:0 6px 6px 0}
-.nestedflow .row{transform:scale(.94);transform-origin:left center}
+ padding:6px 0 6px 12px;margin:0 0 0 82px;background:#101319;border-radius:0 6px 6px 0;width:max-content}
+.nestedflow .row{margin-bottom:8px}
+.nestedflow .row:last-child{margin-bottom:0}
+.gvar{font:11px ui-monospace,monospace;color:#7fb2e0;background:#132030;border:1px solid #22384d;
+ border-radius:5px;padding:2px 6px;margin-right:6px}
+.gvar-out{margin-right:0;margin-left:6px;color:#e6c99a;background:#241b12;border-color:#3a2c1a}
+.gnote{font-size:10.5px;color:#8fb0a0;font-style:italic}
+/* §8 TASK.solution 가로 레이아웃 */
+.solrow{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding-bottom:6px;margin-top:10px}
+.col-pairs{flex:0 0 auto;display:flex;flex-direction:column}
+.col-overlay{flex:0 0 auto;background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;min-width:260px}
+.col-solution{flex:0 0 auto;min-width:280px}
+/* col-pairs 는 pair0+pair1 stack 이라 훨씬 높다 — align-self:center 로 두면 화살표가 그 전체 높이의
+   중앙(대개 빈 배경)에 떠버리므로, overlay/solution 열의 눈높이(대략 첫 pair 한 개 높이의 중앙)에
+   가깝게 flex-start+고정 margin-top 으로 고정한다. */
+.colarrow{align-self:flex-start;margin-top:260px;font-size:22px;color:#5a6577;flex:0 0 auto;padding:0 2px}
 """
 
 CSS += """
@@ -429,16 +548,13 @@ CSS += """
 .rok{background:#12281c;color:#a9e6c1;border:1px solid #2f5a41}
 .rno{background:#241417;color:#e0a3a4;border:1px solid #5a2f34}
 .rerr{color:#e0a3a4;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap}
-.rawsrc summary{color:#7a8698;font-size:10px;cursor:pointer;margin-top:6px}
 .rgridbox{display:inline-grid;gap:1px;background:#2a2e38;border:1px solid #3a4150;padding:1px;width:max-content}
 .rgridbox i{width:20px;height:20px;display:block}
 .rout{align-items:flex-start}.rlab{font-weight:700}
 """
 
 _RUNNER_HTML = r"""
-<section id="runner"><h2>코드 실행기 <span class="tag2">순수 프런트엔드 · frozen atom JS 미러</span></h2>
-<p class="hs">아래 body 를 실행(공통 ARCKG atom 은 러너에 로드). 결과를 빌드타임 expected(=실제
-program_ast.execute)와 대조 — JS↔Python 드리프트가 ✓/✗ 로 드러남.</p>
+<section id="runner"><h2>코드 실행기</h2>
 <div class="runwrap">
   <select id="rsel"></select>
   <button id="rrun">▶ Run</button>
