@@ -404,10 +404,18 @@ def _resolve_cellset(vals, train, comps, sels):
         # 상대라 크기 달라도 일반화, tier -2) > 상수(absolute, 위치 불변이나 크기변화엔 약함, tier -1).
         cr = [(rn, rf, -2) for rn, rf in _canon_matches(atoms, dest_anchor, _CANON_ROW, 0)]
         cc = [(cn, cf, -2) for cn, cf in _canon_matches(atoms, dest_anchor, _CANON_COL, 1)]
-        if len({t[0] for t in dest_anchor}) == 1:              # absolute: output 행 불변
+        if len({t[0] for t in dest_anchor}) == 1:              # absolute(좌상단 앵커): output 행 불변
             v = dest_anchor[0][0]; cr.append((f"={v}", (lambda a, v=v: v), -1))
-        if len({t[1] for t in dest_anchor}) == 1:              # absolute: output 열 불변
+        if len({t[1] for t in dest_anchor}) == 1:              # absolute(좌상단 앵커): output 열 불변
             v = dest_anchor[0][1]; cc.append((f"={v}", (lambda a, v=v: v), -1))
+        # 우하단(BR) 앵커: dest BR = dest_TL + (h-1, w-1). BR 이 전 pair 상수면 TL = BR - (h-1)
+        # (§4-2 "네 코너"; BR 이 격자 코너 H-1 이면 이미 H-h 로 커버). 크기 다른 test 객체도 BR 고정.
+        dbr = [(dest_anchor[i][0] + atoms[i]["h"] - 1, dest_anchor[i][1] + atoms[i]["w"] - 1)
+               for i in range(N)]
+        if len({t[0] for t in dbr}) == 1:
+            br = dbr[0][0]; cr.append((f"BR={br}", (lambda a, br=br: br - a["h"] + 1), -1))
+        if len({t[1] for t in dbr}) == 1:
+            bc = dbr[0][1]; cc.append((f"BR={bc}", (lambda a, bc=bc: bc - a["w"] + 1), -1))
         for rn, rf, rt in cr:
             for cn, cf, ct in cc:
                 nm = f"move[{rn},{cn}]@{sname}"
