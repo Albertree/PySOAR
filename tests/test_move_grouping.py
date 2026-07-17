@@ -125,3 +125,25 @@ class TestResolveCellsetRigidDelta(unittest.TestCase):
         self.assertTrue(survivors, f"no survivor; tried={tried}")
         cells = survivors[0][1](g0)
         self.assertEqual(sorted(cells), [15, 16])
+
+
+class TestCornerPrior(unittest.TestCase):
+    """canonical 코너 prior: 두 pair 의 dest 앵커가 우연히 같아 상수가 fit 해도(few-shot),
+    구조식 H-h/W-w 를 우선 채택해 test 격자로 일반화한다 (move000q/r·made000b 회귀 근거)."""
+    def _grid(self, obj_r, obj_c):
+        g = [[0] * 6 for _ in range(6)]
+        for dr in range(2):
+            for dc in range(2):
+                g[obj_r + dr][obj_c + dc] = 3
+        return g
+
+    def test_br_corner_prefers_H_minus_h_over_coincidental_constant(self):
+        g0a, g0b = self._grid(0, 0), self._grid(1, 2)         # 2x2 객체, 서로 다른 출발
+        # dest = 우하단 코너 (4,4)~(5,5) = idx 28,29,34,35 (양 pair 동일 → 상수 (4,4) 도 fit)
+        vals = [[28, 29, 34, 35], [28, 29, 34, 35]]
+        train = [{"input": g0a, "output": g0a}, {"input": g0b, "output": g0b}]
+        slot = {"kind": "cellset", "pos": 0, "values": vals}
+        survivors, tried = AU.resolve_slot(slot, train)
+        self.assertTrue(survivors, f"no survivor; tried={tried}")
+        self.assertIn("H-h", survivors[0][0])                 # 코너 구조식 우선(상수 아님)
+        self.assertIn("W-w", survivors[0][0])

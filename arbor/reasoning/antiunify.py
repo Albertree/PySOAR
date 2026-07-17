@@ -324,6 +324,18 @@ def _axis_matches(atoms, targets, axis):
 # 설계)는 이제 이 문법의 특수사례로 흡수되어 폐기(DEPRECATED, Task4 M-1) — 우연 상수 과적합은
 # tier(_axis_tier: 객체위치>객체크기>격자>상수) 로 억제한다.
 
+# ── canonical 구조 prior: 객체가 grid 코너/모서리/제자리에 정렬 (few-shot 과적합 방지) ──
+# 앵커식 자유탐색이 2 pair 에서 우연 상수(2*5-r0 등)를 뽑아 코너(H-h,W-w)를 놓치므로, 아래 구조식이
+# train 을 재현하면 일반문법보다 **우선** 채택(tier -1). keep=제자리·0=위/왼끝·H-h/W-w=아래/오른끝(코너).
+_CANON_ROW = [("r0", lambda a: a["r0"]), ("0", lambda a: 0), ("H-h", lambda a: a["H"] - a["h"])]
+_CANON_COL = [("c0", lambda a: a["c0"]), ("0", lambda a: 0), ("W-w", lambda a: a["W"] - a["w"])]
+
+
+def _canon_matches(atoms, targets, cands, axis):
+    """canonical 앵커 후보 중 전 pair targets[axis] 재현하는 (name, fn) — 구조적 prior."""
+    return [(nm, fn) for nm, fn in cands
+            if all(fn(atoms[i]) == targets[i][axis] for i in range(len(atoms)))]
+
 
 def _resolve_cellset(vals, train, comps, sels):
     """cellset slot → (survivors, tried). 소스객체(selector·모양평행이동 일치) 를 dest 로 강체 이동.
@@ -351,10 +363,20 @@ def _resolve_cellset(vals, train, comps, sels):
             atoms.append(_obj_atoms(objs[i], train[i]["input"]))
         if not ok_shape:
             tried.append((f"move@{sname}: 모양 불일치", False)); continue
-        r_hits, r_tr = _axis_matches(atoms, dest_anchor, 0)    # dest 앵커 행식
+        # canonical 구조 prior (제자리/모서리/코너) — train 재현하면 일반문법보다 우선(tier -1)
+        cr = _canon_matches(atoms, dest_anchor, _CANON_ROW, 0)
+        cc = _canon_matches(atoms, dest_anchor, _CANON_COL, 1)
+        for rn, rf in cr:
+            for cn, cf in cc:
+                nm = f"move[{rn},{cn}]@{sname}"
+                keyed.append(((-1, len(rn) + len(cn), si, len(nm)), nm,
+                              _translate_obj_fn(sfn, rf, cf)))
+        r_hits, r_tr = _axis_matches(atoms, dest_anchor, 0)    # dest 앵커 행식 (일반문법 fallback)
         c_hits, c_tr = _axis_matches(atoms, dest_anchor, 1)    # dest 앵커 열식
         if not r_hits or not c_hits:
-            tried.append((f"move@{sname}: 앵커식 없음", False)); continue
+            if not (cr and cc):
+                tried.append((f"move@{sname}: 앵커식 없음", False))
+            continue
         for rn, rf, rd in r_hits:
             for cn, cf, cd in c_hits:
                 name = f"move({rn},{cn})@{sname}"
