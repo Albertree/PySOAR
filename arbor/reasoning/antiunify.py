@@ -260,34 +260,25 @@ def _selectors(comps_list):
     §2-2/사용자(2026-07-17): 객체를 **나열해 N번째**를 집는 rank 열거(min/max/#2 메뉴)는 추가 편향이라
     안 쓴다 — 극값은 나열이 아니라 '모두와 비교' 결과다. #2 류 임의 순위는 제거.
     반환 = [(name, fn(comps)->cells|None)]. resolve 가 train mover 재현하는 선택자만 채택."""
+    # 선택자 = comps → **매치되는 모든 객체 리스트**(scan 순, 결정적). 모호(여러 개)해도 버리지 않는다:
+    # train 은 그 중 mover 를 포함하면 유효(사용자 2026-07-18 "유일 아니어도 mover 를 포함"), test 는
+    # 후보를 열거해 시도(apply→오답→다음 후보). 예전 '유일=None' 대신 리스트 → 호출측이 후보를 다룬다.
     def by_color(c):
-        def pick(comps):
-            m = [cells for cells, col in comps if col == c]
-            return m[0] if len(m) == 1 else None
-        return pick
+        return lambda comps: [cells for cells, col in comps if col == c]
 
     def by_shape(shp):
-        def pick(comps):
-            m = [cells for cells, _ in comps if _shape_key(cells) == shp]
-            return m[0] if len(m) == 1 else None
-        return pick
+        return lambda comps: [cells for cells, _ in comps if _shape_key(cells) == shp]
 
     def by_size(z):
-        def pick(comps):
-            m = [cells for cells, _ in comps if len(cells) == z]
-            return m[0] if len(m) == 1 else None
-        return pick
+        return lambda comps: [cells for cells, _ in comps if len(cells) == z]
 
     def by_extreme(largest):
-        # 크기 극값 = 모든 다른 객체와 비교해 더 큼/작음(§4-2 larger_than 프로파일). 유일할 때만(동률=None).
+        # 크기 극값 = 모두와 비교해 더 큼/작음(§4-2). 동률이면 그 동률 전부(모호 → 열거).
         def pick(comps):
             if not comps:
-                return None
-            sizes = sorted(len(c) for c, _ in comps)
-            tgt = sizes[-1] if largest else sizes[0]
-            if len(sizes) >= 2 and (sizes[-1] == sizes[-2] if largest else sizes[0] == sizes[1]):
-                return None                               # 극값이 유일하지 않음(비교로 특정 불가)
-            return next(c for c, _ in comps if len(c) == tgt)
+                return []
+            tgt = max(len(c) for c, _ in comps) if largest else min(len(c) for c, _ in comps)
+            return [c for c, _ in comps if len(c) == tgt]
         return pick
 
     prop, rel = [], []
@@ -305,12 +296,17 @@ def _selectors(comps_list):
     return prop + rel                                     # 속성값 COMM 우선, 크기비교 극값은 fallback
 
 
-def _color_of_sel(sfn):
+def _one(ms):
+    """선택자 매치 리스트 → 유일하면 그 cells, 아니면 None (레거시 color/src 경로 = 단일 객체 전제)."""
+    return ms[0] if len(ms) == 1 else None
+
+
+def _color_of_sel(sfn, k=0):
     def fn(g):
-        cells = sfn(_components(g))
-        if cells is None:
-            return None
-        r, c = cells[0]
+        cands = sfn(_components(g))
+        if k >= len(cands):
+            return None                                 # 그 후보 없음(이 grid 모호도가 낮음)
+        r, c = sorted(cands[k])[0]
         return g[r][c]
     return fn
 
@@ -318,7 +314,7 @@ def _color_of_sel(sfn):
 def _coord_index_fn(sfn, rf, cf):
     """(선택자, row식, col식) → fn(grid): 선택 객체 원자로 픽셀 인덱스(row*W+col)."""
     def fn(g):
-        cells = sfn(_components(g))
+        cells = _one(sfn(_components(g)))
         if cells is None:
             return None
         a = _obj_atoms(cells, g)
@@ -382,9 +378,11 @@ def _canon_matches(atoms, targets, cands, axis):
             if all(fn(atoms[i]) == targets[i][axis] for i in range(len(atoms)))]
 
 
-def _resolve_cellset(vals, train, comps, sels):
+def _resolve_cellset(vals, train, comps, sels, test_comps=None):
     """cellset slot → (survivors, tried). 소스객체(selector·모양평행이동 일치) 를 dest 로 강체 이동.
-    dest 앵커(min r,min c)를 좌표문법(_axis_matches)으로 resolve → relative/absolute/corner 통합. §P5."""
+    dest 앵커(min r,min c)를 좌표문법(_axis_matches)으로 resolve → relative/absolute/corner 통합. §P5.
+    test_comps: 있으면 선택자를 test 입력에도 걸어 (a)0개 고르면 무효로 스킵, (b)여러 개면 그 수만큼
+    후보 열거(train 유일이라도) — 사용자 #2: 추상화가 test 에서 유일 선택 가능한지 검증."""
     N = len(vals)
     dests = []
     for i in range(N):
@@ -393,28 +391,62 @@ def _resolve_cellset(vals, train, comps, sels):
     dest_anchor = [(min(r for r, _ in d), min(c for _, c in d)) for d in dests]  # (dr0, dc0) per pair
     keyed, tried = [], []
     for si, (sname, sfn) in enumerate(sels):
-        objs = [sfn(comps[i]) for i in range(N)]
-        if any(o is None for o in objs):
-            continue
-        atoms, ok_shape = [], True
+        cands = [sfn(comps[i]) for i in range(N)]          # 각 pair 후보 리스트(모호 시 여러 개)
+        tnc = len(sfn(test_comps)) if test_comps is not None else None
+        if tnc == 0:                                       # test 에서 못 고르는 선택자 = 무효 추상화 → 스킵
+            tried.append((f"move@{sname}: test 선택0", False)); continue
+        atoms, ok_shape, ncand = [], True, 1
         for i in range(N):
-            src = sorted(objs[i]); d = dests[i]
-            if len(src) != len(d):
+            d = dests[i]; dr, dc = min(r for r, _ in d), min(c for _, c in d)
+            dshape = sorted((r - dr, c - dc) for r, c in d)
+            match = None                                    # dest 와 평행이동 일치하는 후보 = mover
+            for cand in cands[i]:                           # (사용자: 유일 아니어도 mover 를 포함하면 유효)
+                if len(cand) != len(d):
+                    continue
+                sr, sc = min(r for r, _ in cand), min(c for _, c in cand)
+                if sorted((r - sr, c - sc) for r, c in cand) == dshape:
+                    match = cand; break
+            if match is None:
                 ok_shape = False; break
-            sr, sc = min(r for r, _ in src), min(c for _, c in src)
-            dr, dc = min(r for r, _ in d), min(c for _, c in d)
-            if sorted((r - sr, c - sc) for r, c in src) != sorted((r - dr, c - dc) for r, c in d):
-                ok_shape = False; break                        # 모양(평행이동 불변) 불일치
-            atoms.append(_obj_atoms(objs[i], train[i]["input"]))
+            atoms.append(_obj_atoms(match, train[i]["input"]))
+            ncand = max(ncand, len(cands[i]))               # test 모호도(후보 수) 상한
         if not ok_shape:
-            tried.append((f"move@{sname}: 모양 불일치", False)); continue
+            tried.append((f"move@{sname}: mover 미포함", False)); continue
+        K = min(max(ncand, tnc or 1), 3)                     # train·test 모호도 최대치로 후보 열거(ar: train유일·test2개)
+
+        def _push(nm, rf, cf, tier, depth=0, sfn=sfn, si=si, K=K):
+            for k in range(K):
+                nk = f"{nm}#{k}" if K > 1 else nm
+                keyed.append(((tier, k, depth, si, len(nk)), nk, _translate_obj_fn(sfn, rf, cf, k)))
         # canonical 구조 prior — train 재현 시 일반문법(≥0)보다 우선. 구조식(제자리/모서리/코너=격자·객체
-        # 상대라 크기 달라도 일반화, tier -2) > 상수(absolute, 위치 불변이나 크기변화엔 약함, tier -1).
-        cr = [(rn, rf, -2) for rn, rf in _canon_matches(atoms, dest_anchor, _CANON_ROW, 0)]
-        cc = [(cn, cf, -2) for cn, cf in _canon_matches(atoms, dest_anchor, _CANON_COL, 1)]
-        if len({t[0] for t in dest_anchor}) == 1:              # absolute(좌상단 앵커): output 행 불변
+        # 상대라 크기 달라도 일반화, tier -2) > 상수(absolute, tier -1).
+        # ── 절대/상대 모델 판별(few-shot 모호성 해소): src const & dst const 인 축은 절대(=v)와 상대(src+Δ)
+        #    가 train 서 둘 다 맞아 우연. 이를 **source 가 varies 인 '정보축'** 이 밝힌 모델로 확정한다:
+        #    정보축 dst const → 절대신호(점으로 감), dst varies 인데 Δ const → 상대신호(Δ 만큼 이동).
+        #    am: col(src varies)→dst const=절대 ⇒ row(모호)도 절대(=2). ak: row(src varies)→Δ const=상대
+        #    ⇒ col(모호)도 상대(c0+1). vacate(미이동)면 keep 이 정답이라 약화하지 않는다.
+        moved = any(dest_anchor[i] != (atoms[i]["r0"], atoms[i]["c0"]) for i in range(N))
+        src_var = [len({a[k] for a in atoms}) > 1 for k in ("r0", "c0")]
+        dst_var = [len({t[ax] for t in dest_anchor}) > 1 for ax in (0, 1)]
+        drs = [dest_anchor[i][0] - atoms[i]["r0"] for i in range(N)]
+        dcs = [dest_anchor[i][1] - atoms[i]["c0"] for i in range(N)]
+        d_const = [len(set(drs)) == 1, len(set(dcs)) == 1]
+        abs_sig = any(src_var[ax] and not dst_var[ax] for ax in (0, 1))       # 정보축 절대신호
+        rel_sig = any(src_var[ax] and dst_var[ax] and d_const[ax] for ax in (0, 1))  # 정보축 상대신호
+        model = "abs" if (abs_sig and not rel_sig) else ("rel" if (rel_sig and not abs_sig) else "amb")
+
+        # 절대(=const)·격자상대(모서리 0/코너 H-h)는 원래 tier 유지(-1/-2 — 코너가 절대상수를 이김: 크기불변
+        # 일반화, made000b 코너 prior). 모델은 **source-상대(keep/offset)** 를 약화할지만 정한다: arrive 인데
+        # 절대모델이면 keep/offset 이 우연(정보축이 '점으로 감'이라 밝힘) → 약화(+2). 상대모델/vacate 면 그대로.
+        def _rel_tier(base):                                  # source-상대(keep/offset) tier
+            return 2 if (moved and model == "abs") else base
+        cr = [(rn, rf, _rel_tier(-2) if rn == "r0" else -2)
+              for rn, rf in _canon_matches(atoms, dest_anchor, _CANON_ROW, 0)]
+        cc = [(cn, cf, _rel_tier(-2) if cn == "c0" else -2)
+              for cn, cf in _canon_matches(atoms, dest_anchor, _CANON_COL, 1)]
+        if not dst_var[0]:                                    # absolute 행 앵커(dst 행 불변)
             v = dest_anchor[0][0]; cr.append((f"={v}", (lambda a, v=v: v), -1))
-        if len({t[1] for t in dest_anchor}) == 1:              # absolute(좌상단 앵커): output 열 불변
+        if not dst_var[1]:                                    # absolute 열 앵커(dst 열 불변)
             v = dest_anchor[0][1]; cc.append((f"={v}", (lambda a, v=v: v), -1))
         # 우하단(BR) 앵커: dest BR = dest_TL + (h-1, w-1). BR 이 전 pair 상수면 TL = BR - (h-1)
         # (§4-2 "네 코너"; BR 이 격자 코너 H-1 이면 이미 H-h 로 커버). 크기 다른 test 객체도 BR 고정.
@@ -424,22 +456,15 @@ def _resolve_cellset(vals, train, comps, sels):
             br = dbr[0][0]; cr.append((f"BR={br}", (lambda a, br=br: br - a["h"] + 1), -1))
         if len({t[1] for t in dbr}) == 1:
             bc = dbr[0][1]; cc.append((f"BR={bc}", (lambda a, bc=bc: bc - a["w"] + 1), -1))
-        # relative(상대이동): dest 앵커 − source 앵커 = Δ(offset). 전 pair 상수면 "source + Δ" — 좌표 DIFF
-        # 아래 숨은 COMM(사용자: output↔input 객체를 비교해 DIFF 세부에서 공통을 도출). keep(Δ=0) 일반화.
-        # **tier -3 = 최우선**: Δ 는 실제 이동을 O↔O' 비교로 직접 도출한 것이라, 우연히 맞는 구조식(모서리
-        # 0·코너 H-h·상수)보다 신뢰. (예 ak: source col 이 train 서 우연히 0 이라 '왼끝0'이 keep 과 동률
-        # 이던 것을 Δ=0→c0 로 확정해 test 일반화.)
-        dr = {dest_anchor[i][0] - atoms[i]["r0"] for i in range(N)}
-        dc = {dest_anchor[i][1] - atoms[i]["c0"] for i in range(N)}
-        if len(dr) == 1:
-            d = next(iter(dr)); cr.append((f"r0{d:+d}", (lambda a, d=d: a["r0"] + d), -3))
-        if len(dc) == 1:
-            d = next(iter(dc)); cc.append((f"c0{d:+d}", (lambda a, d=d: a["c0"] + d), -3))
+        # relative(상대이동): dest − source = Δ. 전 pair 상수면 source+Δ (좌표 DIFF 아래 숨은 COMM=Δ).
+        # 상대모델/vacate 면 최우선(-3), 절대모델 arrive 면 약화(우연). keep(Δ=0) 포함.
+        if d_const[0]:
+            d = drs[0]; cr.append((f"r0{d:+d}", (lambda a, d=d: a["r0"] + d), _rel_tier(-3)))
+        if d_const[1]:
+            d = dcs[0]; cc.append((f"c0{d:+d}", (lambda a, d=d: a["c0"] + d), _rel_tier(-3)))
         for rn, rf, rt in cr:
             for cn, cf, ct in cc:
-                nm = f"move[{rn},{cn}]@{sname}"
-                keyed.append(((max(rt, ct), len(rn) + len(cn), si, len(nm)), nm,
-                              _translate_obj_fn(sfn, rf, cf)))
+                _push(f"move[{rn},{cn}]@{sname}", rf, cf, max(rt, ct))
         r_hits, r_tr = _axis_matches(atoms, dest_anchor, 0)    # dest 앵커 행식 (일반문법 fallback)
         c_hits, c_tr = _axis_matches(atoms, dest_anchor, 1)    # dest 앵커 열식
         if not r_hits or not c_hits:
@@ -448,9 +473,7 @@ def _resolve_cellset(vals, train, comps, sels):
             continue
         for rn, rf, rd in r_hits:
             for cn, cf, cd in c_hits:
-                name = f"move({rn},{cn})@{sname}"
-                key = (_axis_tier(rn, 0) + _axis_tier(cn, 1), rd + cd, si, len(name))
-                keyed.append((key, name, _translate_obj_fn(sfn, rf, cf)))
+                _push(f"move({rn},{cn})@{sname}", rf, cf, _axis_tier(rn, 0) + _axis_tier(cn, 1), rd + cd)
     keyed.sort(key=lambda t: t[0])
     for _k, name, fn in keyed[:_MATCH_CAP]:
         tried.append((name, True))
@@ -460,12 +483,14 @@ def _resolve_cellset(vals, train, comps, sels):
     return survivors, tried
 
 
-def _translate_obj_fn(sfn, rf, cf):
-    """(선택자, 앵커행식, 앵커열식) → fn(grid): 소스객체를 (rf,cf) 앵커로 강체 이동한 cells(idx)."""
+def _translate_obj_fn(sfn, rf, cf, k=0):
+    """(선택자, 앵커행식, 앵커열식, 후보k) → fn(grid): 선택자 매치 중 **k-번째 후보**(scan 순)를 (rf,cf)
+    앵커로 강체 이동한 cells(idx). 모호(여러 후보) 시 version space 가 k=0,1,.. 를 각기 시도(apply→오답→다음)."""
     def fn(g):
-        cells = sfn(_components(g))
-        if cells is None:
-            return None
+        cands = sfn(_components(g))
+        if k >= len(cands):
+            return None                                 # 그 후보 없음(이 grid 의 모호도가 낮음)
+        cells = sorted(cands[k])
         a = _obj_atoms(cells, g)
         tr, tc = rf(a), cf(a)
         if tr is None or tc is None:
@@ -476,18 +501,21 @@ def _translate_obj_fn(sfn, rf, cf):
     return fn
 
 
-def resolve_slot(slot, train):
+def resolve_slot(slot, train, test_input=None):
     """slot(kind='src'|'color'|'cellset') → (survivors=[(name, fn(grid))], tried=[(name, ok)]).
-    소스 객체는 기하 선택자로(배경 가정 없이), 값은 좌표식/객체색/객체이동 자유조합 탐색. train 으로만 검증(§P5)."""
+    소스 객체는 기하 선택자로(배경 가정 없이), 값은 좌표식/객체색/객체이동 자유조합 탐색. train 으로만 검증(§P5).
+    test_input: 있으면 **선택자를 test 입력에도 걸어** 유일성/후보수를 확인(§사용자 #2 — 추상화가 test 에서
+    실제로 그 객체를 고를 수 있어야 유효; test *입력*은 봐도 됨, P5 는 test *출력*만 금지)."""
     vals = slot["values"]
     N = len(vals)
     if N != len(train):
         return [], [("<len-mismatch>", False)]
     comps = [_components(e["input"]) for e in train]
     sels = _selectors(comps)
+    test_comps = _components(test_input) if test_input else None
     tried, survivors = [], []
     if slot["kind"] == "cellset":
-        return _resolve_cellset(vals, train, comps, sels)
+        return _resolve_cellset(vals, train, comps, sels, test_comps)
 
     if slot["kind"] == "color":
         for k in sorted(set(vals)):                       # 상수색 후보
@@ -496,14 +524,22 @@ def resolve_slot(slot, train):
             if ok:
                 survivors.append((f"const {k}", (lambda g, k=k: k)))
         for sname, sfn in sels:                           # 선택자-객체의 색(color_of_fg 의 bg-free 대체)
-            picks = [sfn(comps[i]) for i in range(N)]
-            if any(p is None for p in picks):
-                tried.append((f"color@{sname}", False)); continue
-            cols = [train[i]["input"][picks[i][0][0]][picks[i][0][1]] for i in range(N)]
-            ok = cols == list(vals)
+            tnc = len(sfn(test_comps)) if test_comps is not None else None
+            if tnc == 0:                                  # test 에서 못 고르는 선택자 = 무효 추상화
+                tried.append((f"color@{sname}: test 선택0", False)); continue
+            ncand, ok = 1, True
+            for i in range(N):
+                cs = sfn(comps[i]); ncand = max(ncand, len(cs))
+                # 후보 중 색이 mover 색(vals[i])인 것이 있으면 유효(유일 아니어도; k-일관성으로 mover 확정)
+                if not any(train[i]["input"][c[0][0]][c[0][1]] == vals[i] for c in cs):
+                    ok = False; break
             tried.append((f"color@{sname}", ok))
-            if ok:
-                survivors.append((f"color@{sname}", _color_of_sel(sfn)))
+            if not ok:
+                continue
+            K = min(max(ncand, tnc or 1), 3)              # train·test 모호도 최대치로 후보 열거
+            for k in range(K):                            # 모호 시 후보 열거(cells 와 같은 @선택자#k 로 일관)
+                nm = f"color@{sname}" + (f"#{k}" if K > 1 else "")
+                survivors.append((nm, _color_of_sel(sfn, k)))
         return survivors, tried
 
     # --- src / 픽셀 인덱스 slot: 선택자 × 좌표식 자유조합 ---
@@ -513,7 +549,7 @@ def resolve_slot(slot, train):
     for si, (sname, sfn) in enumerate(sels):
         atoms, ok_sel = [], True
         for i in range(N):
-            cells = sfn(comps[i])
+            cells = _one(sfn(comps[i]))
             if cells is None:
                 ok_sel = False; break
             atoms.append(_obj_atoms(cells, train[i]["input"]))

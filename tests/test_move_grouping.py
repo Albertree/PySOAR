@@ -171,5 +171,6 @@ class TestPropertySelectors(unittest.TestCase):
         comps = AU._components(g0)
         sels = dict(AU._selectors([comps]))
         self.assertIn("color=5", sels)
-        self.assertEqual(sels["color=5"](comps), [(0, 0)])   # 색5 유일 성분
-        self.assertEqual(sels["color=3"](comps), [(0, 2)])
+        # 선택자는 이제 **매치 리스트**(모호 지원). 색5 유일 성분 하나 → [[(0,0)]].
+        self.assertEqual(sels["color=5"](comps), [[(0, 0)]])   # 색5 유일 성분(리스트)
+        self.assertEqual(sels["color=3"](comps), [[(0, 2)]])

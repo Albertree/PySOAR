@@ -71,7 +71,11 @@ def _op_generalize(ag):
             and _all_pixel_residual(asts) and _train_all_moves(ag)):
         ag.wm.add(sid, "needs-compress", "yes")
         return
-    sk, slots = antiunify_ast(asts)
+    # 이동(move) 프로그램이면 cellset 을 const 로 굽지 않고 항상 slot 화(train 우연일치 방지): dest 가
+    # 절대(공통 좌상단)여도 mover 모양은 test 마다 달라 move@anchor 로 일반화해야 함(am).
+    # (color 강제 slot화는 보류: 배경색까지 slot 이 되면 version space 가 부풀어 3-try 안에 정답 조합을
+    #  놓쳐 g/o/p/ah/ak 회귀. au 색-baking 은 '도착색만' 강제하는 수술적 수정 필요 — 후속.)
+    sk, slots = antiunify_ast(asts, force_slots=_train_all_moves(ag))
     if sk is None:                                        # 구조 불일치/부족
         # op 수 불일치(객체 크기 차이 등)면 정직히 포기하기 전에 compress(덩어리화) 를 신호한다.
         # compress 가 blob 으로 재작성 → generalize 재발화 → blob anti-unify. 한 번만(compressed 가드).

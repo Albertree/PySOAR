@@ -377,17 +377,20 @@ def ops_of_ast(ast):
     return ops
 
 
-def antiunify_ast(asts):
+def antiunify_ast(asts, force_slots=False):
     """정렬된 per-pair AST 들 → (skeleton_ast, slots). 계열 판별: 전부 grid body → grid 경로,
     전부 cellset body → blob 경로, 아니면 pixel 경로. 위치별 COMM=상수, DIFF=var 승격.
-    op 수 다르면 (None, None)."""
+    op 수 다르면 (None, None).
+    force_slots: 이동(move) 프로그램에선 cellset(이동객체 위치)이 관계적이므로 train 우연으로 일치해도
+      const 로 굽지 않고 slot 화 → resolve 가 move@anchor 로 일반화(§move am 좌표절대). (color 는 현재
+      강제 안 함 — 배경색까지 slot화하면 version space 부풀어 회귀; 도착색만 강제하는 수술적 수정 후속.)"""
     valid = [a for a in asts if a and a.get("body")]
     if len(valid) < 2:
         return None, None
     if all(_is_grid_body(a["body"]) for a in valid):
-        return _antiunify_ast_grid(valid)
+        return _antiunify_ast_grid(valid, force_slots)
     if all(_is_cellset_body(a["body"]) for a in valid):
-        return _antiunify_ast_blob(valid)
+        return _antiunify_ast_blob(valid, force_slots)
     return _antiunify_ast_pixel(valid)
 
 
@@ -412,7 +415,7 @@ def _reprefix_inner_vars(leaf, prefix):
     return {"program": {"body": new_body}}
 
 
-def _antiunify_ast_grid(asts):
+def _antiunify_ast_grid(asts, force_slots=False):
     """grid(3-property) AST 들 → (skeleton, slots). pixel/blob 처럼 op 위치가 아니라
     property key(size/color/contents) 별로 비교: leaf 동일=COMM(그대로 유지), 다르면
     DIFF → {"var":"?<prop>"} + slot. 단 contents leaf 가 전 pair 에서 program(nested coloring)
@@ -427,7 +430,7 @@ def _antiunify_ast_grid(asts):
         if call == "set_grid_contents" and all("program" in leaf for leaf in leaves):
             inner_asts = [program(leaf["program"]["body"]) for leaf in leaves]
             if all(_is_cellset_body(ia["body"]) for ia in inner_asts):
-                sk_inner, inner_slots = _antiunify_ast_blob(inner_asts)
+                sk_inner, inner_slots = _antiunify_ast_blob(inner_asts, force_slots)
             else:
                 sk_inner, inner_slots = _antiunify_ast_pixel(inner_asts)
             if sk_inner is None:                                # structural mismatch (op-count 불일치 등)
@@ -476,9 +479,10 @@ def _antiunify_ast_pixel(asts):
     return program(body, slots=slots), slots
 
 
-def _antiunify_ast_blob(asts):
+def _antiunify_ast_blob(asts, force_slots=False):
     """blob AST 들 → (skeleton, slots). _align_blobs(색 COMM 정렬) 재사용. cellset DIFF → cellset slot.
-    (antiunify.py::_antiunify_blobs 를 AST 로 mirror; 셀집합 비교는 tuple(sorted) 정규화.)"""
+    (antiunify.py::_antiunify_blobs 를 AST 로 mirror; 셀집합 비교는 tuple(sorted) 정규화.)
+    force_slots=True(이동 프로그램) → cellset 은 일치해도 const 로 굽지 않고 항상 slot 화(color 는 제외)."""
     from arbor.reasoning.antiunify import _align_blobs
     progs = [ops_of_ast(a) for a in asts]
     progs = [p for p in progs if p and all(o[0] is not None for o in p)]   # concrete cells 만
@@ -493,8 +497,9 @@ def _antiunify_ast_blob(asts):
     for i in range(n):
         cellsets = [a[i][0] for a in aligned]
         cols = [a[i][1] for a in aligned]
-        sk_cells = cellsets[0] if len({tuple(sorted(c)) for c in cellsets}) == 1 else None
-        sk_col = cols[0] if len(set(cols)) == 1 else None
+        same_cells = len({tuple(sorted(c)) for c in cellsets}) == 1
+        sk_cells = cellsets[0] if (same_cells and not force_slots) else None
+        sk_col = cols[0] if len(set(cols)) == 1 else None   # (색 강제 slot화 실험 보류 — au 만 이득, 부작용 검증중)
         cells_leaf = const(sorted(sk_cells)) if sk_cells is not None else var(f"?cells{i}")
         col_leaf = const(sk_col) if sk_col is not None else var(f"?color{i}")
         if sk_cells is None:

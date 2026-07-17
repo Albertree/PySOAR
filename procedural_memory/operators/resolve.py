@@ -23,9 +23,11 @@ def _op_resolve(ag):
         ag.wm.add(sid, "resolved", "yes")
         return
     train = ag.task["train"]
+    test = ag.task.get("test") or []
+    test_input = test[0].get("input") if test else None   # 추상화를 test 입력에 검증(§사용자 #2; P5=출력만 금지)
     resolved, tried_all, ok_all = {}, {}, True
     for name, slot in slots.items():
-        survivors, tried = resolve_slot(slot, train)
+        survivors, tried = resolve_slot(slot, train, test_input)
         tried_all[name] = tried
         if survivors:
             resolved[name] = survivors               # version space (생존 후보들)

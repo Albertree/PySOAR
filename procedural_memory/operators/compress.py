@@ -93,10 +93,23 @@ def _norm_shape(cells):
 
 def _object_moves(g0, g1):
     """G0→G1 이동 객체쌍 [(cells0, cells1, color)] — 같은 모양·색, 다른 위치. 배경은 이동 시 모양이
-    달라져 자기매칭 안 됨(그래서 '배경=0' 가정 없이 성분 전부 대응해도 안전)."""
+    달라져 자기매칭 안 됨(그래서 '배경=0' 가정 없이 성분 전부 대응해도 안전).
+    **static 우선**: 같은 위치·색·모양 성분을 먼저 예약(제자리 유지)한 뒤 남은 것에서만 이동을 찾는다.
+    안 그러면 배경색 조각(색0 1칸 등)이 사라진 자리↔제자리 조각과 greedy 매칭돼 phantom 이동으로 오탐
+    (예: move000aq 에서 한 pair 만 이동 2개로 세어져 op 수 불일치→anti-unify 실패)."""
     o0, o1 = _components(g0), _components(g1)
-    used, moves = set(), []
-    for cells0, col0 in o0:
+    used, matched0 = set(), set()
+    for i, (cells0, col0) in enumerate(o0):                   # 1st: static(같은 위치) 예약 → mover 오탐 방지
+        s0 = sorted(cells0)
+        for j, (cells1, col1) in enumerate(o1):
+            if j in used or col1 != col0:
+                continue
+            if sorted(cells1) == s0:                           # 같은 위치·색 = 제자리(static)
+                used.add(j); matched0.add(i); break
+    moves = []
+    for i, (cells0, col0) in enumerate(o0):                   # 2nd: 남은 것에서만 같은 모양·색·다른 위치 = 이동
+        if i in matched0:
+            continue
         s0 = _norm_shape(cells0)
         for j, (cells1, col1) in enumerate(o1):
             if j in used or col1 != col0:
