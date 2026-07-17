@@ -98,10 +98,10 @@ def _op_compress(ag):
         ppid = f"{p.node_id}.property"
         raw = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
         code = as_source(raw)
-        if not code or code == "{}":
+        if not code or code == "{}":               # emptiness guard만 flat 로 (미합성 sentinel 스킵)
             continue
         W = len(ag.task["train"][k]["input"][0])
-        blob = _blob_program(code, W)
+        blob = _blob_program(raw, W)               # raw AST-json 그대로 → grid 분기 도달(as_source 로 납작해지면 grid 탐지 불가)
         if blob is None:
             continue
         ag.wm.remove(ppid, "program", raw)     # was: code
