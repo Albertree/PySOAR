@@ -400,13 +400,18 @@ def _resolve_cellset(vals, train, comps, sels):
             atoms.append(_obj_atoms(objs[i], train[i]["input"]))
         if not ok_shape:
             tried.append((f"move@{sname}: 모양 불일치", False)); continue
-        # canonical 구조 prior (제자리/모서리/코너) — train 재현하면 일반문법보다 우선(tier -1)
-        cr = _canon_matches(atoms, dest_anchor, _CANON_ROW, 0)
-        cc = _canon_matches(atoms, dest_anchor, _CANON_COL, 1)
-        for rn, rf in cr:
-            for cn, cf in cc:
+        # canonical 구조 prior — train 재현 시 일반문법(≥0)보다 우선. 구조식(제자리/모서리/코너=격자·객체
+        # 상대라 크기 달라도 일반화, tier -2) > 상수(absolute, 위치 불변이나 크기변화엔 약함, tier -1).
+        cr = [(rn, rf, -2) for rn, rf in _canon_matches(atoms, dest_anchor, _CANON_ROW, 0)]
+        cc = [(cn, cf, -2) for cn, cf in _canon_matches(atoms, dest_anchor, _CANON_COL, 1)]
+        if len({t[0] for t in dest_anchor}) == 1:              # absolute: output 행 불변
+            v = dest_anchor[0][0]; cr.append((f"={v}", (lambda a, v=v: v), -1))
+        if len({t[1] for t in dest_anchor}) == 1:              # absolute: output 열 불변
+            v = dest_anchor[0][1]; cc.append((f"={v}", (lambda a, v=v: v), -1))
+        for rn, rf, rt in cr:
+            for cn, cf, ct in cc:
                 nm = f"move[{rn},{cn}]@{sname}"
-                keyed.append(((-1, len(rn) + len(cn), si, len(nm)), nm,
+                keyed.append(((max(rt, ct), len(rn) + len(cn), si, len(nm)), nm,
                               _translate_obj_fn(sfn, rf, cf)))
         r_hits, r_tr = _axis_matches(atoms, dest_anchor, 0)    # dest 앵커 행식 (일반문법 fallback)
         c_hits, c_tr = _axis_matches(atoms, dest_anchor, 1)    # dest 앵커 열식
