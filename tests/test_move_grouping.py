@@ -161,3 +161,15 @@ class TestObjectMoveProgram(unittest.TestCase):
         cellsets = [sorted(s["args"]["target"]["cells"]["const"]) for s in inner]
         self.assertIn([0, 1], cellsets)                       # 전체 source 객체 (부분 [0] 아님)
         self.assertIn([1, 2], cellsets)                       # 전체 dest 객체 (부분 [2] 아님)
+
+
+class TestPropertySelectors(unittest.TestCase):
+    """변화객체 비교 기반 선택자: 색/모양/크기가 각 grid 에서 유일하면 그 속성으로 mover 선택."""
+    def test_color_selector_picks_unique_color_object(self):
+        # 2 grid, 각기 색5(1셀)·색3(1셀). color=5 선택자는 색5 셀만.
+        g0 = [[5, 0, 3], [0, 0, 0]]
+        comps = AU._components(g0)
+        sels = dict(AU._selectors([comps]))
+        self.assertIn("color=5", sels)
+        self.assertEqual(sels["color=5"](comps), [(0, 0)])   # 색5 유일 성분
+        self.assertEqual(sels["color=3"](comps), [(0, 2)])
