@@ -42,7 +42,12 @@ def _op_generalize(ag):
     if sk is None:                                        # 구조 불일치/부족
         # op 수 불일치(객체 크기 차이 등)면 정직히 포기하기 전에 compress(덩어리화) 를 신호한다.
         # compress 가 blob 으로 재작성 → generalize 재발화 → blob anti-unify. 한 번만(compressed 가드).
-        if not ag.wm.contains(sid, "compressed", "yes") and compressible(progs):
+        # grid-래핑(move 등) 이면 flat compressible() 이 못 읽으므로 inner(contents) op 수를 직접 비교.
+        from arbor.reasoning.program_ast import grid_inner_op_counts
+        inner = [grid_inner_op_counts(a) for a in asts]
+        grid_mismatch = (all(x is not None for x in inner)
+                         and len({x[0] for x in inner if x}) > 1)
+        if not ag.wm.contains(sid, "compressed", "yes") and (compressible(progs) or grid_mismatch):
             ag.wm.add(sid, "needs-compress", "yes")
             return
         ag.wm.add(sid, "generalized", "failed")

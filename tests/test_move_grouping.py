@@ -19,3 +19,17 @@ class TestGridBlobAntiunify(unittest.TestCase):
         inner = parts["set_grid_contents"]["contents"]["program"]["body"]
         self.assertEqual(inner[0]["args"]["target"]["ref"], "cellset")
         self.assertTrue(any(k.startswith("?c.cells") for k in slots))
+
+
+class TestGridInnerCounts(unittest.TestCase):
+    def _grid_pixel(self, idxs):
+        b = [PA.step("coloring", target=PA.ref("pixel", PA.const(i)), color=PA.const(0)) for i in idxs]
+        return PA.grid_program(PA.expr("size(input_grid)"), PA.expr("color(input_grid)"),
+                               PA.contents_program(b))
+
+    def test_grid_inner_op_counts_reads_contents_length(self):
+        self.assertEqual(PA.grid_inner_op_counts(self._grid_pixel([1, 2, 3])), [3])
+
+    def test_grid_inner_op_counts_none_for_nongrid(self):
+        flat = PA.program([PA.step("coloring", target=PA.ref("pixel", PA.const(1)), color=PA.const(0))])
+        self.assertIsNone(PA.grid_inner_op_counts(flat))

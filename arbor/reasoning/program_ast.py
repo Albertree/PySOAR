@@ -114,6 +114,19 @@ def grid_program_from_decide(dec):
     return grid_program(size_leaf, color_leaf, c_leaf)
 
 
+def grid_inner_op_counts(ast):
+    """grid>pixel/blob 이면 set_grid_contents 의 nested program body 길이 [n], 아니면 None."""
+    body = (ast or {}).get("body") or []
+    if not _is_grid_body(body):
+        return None
+    for s in body:
+        if s["call"] == "set_grid_contents":
+            leaf = s["args"]["contents"]
+            if "program" in leaf:
+                return [len(leaf["program"]["body"])]
+    return None
+
+
 def is_full_grid_program(gp):
     """gp 의 body 어느 leaf 에도 `pending` 이 없으면 True(전 슬롯 결정 = 물질화 가능).
     partial(하강 필요한 슬롯 있음) 이면 False. gp 가 falsy 면 False."""
