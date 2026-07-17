@@ -29,6 +29,14 @@ class WorkingMemory:
         self._wmes: set[Triple] = set()
         self._goals: set[str] = set()
         self._level: dict[str, int] = {}
+        self._sorted: "list[Triple] | None" = None   # 결정적 반복순서 캐시(§2-6); add/remove 시 무효화
+
+    def _ordered(self) -> "list[Triple]":
+        """결정적 정렬 반복순서(캐시). matching() 은 매처가 극빈번 호출하므로 매번 정렬하면 느리다 →
+        **mutation 당 1회만** 정렬해 상각(add/remove 가 캐시 무효화). __iter__·all()·matching() 공용."""
+        if self._sorted is None:
+            self._sorted = sorted(self._wmes, key=_wm_key)
+        return self._sorted
 
     # -- goals / states -------------------------------------------------------
     def mark_goal(self, identifier: str, level: int = 1) -> None:
@@ -47,13 +55,16 @@ class WorkingMemory:
     # -- WMEs -----------------------------------------------------------------
     def add(self, identifier: str, attr: str, value: Any) -> Triple:
         w = (identifier, attr, value)
-        self._wmes.add(w)
+        if w not in self._wmes:
+            self._wmes.add(w)
+            self._sorted = None                          # 반복순서 캐시 무효화(§2-6)
         return w
 
     def remove(self, identifier: str, attr: str, value: Any) -> bool:
         w = (identifier, attr, value)
         if w in self._wmes:
             self._wmes.discard(w)
+            self._sorted = None                          # 반복순서 캐시 무효화(§2-6)
             return True
         return False
 
@@ -61,9 +72,11 @@ class WorkingMemory:
         return (identifier, attr, value) in self._wmes
 
     def matching(self, identifier=None, attr=None, value=None) -> Iterator[Triple]:
-        # 매처(production.py)가 극빈번 호출 → 정렬 없이 빠르게. 매치 '집합'은 순서와 무관하므로
-        # 정렬해도 결정에 영향 없음(비용만↑). '첫 매치' 픽의 결정성은 __iter__(정렬)에서 보장.
-        for (i, a, v) in self._wmes:
+        # 결정성(재현성): __iter__ 와 **같은 정렬**로 반복한다. operator body 들이
+        # `next((.. for .. in wm.matching(..)), default)` 로 '첫 매치' 를 고르고, 매처(production.py)도
+        # 이걸 쓰므로, 정렬 안 하면 PYTHONHASHSEED 에 따라 첫 매치/바인딩 순서가 달라져 경계 태스크
+        # 결과가 실행마다 뒤집힌다(개발 중 2회 발생). '집합은 순서 무관' 은 틀림 — 첫매치는 순서 의존.
+        for (i, a, v) in self._ordered():
             if identifier is not None and i != identifier:
                 continue
             if attr is not None and a != attr:
@@ -73,13 +86,12 @@ class WorkingMemory:
             yield (i, a, v)
 
     def all(self) -> list[Triple]:
-        return sorted(self._wmes, key=_wm_key)
+        return list(self._ordered())
 
     def __iter__(self) -> Iterator[Triple]:
-        # 결정적 반복: WM 은 set 이라 반복순서가 PYTHONHASHSEED 에 따라 달라진다. operator body 들이
-        # next((v for ... in wm if ...)) 로 '첫 매치' 를 고르므로(=이 __iter__) 순서가 결과를 바꾼다
-        # → 항상 정렬 반복해 재현성 확보 (all() 과 같은 키).
-        return iter(sorted(self._wmes, key=_wm_key))
+        # 결정적 반복(§2-6): WM 은 set 이라 반복순서가 PYTHONHASHSEED 에 따라 달라진다 → 정렬 캐시로
+        # 반복. operator body next((v for ... in wm if ..)) 첫매치·매처·all()·matching() 모두 이 순서.
+        return iter(self._ordered())
 
     def __len__(self) -> int:
         return len(self._wmes)
