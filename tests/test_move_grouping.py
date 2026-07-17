@@ -2,6 +2,7 @@
 import json, os, sys, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from arbor.reasoning import program_ast as PA
+from arbor.reasoning import antiunify as AU
 from procedural_memory.operators import compress as CG
 
 
@@ -86,3 +87,41 @@ class TestCompressGridWrapped(unittest.TestCase):
         self.assertNotIn("set_grid_size", calls)              # 래퍼 없음(flat 유지)
         self.assertTrue(all(s["args"]["target"]["ref"] == "cellset" for s in out["body"]))
         self.assertEqual(len(out["body"]), 2)                 # 2 덩어리
+
+
+class TestResolveCellsetRigidDelta(unittest.TestCase):
+    def _pair(self, grid_in, dest_cells):
+        return {"input": grid_in, "output": grid_in}       # output 미사용(dest 는 vals 로 전달)
+
+    def test_relative_offset_resolves_rigidly(self):
+        # 3x5 grid, 소스객체=색3 두 셀 (0,0),(0,1)=idx0,1. dest= +2행 이동 → (2,0),(2,1)=idx10,11
+        g0 = [[3,3,0,0,0],[0,0,0,0,0],[0,0,0,0,0]]
+        g1 = [[3,3,0,0,0],[0,0,0,0,0],[0,0,0,0,0]]           # 두번째 pair: 같은 오프셋, 다른 위치는 아래서
+        train = [{"input": g0, "output": g1}, {"input": g0, "output": g1}]
+        comps = [AU._components(e["input"]) for e in train]
+        sels = AU._selectors(comps)
+        vals = [[10, 11], [10, 11]]                          # +2행 dest (relative)
+        slot = {"kind": "cellset", "pos": 0, "values": vals}
+        survivors, tried = AU.resolve_slot(slot, train)
+        self.assertTrue(survivors, f"no survivor; tried={tried}")
+        cells = survivors[0][1](g0)
+        self.assertEqual(sorted(cells), [10, 11])            # G0 에 적용 시 dest 재현
+
+    def test_relative_offset_survives_only_new_impl(self):
+        """판별 케이스(브리프 원 예제는 3행 격자라 dest row(2)==H-1 과 우연히 겹쳐 구 canonical
+        placement(bottom anchor)로도 통과 — 회귀만으론 구현 교체를 증명 못 함. 여기서는 6행 격자로
+        dest row(3) 를 top(0)·bottom(H-1=5)·keep(r0=0) 어디와도 안 겹치게 해 진짜 relative-Δ(r0+3 류)
+        만 재현 가능하게 만든다: 구현 전엔 survivor 없음(probe 로 확인), 구현 후엔 존재해야 함."""
+        g0 = [[3, 3, 0, 0, 0],
+              [0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0]]
+        train = [{"input": g0, "output": g0}, {"input": g0, "output": g0}]
+        vals = [[15, 16], [15, 16]]                          # dest row3,col0-1 (H=6,W=5)
+        slot = {"kind": "cellset", "pos": 0, "values": vals}
+        survivors, tried = AU.resolve_slot(slot, train)
+        self.assertTrue(survivors, f"no survivor; tried={tried}")
+        cells = survivors[0][1](g0)
+        self.assertEqual(sorted(cells), [15, 16])

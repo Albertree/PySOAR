@@ -317,42 +317,23 @@ def _axis_matches(atoms, targets, axis):
     return [(en, ef, ed) for en, ef, ed in hits[:_MATCH_CAP]], trunc
 
 
-# 객체 이동(placement)의 **정준 배치**: 축별로 grid 랜드마크(위/아래·좌/우 모서리)에 정렬하거나 제자리.
-# few-shot 좌표식 탐색은 우연 상수(4+ac, 7-w…)로 과적합하기 쉬워, 사용자 설계(2026-07-15)대로
-# "output object 를 비교해 그 위치의 불변(우하단이 grid 코너와 정렬)을 찾는" 것을 직접 구현한다:
-# 각 축의 앵커(모서리)를 grid 경계/제자리에 맞춰 보고 train 전 pair 를 재현하는 조합을 채택.
-#   fn(atoms) = 그 앵커가 놓일 좌표. (H-1=아래끝·W-1=오른끝·0=위/왼끝·r0/c0=제자리)
-_ROW_ANCHORS = [("keep", "min", lambda a: a["r0"]), ("top", "min", lambda a: 0),
-                ("bottom", "max", lambda a: a["H"] - 1)]
-_COL_ANCHORS = [("keep", "min", lambda a: a["c0"]), ("left", "min", lambda a: 0),
-                ("right", "max", lambda a: a["W"] - 1)]
-
-
-def _place_canonical_fn(sfn, redge, rtgt, cedge, ctgt):
-    """(선택자, row 앵커모서리·목표, col 앵커모서리·목표) → fn(grid): 객체의 그 모서리를 목표에 맞춰 이동."""
-    def fn(g):
-        cells = sfn(_components(g))
-        if cells is None:
-            return None
-        a = _obj_atoms(cells, g)
-        rs = [r for r, _ in cells]; cs = [c for _, c in cells]
-        src_r = min(rs) if redge == "min" else max(rs)
-        src_c = min(cs) if cedge == "min" else max(cs)
-        dr, dc = rtgt(a) - src_r, ctgt(a) - src_c
-        W = len(g[0])
-        return [(r + dr) * W + (c + dc) for (r, c) in cells]
-    return fn
+# 객체 이동(placement)의 **앵커-Δ 좌표문법**: dest 셀집합의 앵커(min r, min c) 를 좌표식 문법
+# (_axis_matches/_COORD_TEMPLATES, §180-184 의 자유조합 brute-force) 로 그대로 resolve 한다 — pixel
+# src slot(resolve_slot 하단)과 동일한 탐색을 앵커 좌표 1점에 적용해 relative(r0+2)·absolute(0,H-1)·
+# corner(H-h,W-w) 를 **한 문법에서 창발**시킨다. 손으로 만든 named 앵커(keep/top/bottom, 2026-07-15
+# 설계)는 이제 이 문법의 특수사례로 흡수되어 폐기(DEPRECATED, Task4 M-1) — 우연 상수 과적합은
+# tier(_axis_tier: 객체위치>객체크기>격자>상수) 로 억제한다.
 
 
 def _resolve_cellset(vals, train, comps, sels):
-    """cellset slot → (survivors, tried). 셀집합 = 어떤 input object 를 이동한 것. §P5: output 좌표 직접 안 씀.
-    선택자로 고른 input object 의 모양이 셀집합과 **평행이동으로 일치**하면, 축별 정준 앵커(grid 모서리/제자리)
-    조합 중 train 전 pair 를 재현하는 것을 채택(우하단 코너 등이 여기서 창발). train 으로만 검증."""
+    """cellset slot → (survivors, tried). 소스객체(selector·모양평행이동 일치) 를 dest 로 강체 이동.
+    dest 앵커(min r,min c)를 좌표문법(_axis_matches)으로 resolve → relative/absolute/corner 통합. §P5."""
     N = len(vals)
-    dests = []                                            # pair 별 dest 셀 (r,c)
+    dests = []
     for i in range(N):
         W = len(train[i]["input"][0])
         dests.append(sorted((idx // W, idx % W) for idx in vals[i]))
+    dest_anchor = [(min(r for r, _ in d), min(c for _, c in d)) for d in dests]  # (dr0, dc0) per pair
     keyed, tried = [], []
     for si, (sname, sfn) in enumerate(sels):
         objs = [sfn(comps[i]) for i in range(N)]
@@ -366,34 +347,42 @@ def _resolve_cellset(vals, train, comps, sels):
             sr, sc = min(r for r, _ in src), min(c for _, c in src)
             dr, dc = min(r for r, _ in d), min(c for _, c in d)
             if sorted((r - sr, c - sc) for r, c in src) != sorted((r - dr, c - dc) for r, c in d):
-                ok_shape = False; break                    # 모양(평행이동 불변) 불일치 → 이 객체론 설명 불가
+                ok_shape = False; break                        # 모양(평행이동 불변) 불일치
             atoms.append(_obj_atoms(objs[i], train[i]["input"]))
         if not ok_shape:
-            tried.append((f"place@{sname}: 모양 불일치", False)); continue
-        for rname, redge, rtgt in _ROW_ANCHORS:
-            for cname, cedge, ctgt in _COL_ANCHORS:
-                ok = True
-                for i in range(N):
-                    cells = sorted(objs[i]); a = atoms[i]
-                    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
-                    sr = min(rs) if redge == "min" else max(rs)
-                    sc = min(cs) if cedge == "min" else max(cs)
-                    dr, dc = rtgt(a) - sr, ctgt(a) - sc
-                    if sorted((r + dr, c + dc) for (r, c) in cells) != dests[i]:
-                        ok = False; break
-                if not ok:
-                    continue
-                nkeep = (rname != "keep") + (cname != "keep")   # 제자리(identity) 를 이동보다 우선
-                name = f"place[{rname},{cname}]@{sname}"
-                keyed.append(((nkeep, si, len(name)), name,
-                              _place_canonical_fn(sfn, redge, rtgt, cedge, ctgt)))
+            tried.append((f"move@{sname}: 모양 불일치", False)); continue
+        r_hits, r_tr = _axis_matches(atoms, dest_anchor, 0)    # dest 앵커 행식
+        c_hits, c_tr = _axis_matches(atoms, dest_anchor, 1)    # dest 앵커 열식
+        if not r_hits or not c_hits:
+            tried.append((f"move@{sname}: 앵커식 없음", False)); continue
+        for rn, rf, rd in r_hits:
+            for cn, cf, cd in c_hits:
+                name = f"move({rn},{cn})@{sname}"
+                key = (_axis_tier(rn, 0) + _axis_tier(cn, 1), rd + cd, si, len(name))
+                keyed.append((key, name, _translate_obj_fn(sfn, rf, cf)))
     keyed.sort(key=lambda t: t[0])
     for _k, name, fn in keyed[:_MATCH_CAP]:
         tried.append((name, True))
     survivors = [(name, fn) for _k, name, fn in keyed[:_MATCH_CAP]]
     if not survivors:
-        tried.append(("<no canonical placement>", False))
+        tried.append(("<no anchor-delta>", False))
     return survivors, tried
+
+
+def _translate_obj_fn(sfn, rf, cf):
+    """(선택자, 앵커행식, 앵커열식) → fn(grid): 소스객체를 (rf,cf) 앵커로 강체 이동한 cells(idx)."""
+    def fn(g):
+        cells = sfn(_components(g))
+        if cells is None:
+            return None
+        a = _obj_atoms(cells, g)
+        tr, tc = rf(a), cf(a)
+        if tr is None or tc is None:
+            return None
+        sr = min(r for r, _ in cells); sc = min(c for _, c in cells)
+        W = len(g[0])
+        return [(r - sr + tr) * W + (c - sc + tc) for (r, c) in cells]
+    return fn
 
 
 def resolve_slot(slot, train):
