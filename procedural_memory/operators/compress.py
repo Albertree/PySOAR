@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import json
 from arbor.reasoning.antiunify import parse_program
-from arbor.reasoning.program_ast import as_source, program, step, cellset, const
+from arbor.reasoning.program_ast import (as_source, program, step, cellset, const,
+    set_grid_size, set_grid_color, set_grid_contents, contents_program)
 
 
 def _blobs(cells_colored, W):
@@ -35,18 +36,50 @@ def _blobs(cells_colored, W):
     return blobs
 
 
-def _blob_program(code, W):
-    """pixel program(AST-json|legacy) → blob(object-level) AST-json. 압축 불가(파싱 실패)면 None."""
-    ops = parse_program(as_source(code))                  # as_source: AST-json → flat pixel → ops[(idx,col)]
+def _blob_program(code, W, predicate="color"):
+    """pixel program(AST-json|legacy) → blob(object-level) AST-json.
+    grid>pixel 이면 inner contents 만 blob화하고 size/color leaf 보존. 압축 불가면 None."""
+    from arbor.reasoning.program_ast import _is_grid_body
+    try:
+        ast = json.loads(code) if code and code.lstrip().startswith("{") else None
+    except (ValueError, TypeError):
+        ast = None
+    if ast and _is_grid_body(ast.get("body") or []):
+        parts = {s["call"]: s["args"] for s in ast["body"]}
+        cleaf = parts["set_grid_contents"]["contents"]
+        inner = (cleaf.get("program") or {}).get("body") if "program" in cleaf else None
+        if not inner:
+            return None
+        ops = [(t["args"]["target"]["index"]["const"], t["args"]["color"]["const"])
+               for t in inner if t["args"]["target"].get("ref") == "pixel"]
+        if len(ops) != len(inner):
+            return None
+        blob_body = _blob_body(ops, W, predicate)
+        if blob_body is None:
+            return None
+        new = dict(parts)
+        new_contents = set_grid_contents(contents_program(blob_body))
+        body = [set_grid_size(parts["set_grid_size"]["size"]),
+                set_grid_color(parts["set_grid_color"]["color"]),
+                new_contents]
+        return json.dumps(program(body))
+    # ── 기존 flat pixel 경로 (변경 없음) ──
+    ops = parse_program(as_source(code))
     if not ops:
         return None
+    blob_body = _blob_body(ops, W, predicate)
+    return json.dumps(program(blob_body)) if blob_body else None
+
+
+def _blob_body(ops, W, predicate="color"):
+    """(idx,color) 목록 → blob step 리스트. Task 4 에서 predicate 분기; 여기선 color(연결성) 기본."""
     blobs = _blobs(ops, W)
-    blobs.sort(key=lambda b: b[0][0])                     # 첫 셀 순 (pair 간 정렬 안정)
+    blobs.sort(key=lambda b: b[0][0])
     body = []
     for (cells, col) in blobs:
         idxs = [r * W + c for (r, c) in cells]
         body.append(step("coloring", target=cellset(const(idxs)), color=const(col)))
-    return json.dumps(program(body))
+    return body if body else None
 
 
 def _op_compress(ag):
