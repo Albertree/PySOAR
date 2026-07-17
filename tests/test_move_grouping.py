@@ -147,3 +147,17 @@ class TestCornerPrior(unittest.TestCase):
         self.assertTrue(survivors, f"no survivor; tried={tried}")
         self.assertIn("H-h", survivors[0][0])                 # 코너 구조식 우선(상수 아님)
         self.assertIn("W-w", survivors[0][0])
+
+
+class TestObjectMoveProgram(unittest.TestCase):
+    """대응 기반 전체-객체 복원: 객체가 원위치와 겹쳐 이동해도 잔여(부분)가 아니라 전체 객체를 잡는다."""
+    def test_full_object_recovered_on_overlap(self):
+        # 3x4, 2셀 객체 (0,0),(0,1) → +1col (0,1),(0,2). 겹침 (0,1). 잔여는 [0],[2] 뿐이나 전체는 [0,1],[1,2].
+        g0 = [[3, 3, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        g1 = [[0, 3, 3, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        prog = CG._object_move_program(g0, g1, 4)
+        self.assertIsNotNone(prog)
+        inner = json.loads(prog)["body"][2]["args"]["contents"]["program"]["body"]
+        cellsets = [sorted(s["args"]["target"]["cells"]["const"]) for s in inner]
+        self.assertIn([0, 1], cellsets)                       # 전체 source 객체 (부분 [0] 아님)
+        self.assertIn([1, 2], cellsets)                       # 전체 dest 객체 (부분 [2] 아님)
