@@ -17,6 +17,32 @@ from arbor.reasoning.antiunify import compressible
 from arbor.reasoning.program_ast import antiunify_ast, as_source
 
 
+def _all_pixel_residual(asts):
+    """모든 ast 가 grid>pixel(contents=nested pixel coloring) 인가 — 아직 blob 화 전(낱개 픽셀 잔여)."""
+    from arbor.reasoning.program_ast import _is_grid_body
+    if not asts:
+        return False
+    for a in asts:
+        body = a.get("body") or []
+        if not _is_grid_body(body):
+            return False
+        inner = None
+        for s in body:
+            if s.get("call") == "set_grid_contents":
+                leaf = s["args"]["contents"]
+                inner = (leaf.get("program") or {}).get("body") if "program" in leaf else None
+        if not (inner and all(x["args"]["target"].get("ref") == "pixel" for x in inner)):
+            return False
+    return True
+
+
+def _train_all_moves(ag):
+    """모든 train pair 가 객체 이동(같은 모양·색·다른 위치)을 포함하는가 (대응 존재 여부)."""
+    from procedural_memory.operators.compress import _object_moves
+    train = ag.task.get("train") or []
+    return bool(train) and all(_object_moves(e["input"], e["output"]) for e in train)
+
+
 def _op_generalize(ag):
     sid = ag.stack[-1].id
     root = ag.kg.get("arckg_root")
@@ -38,6 +64,13 @@ def _op_generalize(ag):
             continue
         if ast and ast.get("body"):
             asts.append(ast)
+    # ── 이동 preempt (mism 무관): grid>pixel 낱개-픽셀 잔여인데 train 이 객체 이동이면, per-pixel
+    #    anti-unify(강체 이동을 못 잡아 과적합; move000g/i/m/p) 대신 compress(전체객체 복원)로 라우팅.
+    #    한 번만(compressed 가드). 이동 아니면(대응 없음) 기존 per-pixel 경로 유지.
+    if (not ag.wm.contains(sid, "compressed", "yes")
+            and _all_pixel_residual(asts) and _train_all_moves(ag)):
+        ag.wm.add(sid, "needs-compress", "yes")
+        return
     sk, slots = antiunify_ast(asts)
     if sk is None:                                        # 구조 불일치/부족
         # op 수 불일치(객체 크기 차이 등)면 정직히 포기하기 전에 compress(덩어리화) 를 신호한다.
