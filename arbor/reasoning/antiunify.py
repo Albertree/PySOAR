@@ -539,7 +539,12 @@ def resolve_slot(slot, train):
 
 # ── 실행 + version space ─────────────────────────────────────────────────────
 def solution_candidates(sol, limit=3):
-    """resolved version space 곱 → [(label, choice{name:fn})] (≤limit; few-shot 애매성=3-attempt)."""
+    """resolved version space → [(label, choice{name:fn})] (≤limit; few-shot 애매성=3-attempt).
+
+    **선택자-일관 우선(사용자 2026-07-18):** 한 mover 를 가리키는 슬롯들(cellset·color)은 **같은 선택자**를
+    써야 한다. 그래서 각 COMM 선택자(shape#·size=·color=…)를 **하나의 가설로 통째** 시도한다 — anchor 변형을
+    product 로 돌려 3-try 를 소진하지 않게. 우선순위: **속성값 일치(색·크기·모양)** 먼저, **관계 극값
+    (smallest/largest = DIFF 분해)** 나중. 남으면 기존 product fallback."""
     slots, resolved = sol["slots"], sol.get("resolved") or {}
     names = list(slots.keys())
     if not names:
@@ -547,11 +552,34 @@ def solution_candidates(sol, limit=3):
     pools = [resolved.get(n) or [] for n in names]
     if any(not pool for pool in pools):
         return []
-    out = []
-    for combo in itertools.product(*pools):
-        choice = {names[i]: combo[i][1] for i in range(len(names))}
-        label = ", ".join(f"{names[i]}={combo[i][0]}" for i in range(len(names)))
-        out.append((label, choice))
+    out, seen = [], set()
+
+    def _sel(nm):                                   # survivor 이름의 @선택자 ("..@size=4"→"size=4"), 없으면 None
+        return nm.rsplit("@", 1)[1] if "@" in nm else None
+
+    def _emit(combo):
+        key = tuple(id(fn) for _, fn in combo)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append((", ".join(f"{names[i]}={combo[i][0]}" for i in range(len(names))),
+                    {names[i]: combo[i][1] for i in range(len(names))}))
+
+    all_sels = []                                   # 등장 선택자 (중복 제거, 순서 보존)
+    for pool in pools:
+        for nm, _ in pool:
+            s = _sel(nm)
+            if s and s not in all_sels:
+                all_sels.append(s)
+    # 속성값 일치(관계 극값 아님) 를 먼저. stable → 그 안에서는 등장순서(=선택자 우선순위) 유지.
+    all_sels.sort(key=lambda s: s in ("smallest", "largest"))
+    for s in all_sels:                              # 각 COMM 선택자 = 슬롯 전체 일관 조합 하나
+        combo = [next(((nm, fn) for nm, fn in pool if _sel(nm) == s), pool[0]) for pool in pools]
+        _emit(combo)
+        if len(out) >= limit:
+            return out
+    for combo in itertools.product(*pools):         # fallback: 기존 곱(선택자 없는 슬롯·잔여 조합)
+        _emit(combo)
         if len(out) >= limit:
             break
     return out
