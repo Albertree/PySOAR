@@ -424,6 +424,17 @@ def _resolve_cellset(vals, train, comps, sels):
             br = dbr[0][0]; cr.append((f"BR={br}", (lambda a, br=br: br - a["h"] + 1), -1))
         if len({t[1] for t in dbr}) == 1:
             bc = dbr[0][1]; cc.append((f"BR={bc}", (lambda a, bc=bc: bc - a["w"] + 1), -1))
+        # relative(상대이동): dest 앵커 − source 앵커 = Δ(offset). 전 pair 상수면 "source + Δ" — 좌표 DIFF
+        # 아래 숨은 COMM(사용자: output↔input 객체를 비교해 DIFF 세부에서 공통을 도출). keep(Δ=0) 일반화.
+        # **tier -3 = 최우선**: Δ 는 실제 이동을 O↔O' 비교로 직접 도출한 것이라, 우연히 맞는 구조식(모서리
+        # 0·코너 H-h·상수)보다 신뢰. (예 ak: source col 이 train 서 우연히 0 이라 '왼끝0'이 keep 과 동률
+        # 이던 것을 Δ=0→c0 로 확정해 test 일반화.)
+        dr = {dest_anchor[i][0] - atoms[i]["r0"] for i in range(N)}
+        dc = {dest_anchor[i][1] - atoms[i]["c0"] for i in range(N)}
+        if len(dr) == 1:
+            d = next(iter(dr)); cr.append((f"r0{d:+d}", (lambda a, d=d: a["r0"] + d), -3))
+        if len(dc) == 1:
+            d = next(iter(dc)); cc.append((f"c0{d:+d}", (lambda a, d=d: a["c0"] + d), -3))
         for rn, rf, rt in cr:
             for cn, cf, ct in cc:
                 nm = f"move[{rn},{cn}]@{sname}"
