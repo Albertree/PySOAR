@@ -253,17 +253,13 @@ def _shape_key(cells):
 
 
 def _selectors(comps_list):
-    """소스-객체 선택자. 면적순위(기하) + **변화객체 비교로 도출되는 속성 선택자**(색/모양/크기).
-    §4-2: 변형 객체들의 COMM 속성으로 mover 를 고른다. 특정 값이 각 grid 에서 **유일**할 때만(모호 시 None).
+    """소스-객체 선택자 = **변화객체 비교(COMM/DIFF)로 도출**한다. 우선순위:
+      1. 속성값 COMM (색·모양·크기의 특정 값이 각 grid 에서 유일) — '같은 것'으로 바로 해결.
+      2. 크기 **비교** 극값(모두보다 큼/작음 = 유일 최대/최소) — §4-2 요소간 larger_than 비교로 도출.
+         (M2 처럼 '전경 객체 1개'는 '바탕보다 작은 것'=smallest 로, M4/크기 mover 는 largest 로 잡힌다.)
+    §2-2/사용자(2026-07-17): 객체를 **나열해 N번째**를 집는 rank 열거(min/max/#2 메뉴)는 추가 편향이라
+    안 쓴다 — 극값은 나열이 아니라 '모두와 비교' 결과다. #2 류 임의 순위는 제거.
     반환 = [(name, fn(comps)->cells|None)]. resolve 가 train mover 재현하는 선택자만 채택."""
-    def by_rank(j, rev):
-        def pick(comps):
-            if j >= len(comps):
-                return None
-            return sorted(comps, key=lambda cc: (len(cc[0]), cc[0][0]),
-                          reverse=rev)[j][0]
-        return pick
-
     def by_color(c):
         def pick(comps):
             m = [cells for cells, col in comps if col == c]
@@ -282,19 +278,31 @@ def _selectors(comps_list):
             return m[0] if len(m) == 1 else None
         return pick
 
-    sels = [("min_area", by_rank(0, False)), ("max_area", by_rank(0, True)),
-            ("min_area#2", by_rank(1, False)), ("max_area#2", by_rank(1, True))]
+    def by_extreme(largest):
+        # 크기 극값 = 모든 다른 객체와 비교해 더 큼/작음(§4-2 larger_than 프로파일). 유일할 때만(동률=None).
+        def pick(comps):
+            if not comps:
+                return None
+            sizes = sorted(len(c) for c, _ in comps)
+            tgt = sizes[-1] if largest else sizes[0]
+            if len(sizes) >= 2 and (sizes[-1] == sizes[-2] if largest else sizes[0] == sizes[1]):
+                return None                               # 극값이 유일하지 않음(비교로 특정 불가)
+            return next(c for c, _ in comps if len(c) == tgt)
+        return pick
+
+    prop, rel = [], []
     if comps_list:                                        # 전 grid 공통 값만(선택자가 test 에도 성립하려면)
         common_col = set.intersection(*[{col for _, col in cs} for cs in comps_list])
         for c in sorted(common_col):
-            sels.append((f"color={c}", by_color(c)))
+            prop.append((f"color={c}", by_color(c)))
         common_shp = set.intersection(*[{_shape_key(cells) for cells, _ in cs} for cs in comps_list])
         for i, shp in enumerate(sorted(common_shp, key=lambda s: (len(s), sorted(s)))):
-            sels.append((f"shape#{i}", by_shape(shp)))
+            prop.append((f"shape#{i}", by_shape(shp)))
+        rel = [("smallest", by_extreme(False)), ("largest", by_extreme(True))]   # 크기 비교 극값(§4-2)
         common_sz = set.intersection(*[{len(cells) for cells, _ in cs} for cs in comps_list])
         for z in sorted(common_sz):
-            sels.append((f"size={z}", by_size(z)))
-    return sels
+            prop.append((f"size={z}", by_size(z)))
+    return prop + rel                                     # 속성값 COMM 우선, 크기비교 극값은 fallback
 
 
 def _color_of_sel(sfn):
