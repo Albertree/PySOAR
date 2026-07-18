@@ -86,8 +86,9 @@ def _grid_decide(train, paG0):
     desc, val = _size_apply(train, paG0)
     if desc:
         cs.append((f"MAP[{desc}]", val, True)); preds.add(val)
+    dsz, vsz, csz = _resolve_decision(cs)                    # delta-const 우선 해소(§spec #2)
     out["size"] = {"type": "NUMBER", "within": [sz(i) == sz(o) for i, o in pairs],
-                   "cands": cs, "decision": _dec(preds), "value": (next(iter(preds)) if len(preds) == 1 else None)}
+                   "cands": cs, "decision": dsz, "value": vsz, "category": csz}
 
     # ── color (SET) ──
     ci = [_colorset(i) for i in ins]
@@ -105,8 +106,9 @@ def _grid_decide(train, paG0):
     if gm and any(k != v for k, v in gm.items()):
         pc = frozenset(gm.get(v, v) for v in pa)
         cp.append(("MAP", pc, True)); preds.add(pc)
+    dco, vco, cco = _resolve_decision(cp)                    # delta-const 우선 해소(§spec #2)
     out["color"] = {"type": "SET", "within": [a == b for a, b in zip(ci, co)],
-                    "cands": cp, "decision": _dec(preds), "value": (next(iter(preds)) if len(preds) == 1 else None),
+                    "cands": cp, "decision": dco, "value": vco, "category": cco,
                     "map": gm if (gm and any(k != v for k, v in gm.items())) else None}
 
     # ── contents (CLASS) ──
@@ -124,6 +126,28 @@ def _grid_decide(train, paG0):
 
 def _dec(preds):
     return "DESCEND" if len(preds) == 0 else ("DECIDE" if len(preds) == 1 else "AMBIGUOUS")
+
+
+def _cat(kind):
+    """후보 kind → 카테고리: output-const(출력값 일치=CONST) / delta-const(변화 일관=KEEP/MAP/SET-MAP)."""
+    return "output-const" if kind == "CONST" else "delta-const"
+
+
+def _resolve_decision(cands):
+    """valid 후보 중 **delta-const 예측 우선**(구조적 일반화 > 표면 출력일치). 단일 예측 → DECIDE(값),
+    여럿(delta 끼리 갈림) → AMBIGUOUS, 없음 → DESCEND. 반환 (decision, value, category).
+    (delta-const=변화가 pair마다 같음; output-const=출력값 자체가 pair마다 같음. move size 는
+    KEEP(delta)=test입력크기 가 CONST(output)=train출력크기 를 이겨 test 로 올바르게 일반화한다.)"""
+    valid = [(k, v) for k, v, ok in cands if ok]
+    if not valid:
+        return "DESCEND", None, None
+    delta = [(k, v) for k, v in valid if k != "CONST"]
+    pool = delta if delta else valid                         # delta 있으면 delta, 없으면 output(CONST)
+    cat = "delta-const" if delta else "output-const"
+    preds = {v for _, v in pool}
+    if len(preds) == 1:
+        return "DECIDE", next(iter(preds)), cat
+    return "AMBIGUOUS", None, cat
 
 
 def _color_map_search(train):
