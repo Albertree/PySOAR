@@ -48,40 +48,6 @@ class TestSelect(unittest.TestCase):
             self.assertEqual(self._solve(name)["ops"],
                              ["observe", "select", "compose", "submit"])
 
-    def test_fine_trace_is_atomic(self):
-        # every system change is its own step: phases, rule fire/retract, and
-        # individual WME adds are separate events.
-        from arbor.engine.trace import fine_trace
-        import os as _os
-        easy = _os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a/easy000a.json")
-        ev = fine_trace(json.load(open(easy)))
-        kinds = {e["kind"] for e in ev}
-        self.assertIn("phase", kinds)
-        self.assertIn("rule-fire", kinds)
-        self.assertIn("wme-add", kinds)
-        self.assertIn("op-select", kinds)
-        self.assertIn("output", kinds)
-        # each wme-add reports exactly the WME(s) it added: 1 normally; the
-        # observe step bulk-loads the whole ARCKG hierarchy in one event.
-        for e in ev:
-            if e["kind"] == "wme-add" and "WMEs" not in e["label"]:    # bulk loads aside
-                self.assertEqual(len(e["highlight"]), 1)
-        # phases occur in cycle order: input first, output last
-        self.assertEqual(ev[0]["phase"], "input")
-        self.assertEqual(ev[-1]["phase"], "output")
-
-    def test_dashboard_data_well_formed(self):
-        # the dashboard embeds task data with no leftover injection sentinel
-        from debugger.dashboard import task_data, build
-        import os as _os
-        easy = _os.path.expanduser("~/Desktop/ARC-solver/data/ARC_easy_a/easy000a.json")
-        td = task_data("easy000a", json.load(open(easy)))
-        html = build("easy_a", [td])
-        self.assertNotIn("__DATA__", html)         # sentinel replaced
-        self.assertIn('"events"', html)            # data embedded
-        self.assertIn("renderStep", html)          # stepper JS present
-        self.assertGreater(td["n_steps"], 10)      # atomic -> many steps
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

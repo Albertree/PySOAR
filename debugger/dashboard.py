@@ -22,7 +22,6 @@ Usage:  python arc/dashboard.py easy   ->  dashboard.html
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 
@@ -61,20 +60,6 @@ OP_DOCS = {
 }
 
 
-def rules_manifest():
-    from arbor.expr_solver import PRODUCTIONS
-    out = []
-    for p in PRODUCTIONS:
-        out.append({
-            "name": p.name,
-            "if": [{"id": c.id, "attr": c.attr, "val": c.value, "neg": c.negated}
-                   for c in p.conditions],
-            "then": [{"id": a.id, "attr": a.attr, "val": a.value, "pref": a.pref}
-                     for a in p.actions],
-        })
-    return out
-
-
 def wm_deltas(wm_states):
     """dedupe 된 wm_states(각 원소 = 그 시점 full WM triple 리스트)를 base+delta 로 압축한다.
     각 결과 원소 = {"a":[추가 triple], "r":[삭제 triple]} (직전 state 대비). WM 은 단조 증가라
@@ -88,33 +73,6 @@ def wm_deltas(wm_states):
         deltas.append({"a": add, "r": rem})
         prev, prevset = st, curset
     return deltas
-
-
-def task_data(tid, task):
-    from arbor.engine.trace import _Tracer
-    from arbor.expr_solver import candidates
-    # WM 스냅샷은 emit 이 연속중복 병합해 tr._wm_states 로 축소 저장(메모리 폭증 방지) — event 는
-    # wm_state 인덱스만 보유. (구 fine_trace() 는 events 만 주어 _wm_states 접근 불가 → _Tracer 직접.)
-    tr = _Tracer(task, tid)
-    events = tr.run()
-    wm_states = tr._wm_states
-    cands = candidates(task, 3)
-    gt = [tp["output"] for tp in task["test"]]
-    correct_i = next((i for i, c in enumerate(cands) if c["grid"] == gt), None)
-    return {
-        "id": tid, "events": events, "wm_states": wm_deltas(wm_states),
-        "grids": {"train": task["train"],
-                  "test": [{"input": tp["input"]} for tp in task["test"]]},
-        "candidates": [{"answer": c["grid"], "position": c["position"], "color": c["color"]}
-                       for c in cands],
-        "correct_attempt": correct_i, "n_steps": len(events),
-    }
-
-
-def build(dataset, tasks):
-    data = {"dataset": dataset, "tasks": tasks,
-            "rules": rules_manifest(), "op_docs": OP_DOCS}
-    return _HTML.replace("__DATA__", json.dumps(data))
 
 
 # ---------------------------------------------------------------------------
@@ -708,20 +666,3 @@ document.addEventListener('keydown',ev=>{
 });
 renderBrowser();
 </script></body></html>"""
-
-
-def main():
-    from arbor.env.dataset import list_tasks, load_task
-    ds = sys.argv[1] if len(sys.argv) > 1 else "easy"
-    limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    tasks = [task_data(tid, load_task(p)) for tid, p in list_tasks(ds, limit)]
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")
-    with open(out, "w") as f:
-        f.write(build(ds, tasks))
-    solved = sum(1 for t in tasks if t["correct_attempt"] is not None)
-    print(f"wrote {out}  ({len(tasks)} tasks, {solved} solved)")
-    print(f"open it:  open {out}")
-
-
-if __name__ == "__main__":
-    main()
