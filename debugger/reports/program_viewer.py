@@ -881,6 +881,10 @@ function runBody(code, input){
     var mDot = ln.match(/^g\.(size|color|contents)\s*=\s*(.+)$/);   // 객체 속성 대입
     if(mDot){
       if(g===INPUT) g=_cloneObj(INPUT);
+      // size 리터럴 (H, W): display 가 Python 튜플 표기를 찍으므로 evalExpr(new Function)로 넘기면
+      // 콤마연산자로 붕괴(마지막 값 W)해 size 가 숫자가 됨 → mCoord 와 같은 급의 특수 파싱으로 방지.
+      var mSz = (mDot[1]==="size") && mDot[2].match(/^set_grid_size\(\((\d+),\s*(\d+)\)\)$/);
+      if(mSz){ g.size = {height:parseInt(mSz[1],10), width:parseInt(mSz[2],10)}; continue; }
       g[mDot[1]] = evalExpr(mDot[2]);
       continue;
     }
