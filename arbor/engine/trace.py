@@ -56,12 +56,13 @@ def _wstr(t):
 
 
 class _Tracer:
-    def __init__(self, task, tid="0a", setup=None):
+    def __init__(self, task, tid="0a", setup=None, sink=None):
         if setup is None:
             from arbor.expr_solver import setup_arc_agent as setup
         self.ag = setup(task, tid)             # io + the solver's input function
+        from arbor.engine.sink import JournalSink
+        self.sink = sink if sink is not None else JournalSink(self.ag)
         self.task = task
-        self.events = []
         self.cycle = 0
         self._cands: set = set()               # materialised ^operator + WMEs
         # A안(2-사이클 충실 ONC): operator 가 적용됐으나 무변화면 여기에 (name, kind) 를 기록하고
@@ -80,27 +81,17 @@ class _Tracer:
         # (같은 키로 이미 정렬된 데이터의 재정렬 — 매 emit 마다 33M회 비교 오버헤드였다, 2026-07-18).
         return [list(t) for t in self.ag.wm]
 
+    @property
+    def events(self):
+        return self.sink.events
+
+    @property
+    def _wm_states(self):
+        return self.sink._wm_states
+
     def emit(self, phase, kind, label, highlight=None, detail=None, rule=None, wave=None):
-        # 메모리: event 마다 full WM 스냅샷을 들고 있으면 events×WM(대개 WM 수천 WME) 로 곱해져
-        # 큰 격자에서 수십~수백 GB(179GB OOM)까지 커진다. WM 이 안 바뀐 연속 event(대부분의 MATCH/
-        # FIRE/phase step)는 직전 상태 인덱스를 **재사용**하고, 바뀔 때만 새 상태를 push 한다.
-        # → 보관 메모리 = (WM 이 실제 바뀐 횟수)×WM 로 축소. 대시보드는 wm_state 인덱스로 상태를 찾는다.
-        if not hasattr(self, "_wm_states"):
-            self._wm_states, self._last_key, self._last_si = [], None, -1
-        wm = self._wm()
-        key = tuple(tuple(t) for t in wm)
-        if key == self._last_key:
-            si = self._last_si
-        else:
-            si = len(self._wm_states)
-            self._wm_states.append(wm)
-            self._last_key, self._last_si = key, si
-        self.events.append({
-            "seq": len(self.events), "phase": phase, "kind": kind, "label": label,
-            "cycle": self.cycle, "wave": wave, "highlight": highlight or [],
-            "wm_state": si, "goal_stack": [g.id for g in self.ag.stack],
-            "detail": detail, "rule": rule,   # the responsible rule / operator
-        })
+        self.sink.event(phase, kind, label, self.cycle, [g.id for g in self.ag.stack],
+                        highlight=highlight, detail=detail, rule=rule, wave=wave)
 
     def _sync_candidates(self):
         """Keep the acceptable-preference WMEs (goal ^operator <o> +) in sync with
