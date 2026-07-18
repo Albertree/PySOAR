@@ -225,9 +225,9 @@ class TestEmitAst(unittest.TestCase):
     def test_pixel_residual_emits_ast_json_that_rendersback(self):
         from arbor.reasoning.program import _pixel_residual_program
         g0 = [[0, 0], [0, 0]]
-        g1 = [[0, 3], [0, 0]]                       # index 1 → color 3
+        g1 = [[0, 3], [0, 0]]                       # (row0,col1) → color 3
         out = _pixel_residual_program(g0, g1)
         import json
-        ast = json.loads(out)                       # 이제 AST-json 이어야
-        self.assertEqual(P.ops_of_ast(ast), [(1, 3)])
-        self.assertIn("apply_DSL(tfg0, coloring, P0.coord, 3)", P.as_source(out))
+        ast = json.loads(out)                       # 이제 AST-json 이어야 (Task4: 리터럴 coord)
+        self.assertEqual(P.ops_of_ast(ast), [((0, 1), 3)])
+        self.assertIn("apply_DSL(tfg0, coloring, (0, 1), 3)", P.as_source(out))

@@ -245,6 +245,6 @@ def _pixel_residual_program(g0, g1):
     from arbor.reasoning import program_ast as PA
     H, W = len(g0), len(g0[0])
     changed = [(r, c) for r in range(H) for c in range(W) if g0[r][c] != g1[r][c]]
-    body = [PA.step("coloring", target=PA.ref("pixel", PA.const(r * W + c)), color=PA.const(g1[r][c]))
+    body = [PA.step("coloring", target=PA.ref("coord", PA.const([r, c])), color=PA.const(g1[r][c]))
             for (r, c) in changed]
     return json.dumps(PA.program(body))

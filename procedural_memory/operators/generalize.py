@@ -31,7 +31,7 @@ def _all_pixel_residual(asts):
             if s.get("call") == "set_grid_contents":
                 leaf = s["args"]["contents"]
                 inner = (leaf.get("program") or {}).get("body") if "program" in leaf else None
-        if not (inner and all(x["args"]["target"].get("ref") == "pixel" for x in inner)):
+        if not (inner and all(x["args"]["target"].get("ref") in ("pixel", "coord") for x in inner)):
             return False
     return True
 

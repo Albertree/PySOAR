@@ -46,7 +46,11 @@ def _op_coloring(ag):
             if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
                 grid = coloring(grid, (r, c), g1col)
         ag.wm.add(xid, "applied", "yes")
-        body.append(PA.step("coloring", target=PA.ref(level, PA.const(g0i)), color=PA.const(g1col)))
+        if level == "pixel":
+            (rr, cc) = g0c[0]
+            body.append(PA.step("coloring", target=PA.ref("coord", PA.const([rr, cc])), color=PA.const(g1col)))
+        else:
+            body.append(PA.step("coloring", target=PA.ref(level, PA.const(g0i)), color=PA.const(g1col)))
     ast = PA.program(body)
     ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
     ag.wm.add(sid, "program-code", json.dumps(ast))

@@ -50,8 +50,15 @@ def _blob_program(code, W, predicate="color"):
         inner = (cleaf.get("program") or {}).get("body") if "program" in cleaf else None
         if not inner:
             return None
-        ops = [(t["args"]["target"]["index"]["const"], t["args"]["color"]["const"])
-               for t in inner if t["args"]["target"].get("ref") == "pixel"]
+        W_ = W
+        ops = []
+        for t in inner:
+            tg = t["args"]["target"]
+            if tg.get("ref") == "pixel":
+                ops.append((tg["index"]["const"], t["args"]["color"]["const"]))
+            elif tg.get("ref") == "coord":
+                r_, c_ = tg["index"]["const"]
+                ops.append((r_ * W_ + c_, t["args"]["color"]["const"]))
         if len(ops) != len(inner):
             return None
         blob_body = _blob_body(ops, W, predicate)

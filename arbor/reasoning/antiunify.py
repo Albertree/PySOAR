@@ -465,8 +465,9 @@ def resolve_slot(slot, train, test_input=None):
         return survivors, tried
 
     # --- src / 픽셀 인덱스 slot: 선택자 × 좌표식 자유조합 ---
-    targets = [(vals[i] // len(train[i]["input"][0]), vals[i] % len(train[i]["input"][0]))
-               for i in range(N)]
+    def _rc(v, W):
+        return (tuple(v) if isinstance(v, (list, tuple)) else (v // W, v % W))
+    targets = [_rc(vals[i], len(train[i]["input"][0])) for i in range(N)]
     keyed = []                                         # (정렬키, name, fn) — 최선 조합이 앞
     for si, (sname, sfn) in enumerate(sels):
         atoms, ok_sel = [], True
