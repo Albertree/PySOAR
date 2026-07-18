@@ -36,7 +36,7 @@ def _is_cellset_body(body):
 
 
 def _is_pixel_body(body):
-    return bool(body) and all(s["args"]["target"].get("ref") == "pixel" for s in body)
+    return bool(body) and all(s["args"]["target"].get("ref") in ("pixel", "coord") for s in body)
 
 
 # ── grid-property 생성자 (G1 = set_grid_size ∘ set_grid_color ∘ set_grid_contents) ──
@@ -176,6 +176,8 @@ def _contents_program_src(body):
             cl = tgt["cells"]
             cells = str(cl["const"]) if "const" in cl else _leaf_src(cl)
             parts.append(f"coloring(cellset={cells}, color={col})")
+        elif tgt.get("ref") == "coord":
+            parts.append(f"coloring({tuple(tgt['index']['const'])}, color={col})")
         else:
             parts.append(f"coloring({tgt.get('ref')}[{_leaf_src(tgt['index'])}], color={col})")
     return " ∘ ".join(parts) if parts else "identity"
@@ -280,6 +282,14 @@ def _execute_pixel_body(body, grid_in, choice):
                 if 0 <= r < H and 0 <= c < W:
                     grid[r][c] = col
             continue
+        if tgt.get("ref") == "coord":                       # 리터럴 좌표 (r,c) 직접
+            pos = _leaf_value(tgt["index"], grid_in, choice)
+            if pos is None or col is None:
+                continue
+            r, c = pos
+            if 0 <= r < H and 0 <= c < W:
+                grid[r][c] = col
+            continue
         ix = _leaf_value(tgt["index"], grid_in, choice)      # pixel/object
         if ix is None or col is None:
             continue
@@ -373,6 +383,8 @@ def ops_of_ast(ast):
         else:
             idx_leaf = tgt["index"]
             idx = idx_leaf.get("const") if "const" in idx_leaf else None
+            if isinstance(idx, list):                        # coord [r,c] → 해시가능 튜플 키
+                idx = tuple(idx)
             ops.append((idx, col))
     return ops
 
@@ -475,7 +487,10 @@ def _antiunify_ast_pixel(asts):
             slots[f"?src{i}"] = {"kind": "src", "pos": i, "values": idxs}
         if sk_col is None:
             slots[f"?color{i}"] = {"kind": "color", "pos": i, "values": cols}
-        body.append(step("coloring", target=ref("pixel", idx_leaf), color=col_leaf))
+        if isinstance(sk_idx, tuple):                        # coord 입력 → coord 스켈레톤(리터럴 유지)
+            body.append(step("coloring", target=ref("coord", const(list(sk_idx))), color=col_leaf))
+        else:
+            body.append(step("coloring", target=ref("pixel", idx_leaf), color=col_leaf))
     return program(body, slots=slots), slots
 
 
