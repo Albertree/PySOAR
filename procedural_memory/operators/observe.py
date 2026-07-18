@@ -110,15 +110,24 @@ def _build_agenda(ag, sid, group):
         # PIXEL: GRID.pixels 를 G0·G1 로 나눠 **G0-pixels ↔ G1-pixels 교차 비교**(cross-grid 우선 —
         # grid 내부 pixel 끼리보다). object match 와 동형, 단위만 pixel. 같은 좌표끼리 kg_compare →
         # color/coord COMM/DIFF 만(**delta·크기비교 없음**; 좌표차 표현은 별도 단계). (사용자 2026-07-10)
+        # (Task 1, 2026-07-19) focus group 의 pixel 만 쓰면 pxmatch 가 **그 pair 하나**로 묶인다 — grid
+        # `within` 분기처럼 idx 구조에서 **G0·G1 둘 다 있는 모든 train pair** 를 찾아 pair 마다 하나씩
+        # 깐다. idx["pixels"] 에 모든 pair 의 pixel 이 이미 있고 `_compare_pixels` 가 focus 와 무관하게
+        # idx 를 직접 읽으므로, focus 확장 없이 그 pair 의 g0/g1 grid id 만 넘기면 된다.
         bygrid = {}
         for px in group:
             bygrid.setdefault(par[px], []).append(px)           # pixel → 그 GRID
-        grids = sorted(bygrid)                                   # [G0, G1] (같은 pair)
-        if len(grids) >= 2:
-            g0, g1 = grids[0], grids[1]
-            cid = f"{sid}.cmp:pxmatch"
+        bypair = {}
+        for g in bygrid:
+            bypair.setdefault(par[g], []).append(g)             # GRID → 그 PAIR
+        train = sorted(p for p, gs in bypair.items() if len(gs) >= 2)   # G0·G1 다 있는 훈련 pair
+        order = 0
+        for p in train:
+            g0, g1 = sorted(bypair[p])
+            cid = f"{sid}.cmp:pxmatch.{p.split('.')[-1]}"
             ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1)
-            specs.append((cid, "pxmatch", 0))
+            specs.append((cid, "pxmatch", order)); order += 1
+        if train:
             ag.wm.add(sid, "to-hypothesize", "yes")             # pxmatch 끝나면 hypothesize(PIXEL) 발화
     for cid, k, order in specs:
         ag.wm.add(sid, "cmp", cid)                       # 계층 아래 비교 목록(선언적)
