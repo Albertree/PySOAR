@@ -31,12 +31,13 @@ def clear_cache():
         shutil.rmtree(_CACHE_DIR)
 
 
-def run_solve(tid, task, max_cycles=500, use_cache=True):
+def run_solve(tid, task, max_cycles=500, use_cache=True, mode="debug"):
     """태스크를 solve(또는 캐시 로드)해 {events, wm, wm_states, attempts, error} 반환.
     dashboard(_dash_data)·program report(_collect) 가 이 하나를 공유한다(솔버 1회).
-    캐시 히트 = 같은 task 해시 + 같은(이상) max_cycles → 솔버 재실행 없음."""
+    캐시 히트 = 같은 task 해시 + 같은(이상) max_cycles → 솔버 재실행 없음.
+    mode='score' → NullSink(방출·스냅샷 0, attempts 만) / 'debug' → JournalSink+Renderer."""
     h = _task_hash(task)
-    cf = os.path.join(_CACHE_DIR, f"{tid}.pkl")
+    cf = os.path.join(_CACHE_DIR, f"{tid}.{mode}.pkl")
     if use_cache and os.path.exists(cf):
         try:
             c = pickle.load(open(cf, "rb"))
@@ -46,15 +47,19 @@ def run_solve(tid, task, max_cycles=500, use_cache=True):
             pass
     from arbor.engine.trace import _Tracer
     from arbor.agent.focus import setup_focus_agent
-    tr = _Tracer(task, tid, setup=setup_focus_agent)
-    events = tr.run(max_cycles=max_cycles)                 # 예외는 호출측(_safe_dash_data)이 격리
-    result = {
-        "events": events,
-        "wm": [list(t) for t in tr.ag.wm],                 # [(id, attr, value), ...]
-        "wm_states": tr._wm_states,
-        "attempts": tr.attempts,
-        "error": None,
-    }
+    if mode == "score":
+        from arbor.engine.sink import NullSink
+        tr = _Tracer(task, tid, setup=setup_focus_agent, sink=NullSink())
+        tr.run(max_cycles=max_cycles)
+        result = {"events": [], "wm": [list(t) for t in tr.ag.wm],
+                  "wm_states": [], "attempts": tr.attempts, "error": None}
+    else:
+        tr = _Tracer(task, tid, setup=setup_focus_agent)     # JournalSink 기본
+        tr.run(max_cycles=max_cycles)
+        # tr.events/tr._wm_states = lazy render+memoize(Task 3) → 단일 render 재사용
+        # (render(tr.sink) 직접 호출은 run() 의 return self.events 가 이미 튕긴 render 와 겹쳐 이중 render).
+        result = {"events": tr.events, "wm": [list(t) for t in tr.ag.wm],
+                  "wm_states": tr._wm_states, "attempts": tr.attempts, "error": None}
     if use_cache:
         try:
             os.makedirs(_CACHE_DIR, exist_ok=True)
