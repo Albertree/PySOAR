@@ -112,7 +112,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `arbor/engine/sink.py`
-- Create: `tests/fixtures/engine_golden.json`
+- Create: `tests/fixtures/engine_golden.pkl` (pickle — WM 의 grid 튜플이 JSON 라운드트립에서 list 로 깨지는 것 방지, solve_cache 와 동일 이유)
 - Modify: `arbor/engine/trace.py` (`_Tracer.__init__`, `emit`, `run` 반환)
 - Test: `tests/test_engine_renderer.py`
 
@@ -125,40 +125,40 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: golden 캡처(리팩터 전 코드로) + 커밋**
 
-`tests/fixtures/` 없으면 만들고, 아래 스크립트를 1회 실행해 fixture 생성:
+`tests/fixtures/` 없으면 만들고, 아래 스크립트를 1회 실행해 fixture 생성(pickle — 튜플 보존):
 ```bash
 mkdir -p tests/fixtures
 PYTHONHASHSEED=0 python -c "
-import json, sys; sys.path.insert(0,'.')
+import pickle, sys; sys.path.insert(0,'.')
 from arbor.env.dataset import list_tasks, load_task
 from debugger.solve_cache import run_solve
-sel = [('easy_a', list_tasks('easy_a')[0]), ('move', list_tasks('move')[0]),
-       ('move', list_tasks('move')[1])]
+sel = [list_tasks('easy_a')[0], list_tasks('move')[0], list_tasks('move')[1]]
 out = {}
-for ds,(tid,p) in sel:
+for tid,p in sel:
     r = run_solve(tid, load_task(p), max_cycles=500, use_cache=False)
     out[tid] = {'events': r['events'], 'wm_states': r['wm_states']}
-json.dump(out, open('tests/fixtures/engine_golden.json','w'))
+pickle.dump(out, open('tests/fixtures/engine_golden.pkl','wb'))
 print('golden tids:', list(out))
 "
 ```
 Expected 출력: `golden tids: ['<easy_a id>', 'move000a', 'move000b']`
 ```bash
-git add tests/fixtures/engine_golden.json
+git add -f tests/fixtures/engine_golden.pkl
 git commit -m "test(engine): 리팩터 전 events/wm_states golden 고정(easy_a·move000a·move000b)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
+(`git add -f` — `tests/fixtures/` 가 .gitignore 대상일 수 있어 강제 추가. 아니면 `-f` 무해.)
 
 - [ ] **Step 2: 특성화 테스트 작성(지금 green, 리팩터 내내 유지)**
 
 `tests/test_engine_renderer.py`:
 ```python
-import json, os
+import os, pickle
 from arbor.env.dataset import list_tasks, load_task
 from debugger.solve_cache import run_solve
 
-_GOLD = json.load(open(os.path.join(os.path.dirname(__file__), "fixtures", "engine_golden.json")))
+_GOLD = pickle.load(open(os.path.join(os.path.dirname(__file__), "fixtures", "engine_golden.pkl"), "rb"))
 _PATHS = {tid: p for ds in ("easy_a", "move") for tid, p in list_tasks(ds)}
 
 
