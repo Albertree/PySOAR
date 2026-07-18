@@ -18,7 +18,7 @@
 
 ---
 
-### Task A1: 죽은 import 제거 (동작 0변경)
+### Task 1: 죽은 import 제거 (동작 0변경)
 
 **Files:** Modify `arbor/engine/trace.py`, `arbor/reasoning/program_ast.py`
 
@@ -35,7 +35,7 @@
 
 ---
 
-### Task A2: 옛 대시보드(task_data/build/main) 은퇴 + test_select 레거시부
+### Task 2: 옛 대시보드(task_data/build/main) 은퇴 + test_select 레거시부
 
 **Files:** Modify `debugger/dashboard.py`, `tests/test_select.py`
 
@@ -52,7 +52,7 @@
 
 ---
 
-### Task A3: tracer 기본 setup 제거(setup 필수화)
+### Task 3: tracer 기본 setup 제거(setup 필수화)
 
 **Files:** Modify `arbor/engine/trace.py`
 
@@ -66,7 +66,7 @@
 
 ---
 
-### Task A4: expr_solver 레거시 블록 제거(build_arckg 3종만 남김)
+### Task 4: expr_solver 레거시 블록 제거(build_arckg 3종만 남김)
 
 **Files:** Modify `arbor/expr_solver.py`; Modify `legacy/run.py`(있으면, A6서 삭제 예정이라 최소), `tests/test_seokki_relations.py`, `tests/test_dsl.py`
 
@@ -84,7 +84,7 @@
 
 ---
 
-### Task A5: helpers.py + make_grid + set_grid_size(DSL) 제거
+### Task 5: helpers.py + make_grid + set_grid_size(DSL) 제거
 
 **Files:** Delete `procedural_memory/dsl/helpers.py`; Modify `procedural_memory/dsl/transformation/__init__.py`, `tests/test_grid_program.py`, `tests/test_dsl.py`(삭제), doc mirrors
 
@@ -104,7 +104,7 @@
 
 ---
 
-### Task A6: legacy/ 디렉터리 삭제 + 의존 테스트 은퇴
+### Task 6: legacy/ 디렉터리 삭제 + 의존 테스트 은퇴
 
 **Files:** Delete `legacy/` (dir); Delete `tests/test_arc.py`, `tests/test_soar_solver.py`, `tests/test_unified.py`
 
