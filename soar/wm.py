@@ -32,6 +32,7 @@ class WorkingMemory:
         self._sorted: "list[Triple] | None" = None   # 결정적 반복순서 캐시(§2-6); add/remove 시 무효화
         self._idx_id: "dict[str, list[Triple]] | None" = None    # id -> 정렬 버킷(matching 인덱스)
         self._idx_attr: "dict[str, list[Triple]] | None" = None  # attr -> 정렬 버킷
+        self.journal: "list | None" = None       # debug 시 JournalSink 가 붙임; None=headless(무비용)
 
     def _invalidate(self) -> None:
         self._sorted = self._idx_id = self._idx_attr = None       # 반복순서·인덱스 캐시 무효화(§2-6)
@@ -73,6 +74,8 @@ class WorkingMemory:
         if w not in self._wmes:
             self._wmes.add(w)
             self._invalidate()                           # 반복순서·인덱스 캐시 무효화(§2-6)
+            if self.journal is not None:                 # event-sourcing(디버그): 실제 변경만
+                self.journal.append(("+", w))
         return w
 
     def remove(self, identifier: str, attr: str, value: Any) -> bool:
@@ -80,6 +83,8 @@ class WorkingMemory:
         if w in self._wmes:
             self._wmes.discard(w)
             self._invalidate()                           # 반복순서·인덱스 캐시 무효화(§2-6)
+            if self.journal is not None:
+                self.journal.append(("-", w))
             return True
         return False
 
