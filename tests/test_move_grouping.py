@@ -53,8 +53,9 @@ class TestCompressGridWrapped(unittest.TestCase):
 
     def test_op_compress_reaches_grid_branch_live(self):
         """_op_compress 호출 경로(라이브)가 grid 분기에 도달함을 회귀-고정: WM 의 grid>pixel
-        PAIR.program 을 넣고 operator body 를 돌리면 grid>blob 로 재작성돼야 한다. (call-site 가
-        raw 대신 as_source(raw)=납작한 텍스트를 넘기던 버그면 grid 미탐지→스킵→grid>pixel 유지로 FAIL.)"""
+        PAIR.program 을 넣고 operator body 를 돌리면 grid>blob 이 새 `grouping` slot 에 기록돼야
+        한다(PAIR.program 은 픽셀 그대로 유지 — Task 3). (call-site 가 raw 대신 as_source(raw)=납작한
+        텍스트를 넘기던 버그면 grid 미탐지→스킵→grouping 미생성으로 FAIL.)"""
         import types
         from soar.wm import WorkingMemory
         inner = [PA.step("coloring", target=PA.ref("pixel", PA.const(i)), color=PA.const(c))
@@ -71,7 +72,9 @@ class TestCompressGridWrapped(unittest.TestCase):
             task={"train": [{"input": [[0] * 5]}]},           # W=5 (grid 폭만 사용)
             stack=[types.SimpleNamespace(id="S1")])
         CG._op_compress(ag)
-        out = json.loads(next(v for (i, a, v) in wm if i == ppid and a == "program"))
+        still_pixel = json.loads(next(v for (i, a, v) in wm if i == ppid and a == "program"))
+        self.assertEqual(still_pixel, gp)                     # PAIR.program 은 그대로(픽셀) 유지
+        out = json.loads(next(v for (i, a, v) in wm if i == ppid and a == "grouping"))
         parts = {s["call"]: s["args"] for s in out["body"]}
         blob_body = parts["set_grid_contents"]["contents"]["program"]["body"]
         self.assertTrue(all(s["args"]["target"]["ref"] == "cellset" for s in blob_body))

@@ -164,8 +164,7 @@ def _op_compress(ag):
             blob = _blob_program(raw, W)           # 잔여 blobify fallback (raw AST-json → grid 분기 도달)
         if blob is None:
             continue
-        ag.wm.remove(ppid, "program", raw)     # was: code
-        ag.wm.add(ppid, "program", blob)                  # pixel → blob(객체) program
+        ag.wm.add(ppid, "grouping", blob)                 # 객체 grouping = 별도 아티팩트(PAIR.program 픽셀 유지)
         n += 1
     for (i, a, v) in list(ag.wm.matching(identifier=sid, attr="needs-compress")):
         ag.wm.remove(i, a, v)                             # 신호 소거 → generalize 재발화 가능

@@ -54,7 +54,9 @@ def _op_generalize(ag):
     asts, progs = [], []
     for p in getattr(root, "example_pairs", []) or []:
         ppid = f"{p.node_id}.property"
-        v = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
+        v = next((v for (i, a, v) in ag.wm if i == ppid and a == "grouping"), None)   # 있으면 객체 grouping
+        if v in (None, "{}"):
+            v = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)  # 없으면 픽셀 program
         if v in (None, "{}"):
             continue
         progs.append(as_source(v))            # compressible() 은 레거시 flat 텍스트를 받는다
