@@ -478,10 +478,24 @@ _GRID_SIG = {
 _COLORING_SIG = "coloring(grid, position, color) -> grid   (contents 합성 시)"
 
 
+def _grid_2d_literal(grid, var="input_grid"):
+    """2D 정수격자 리터럴을 행마다 줄바꿈해 직사각형으로 렌더('var = [' 여는 괄호 아래로 각 행 정렬).
+    <pre class=hdr>(white-space:pre-wrap) 안이라 개행·공백이 그대로 보인다 — 한 줄로 주욱 늘어지던
+    것 방지(사용자 2026-07-19). 격자(2D 리스트)가 아니면(1D·스칼라) 기존대로 한 줄 json."""
+    prefix = f"{var} = "
+    if not (isinstance(grid, list) and grid and all(isinstance(r, list) for r in grid)):
+        return prefix + json.dumps(grid)
+    indent = " " * (len(prefix) + 1)                    # 여는 '[' 다음 열에 각 행을 정렬(직사각형)
+    return prefix + "[" + (",\n" + indent).join(json.dumps(r) for r in grid) + "]"
+
+
 def _render_header_safe(ast, g0):
     body = ast.get("body") or []
     if not PA._is_grid_body(body):
-        return PA.render_header(ast, g0)
+        # program_ast(read-only)의 헤더 문자열에서 한 줄 input_grid literal 만 2D 모양으로 후처리
+        # (grid_in==g0, 양쪽 json.dumps 기본 separators 동일 → 문자열 일치; 불일치 시 no-op).
+        txt = PA.render_header(ast, g0)
+        return txt.replace(f"input_grid = {json.dumps(g0)}", _grid_2d_literal(g0))
     parts = {s["call"]: s["args"] for s in body}
     lines = ["# --- DSL (used) ---"]
     for name in ("set_grid_size", "set_grid_color", "set_grid_contents"):
@@ -490,7 +504,7 @@ def _render_header_safe(ast, g0):
     ct = parts.get("set_grid_contents", {}).get("contents", {})
     if "program" in ct:                        # contents 가 하강 coloring 합성일 때만(§1) 병기
         lines.append(f"# {_COLORING_SIG}")
-    lines += ["# --- input (this pair) ---", f"input_grid = {json.dumps(g0)}"]
+    lines += ["# --- input (this pair) ---", _grid_2d_literal(g0)]
     return "\n".join(lines)
 
 
