@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from arbor.reasoning.antiunify import parse_program, _components
 from arbor.reasoning.program_ast import (as_source, program, step, cellset, const, expr,
-    grid_program, set_grid_size, set_grid_color, set_grid_contents, contents_program)
+    grid_program, set_grid_size, set_grid_color, set_grid_contents, contents_program, ops_of_ast)
 
 
 def _blobs(cells_colored, W):
@@ -70,7 +70,26 @@ def _blob_program(code, W, predicate="color"):
                 set_grid_color(parts["set_grid_color"]["color"]),
                 new_contents]
         return json.dumps(program(body))
-    # ── 기존 flat pixel 경로 (변경 없음) ──
+    # ── flat(non-grid) pixel/coord 경로 — AST 에서 직접 ops 도출(coord-aware) ──
+    # Task4 이후 pixel coloring 은 ref("coord",[r,c]) 리터럴로도 emit 된다. 이걸 as_source 로 렌더하면
+    # 문자열 `apply_DSL(tfg,coloring,(r,c),color)` 가 되어 parse_program 의 _STEP 정규식(VAR.coord 만
+    # 인식)이 못 잡는다(§finding). ops_of_ast 는 AST 를 직접 읽으므로 pixel(idx)·coord((r,c)) 둘 다
+    # 정직하게 (target,color) 로 낸다 — 문자열 재렌더(정보손실)를 거치지 않는다.
+    if ast and ast.get("body"):
+        raw_ops = ops_of_ast(ast)
+        ops = []
+        for tgt, col in raw_ops:
+            if tgt is None or col is None:
+                return None                          # 미결정 slot 포함 → 압축 불가(기존 parse_program 동치)
+            if isinstance(tgt, tuple):                # coord (r,c) 리터럴 → 픽셀 인덱스로 접기(_blob_body 계약)
+                r_, c_ = tgt
+                tgt = r_ * W + c_
+            elif not isinstance(tgt, int):            # cellset(frozenset) 등 이미-blob 형은 이 경로 대상 아님
+                return None
+            ops.append((tgt, col))
+        blob_body = _blob_body(ops, W, predicate)
+        return json.dumps(program(blob_body)) if blob_body else None
+    # ── legacy fallback: 진짜 비-JSON(구 flat 텍스트) 입력만. 정상 AST-json 은 위 분기가 처리한다. ──
     ops = parse_program(as_source(code))
     if not ops:
         return None

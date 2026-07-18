@@ -9,6 +9,12 @@ Task 8 보강: op 수 불일치로 antiunify_ast 가 (None,None) 을 내면, 정
 로 렌더한 표현을 넘긴다)로 compress 신호 여부를 판정한다. 이 신호(needs-compress)가 없으면
 compress operator 가 발화하지 않아 blob(object-level) program 이 만들어지지 않고, made000b 같은
 op-수-불일치 태스크의 generalize 가 영구 실패한다(§2-5 행동보존).
+
+브랜치리뷰(Task4 이후) 보강: pixel coloring 이 ref("coord",[r,c]) 리터럴로도 emit 되면서, `compressible`
+가 쓰는 flat-텍스트 정규식(VAR.coord 형만 인식)이 coord 리터럴을 못 잡아 op-수-불일치 flat 재채색
+태스크가 needs-compress 없이 곧장 generalized:failed 로 떨어지는 공백이 생겼다(§2b 위반). AST 는 이미
+coord-aware(ops_of_ast)이므로, flat(non-grid) asts 의 op 수는 그 결과를 문자열로 되돌리지 않고 직접
+비교한다(`flat_mismatch`) — compressible/grid_mismatch 는 그대로 두고 OR 로만 보강.
 """
 from __future__ import annotations
 
@@ -82,11 +88,18 @@ def _op_generalize(ag):
         # op 수 불일치(객체 크기 차이 등)면 정직히 포기하기 전에 compress(덩어리화) 를 신호한다.
         # compress 가 blob 으로 재작성 → generalize 재발화 → blob anti-unify. 한 번만(compressed 가드).
         # grid-래핑(move 등) 이면 flat compressible() 이 못 읽으므로 inner(contents) op 수를 직접 비교.
-        from arbor.reasoning.program_ast import grid_inner_op_counts
+        from arbor.reasoning.program_ast import grid_inner_op_counts, ops_of_ast, _is_grid_body
         inner = [grid_inner_op_counts(a) for a in asts]
         grid_mismatch = (all(x is not None for x in inner)
                          and len({x[0] for x in inner if x}) > 1)
-        if not ag.wm.contains(sid, "compressed", "yes") and (compressible(progs) or grid_mismatch):
+        # flat(non-grid) 경로의 op 수 불일치는 AST 에서 직접 판정한다(coord-aware, §finding). 레거시
+        # compressible(progs) 는 as_source 로 렌더된 flat 텍스트를 정규식(_STEP=VAR.coord 만 인식)으로
+        # 파싱하므로 ref("coord",[r,c]) 리터럴(Task4 emit)은 못 잡아 op-수-달라도 False 를 냈다.
+        # ops_of_ast 는 pixel(idx)·coord((r,c)) 를 문자열 재렌더 없이 그대로 세므로 그 공백을 메운다.
+        flat_asts = [a for a in asts if not _is_grid_body(a.get("body") or [])]
+        flat_counts = [len(ops_of_ast(a)) for a in flat_asts]
+        flat_mismatch = len(flat_counts) > 1 and len(set(flat_counts)) > 1
+        if not ag.wm.contains(sid, "compressed", "yes") and (compressible(progs) or grid_mismatch or flat_mismatch):
             ag.wm.add(sid, "needs-compress", "yes")
             return
         ag.wm.add(sid, "generalized", "failed")
