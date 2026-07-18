@@ -279,15 +279,19 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `arbor/engine/renderer.py`
-- Modify: `arbor/engine/sink.py` (`JournalSink` 을 델타 기록으로)
-- Modify: `debugger/solve_cache.py` (`run_solve` debug 경로에서 Renderer 호출)
+- Modify: `arbor/engine/sink.py` (`JournalSink` 을 델타 기록으로; `NullSink` 에 빈 `seed`/`wm_log`/`raw_events`)
+- Modify: `arbor/engine/trace.py` (`_Tracer.events`/`_wm_states` 를 **lazy render+memoize** property 로, `run()` 반환 유지)
 - Test: `tests/test_engine_renderer.py` (기존 golden 테스트가 게이트)
 
 **Interfaces:**
 - Consumes: `WorkingMemory.journal`(Task 1), golden 테스트(Task 2).
 - Produces:
   - `JournalSink(agent)`: `seed`(부착 시점 WM list), `wm_log`(=agent.wm.journal), `raw_events`(list of dict: phase/kind/label/cycle/wave/highlight/detail/rule/goal_stack/cursor). `event(...)` 은 cursor=`len(self.wm_log)` 만 기록(스냅샷 없음).
+  - `NullSink`: `seed=[]`, `wm_log=[]`, `raw_events=[]` (render 가 빈 결과를 내도록) + `event()` no-op.
   - `arbor.engine.renderer.render(sink) -> (events, wm_states)`: seed 에서 시작해 각 이벤트 cursor 까지 델타 replay → 그 시점 WM 복원, 연속 동일 dedup. 반환 자료구조 = 기존과 동일.
+  - `_Tracer.events`/`_Tracer._wm_states`: **lazy render+memoize** property (`self.sink` 을 render → 캐시). `run()` 은 `return self.events` 유지. 기존 소비자(`debugger/solve_cache.py`, `debugger/dashboard.py:fine_trace`, `debugger/reports/*`)가 **무변경**으로 계속 동작.
+
+> **설계 주의(중요):** Task 2 는 `_Tracer.events`/`_wm_states` 를 `self.sink.events` 로 직접 위임하는 property 로 만들었다. 델타 `JournalSink` 은 그 리스트가 없으므로, **삭제하지 말고** journal 을 render 해 주는 lazy property 로 바꾼다. `debugger/dashboard.py`(fine_trace, line 98-100)와 `debugger/reports/*` 가 `_Tracer` 를 직접 만들어 `tr.run()` 반환·`tr._wm_states` 를 쓰므로, 이 인터페이스를 유지해야 그것들이 안 깨진다(스펙 "dashboard.py 불변"). `solve_cache` 도 이 property 로 그대로 동작 → **Task 3 는 solve_cache 를 건드리지 않는다**(Task 4 에서 mode 만 추가).
 
 - [ ] **Step 1: Renderer 작성**
 
@@ -333,9 +337,21 @@ def render(sink):
     return events, wm_states
 ```
 
-- [ ] **Step 2: `JournalSink` 을 델타 기록으로 교체**
+- [ ] **Step 2: `JournalSink` 델타 교체 + `NullSink` 에 빈 seed/wm_log/raw_events**
 
-`arbor/engine/sink.py` 의 `JournalSink` 을 아래로 교체(NullSink 은 그대로):
+`arbor/engine/sink.py` 에서 `NullSink` 을 아래로(render 가 빈 결과를 내도록 빈 리스트 3개 추가):
+```python
+class NullSink:
+    """headless: 방출 no-op. wm.journal 을 안 붙여 실행이 방출 비용을 전혀 안 낸다.
+    render(NullSink) 이 빈 events/wm_states 를 내도록 seed/wm_log/raw_events 는 빈 리스트."""
+    seed: list = []
+    wm_log: list = []
+    raw_events: list = []
+
+    def event(self, *a, **k):
+        pass
+```
+그리고 `JournalSink` 전체를 아래로 교체(stage b full-snapshot 버전 → 델타 버전):
 ```python
 class JournalSink:
     """debug(stage c): 이벤트와 WM mutation 을 append-only journal 로 기록.
@@ -356,41 +372,41 @@ class JournalSink:
             "goal_stack": list(goal_stack), "cursor": len(self.wm_log),
         })
 ```
+`sink.py` 상단의 `from soar.wm import _wm_key` 는 이제 sink 에서 안 쓰이므로 **제거**(renderer 로 이동됨 — T2 minor 해소).
 
-- [ ] **Step 3: `_Tracer` 정리 — 델타 sink 는 `.events`/`._wm_states` 가 없다**
+- [ ] **Step 3: `_Tracer.events`/`_wm_states` 를 lazy render+memoize property 로**
 
-델타 `JournalSink` 은 `raw_events`/`wm_log` 만 갖고 `.events`/`._wm_states` 리스트가 없다. Task 2 에서 넣은 `_Tracer.events`/`_Tracer._wm_states` **property 두 개를 삭제**하고, `run()` 의 `return self.events` 를 아래로 바꾼다(반환값은 어떤 호출자도 더는 쓰지 않는다 — Step 4 에서 solve_cache 가 render 로 대체):
+Task 2 에서 넣은 두 property 는 `self.sink.events` 를 직접 읽는다 — 델타 sink 엔 그게 없다. **삭제하지 말고** journal 을 render 해 주는 lazy property 로 바꾼다(기존 소비자 무변경 유지가 목적). `arbor/engine/trace.py` `_Tracer.__init__` 의 `self.sink = ...` 아래에:
 ```python
-        return None
+        self._rendered = None                       # (events, wm_states) 캐시 — 최초 접근 시 1회 render
 ```
-`_Tracer.__init__` 의 `self.sink = ...` 줄은 그대로 둔다(sink 인스턴스는 render 가 소비).
-
-- [ ] **Step 4: `run_solve` debug 경로에서 Renderer 호출**
-
-`debugger/solve_cache.py` `run_solve` 안, `events = tr.run(...)` 이후 result 조립을 아래로:
+그리고 Task 2 의 두 property 를 아래로 교체:
 ```python
-    tr.run(max_cycles=max_cycles)                          # 예외는 호출측(_safe_dash_data)이 격리
-    from arbor.engine.renderer import render
-    events, wm_states = render(tr.sink)                    # journal → events/wm_states(시간순 replay)
-    result = {
-        "events": events,
-        "wm": [list(t) for t in tr.ag.wm],                 # [(id, attr, value), ...]
-        "wm_states": wm_states,
-        "attempts": tr.attempts,
-        "error": None,
-    }
-```
-(`tr._wm_states` 참조 줄은 제거 — render 산출로 대체.)
+    def _render(self):
+        if self._rendered is None:
+            from arbor.engine.renderer import render
+            self._rendered = render(self.sink)      # journal → (events, wm_states), 1회 memoize
+        return self._rendered
 
-- [ ] **Step 5: 통과 확인 + 회귀 게이트**
+    @property
+    def events(self):
+        return self._render()[0]
+
+    @property
+    def _wm_states(self):
+        return self._render()[1]
+```
+`emit`(Task 2 의 delegating 버전)과 `run()` 의 `return self.events` 는 **그대로**(events property 가 render 를 트리거). `debugger/solve_cache.py` 는 이 property 로 그대로 동작하므로 **건드리지 않는다**.
+
+- [ ] **Step 4: 통과 확인 + 회귀 게이트**
 
 Run: `PYTHONHASHSEED=0 python -m pytest tests/test_engine_renderer.py -v`
 Expected: PASS — 델타 replay 로 재구성한 events/wm_states 가 golden 과 여전히 byte 동일.
 
 Run: `PYTHONHASHSEED=0 python -m pytest tests/ -q`
-Expected: `165 passed, 10 failed, 11 skipped` (기존 동일)
+Expected: `168 passed, 10 failed, 11 skipped` (Task 2 이후와 동일 — Task 3 는 신규 테스트 없음)
 
-- [ ] **Step 6: 대시보드 데이터 byte 검증(수동 게이트)**
+- [ ] **Step 5: 대시보드 데이터 byte 검증(수동 게이트)**
 
 ```bash
 PYTHONHASHSEED=0 python -c "
@@ -406,10 +422,10 @@ print('n_steps', d['n_steps'], 'wm_states', len(d['wm_states']), 'correct', d['c
 ```
 Expected: `correct` 가 0 (첫 후보로 정답) 이고 n_steps/wm_states 가 0 아님 — 대시보드 파이프라인이 Renderer 산출로 정상 동작.
 
-- [ ] **Step 7: 커밋**
+- [ ] **Step 6: 커밋**
 
 ```bash
-git add arbor/engine/renderer.py arbor/engine/sink.py debugger/solve_cache.py arbor/engine/trace.py
+git add arbor/engine/renderer.py arbor/engine/sink.py arbor/engine/trace.py
 git commit -m "refactor(engine): WM 스냅샷 → event-sourcing 델타 + 순수 Renderer(시간순 replay)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
