@@ -56,8 +56,6 @@ def _wstr(t):
 
 class _Tracer:
     def __init__(self, task, tid="0a", setup=None, sink=None):
-        if setup is None:
-            from arbor.expr_solver import setup_arc_agent as setup
         self.ag = setup(task, tid)             # io + the solver's input function
         from arbor.engine.sink import JournalSink
         self.sink = sink if sink is not None else JournalSink(self.ag)
