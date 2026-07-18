@@ -76,12 +76,6 @@ class _Tracer:
         self.env.reset()
         self.attempts: list = []               # [{answer, correct, hyp}] — 대시보드 후보
 
-    def _wm(self):
-        # structured triples (so the dashboard can build the ARCKG tree). wm.__iter__ 는 이미
-        # 결정적 정렬순(_wm_key = (str id, str attr, str value))으로 내놓으므로 재-sorted() 불필요
-        # (같은 키로 이미 정렬된 데이터의 재정렬 — 매 emit 마다 33M회 비교 오버헤드였다, 2026-07-18).
-        return [list(t) for t in self.ag.wm]
-
     def _render(self):
         if self._rendered is None:
             from arbor.engine.renderer import render

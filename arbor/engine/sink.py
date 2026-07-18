@@ -10,10 +10,11 @@ from __future__ import annotations
 
 class NullSink:
     """headless: 방출 no-op. wm.journal 을 안 붙여 실행이 방출 비용을 전혀 안 낸다.
-    render(NullSink) 이 빈 events/wm_states 를 내도록 seed/wm_log/raw_events 는 빈 리스트."""
-    seed: list = []
-    wm_log: list = []
-    raw_events: list = []
+    render(NullSink) 이 빈 events/wm_states 를 내도록 seed/wm_log/raw_events 는 빈 튜플
+    (클래스-레벨 mutable list 는 인스턴스 간 공유되는 footgun 이라 immutable 튜플로 둔다)."""
+    seed: tuple = ()
+    wm_log: tuple = ()
+    raw_events: tuple = ()
 
     def event(self, *a, **k):
         pass
@@ -24,7 +25,6 @@ class JournalSink:
     seed = 부착 시점 WM(이후 델타의 기준점). wm_log = wm.add/remove 가 append 하는 델타.
     event() 은 그 순간 wm_log 길이(cursor)만 실어 전체 WM 을 안 뜬다 → 실행 중 O(1)."""
     def __init__(self, agent):
-        self.ag = agent
         self.raw_events: list = []
         self.wm_log: list = []
         self.seed = list(agent.wm)                  # 부착 전 초기 WM — Renderer replay 시작점

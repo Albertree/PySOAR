@@ -22,5 +22,11 @@ def test_score_mode_same_attempts_as_debug():
         t = load_task(_PATHS[tid])
         deb = run_solve(tid, t, max_cycles=500, use_cache=False, mode="debug")
         sco = run_solve(tid, t, max_cycles=500, use_cache=False, mode="score")
-        assert [a["correct"] for a in sco["attempts"]] == [a["correct"] for a in deb["attempts"]]
+        assert sco["attempts"] == deb["attempts"]
         assert sco["events"] == [] and sco["wm_states"] == []
+
+
+def test_score_dataset_slice():
+    from debugger.score import score_dataset
+    r = score_dataset("move", limit=2)          # move000a, move000b — 둘 다 풀림
+    assert r["ok"] == 2 and r["total"] == 2 and r["fail"] == []
