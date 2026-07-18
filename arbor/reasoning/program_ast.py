@@ -5,7 +5,7 @@
   program = {"input": {"grid": "G0"}, "body": [step...], "output": {"var": "grid"}, "slots"?: {...}}
   step    = {"call": op, "args": {name: leaf|node}}
   leaf    = {"const": v} | {"var": name} | {"expr": e} | {"ref": level, "index": leaf}
-op ∈ frozen transformation atom (coloring, make_grid) 만. 그 외는 조합.
+op ∈ frozen transformation atom (coloring) 만. 그 외는 조합.
 
 to_source(ast) 는 현행 flat Python 문자열과 바이트 동일을 낸다(이행 안전장치·복붙 실행용).
 """

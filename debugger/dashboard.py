@@ -55,7 +55,7 @@ OP_DOCS = {
     "observe": "ARCKG 계층(task→pair→grid→object)을 WM에 적재 → ^observed",
     "compare": "target in→out 비교 → ^compared, 변환 필요 여부",
     "generalize": "각 arg를 일반 표현식으로 resolve → ^schema-ready, ^expr-*",
-    "compose": "make_grid + coloring 으로 답 조립 → ^answer-ready",
+    "compose": "coloring 으로 답 조립 → ^answer-ready",
     "submit": "완료 표시 → ^done",
 }
 

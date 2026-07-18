@@ -10,7 +10,7 @@ Effect (양식) — '무엇을 어떻게 변화시키나' 를 한 줄로 기술.
     verb : 변화의 종류  ("create" | "recolor" | "add" | ...)
     kind : 그 변화가 닿는 실체 타입  ("grid" | "roles" | ...)
 
-예) make_grid → effect("create", "grid")   (size·color 로 grid 를 *지어냄*)
+예) coloring → effect("recolor", "grid")   (position·color 로 grid 셀 하나를 *칠함*)
     PAIR 의 need(roles.output 채우기) → requires effect("add", "roles")
     → kind 가 "roles" vs "grid" 라 안 맞음 → 탐색 empty → 막힘 (의도된 결과).
 """

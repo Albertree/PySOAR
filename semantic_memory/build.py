@@ -32,7 +32,7 @@ def build_ontology() -> str:
         by_kind.setdefault(s["kind"], {})[name] = s
     onto = {
         "note": "DSL 선언적 명세(semantic 라이브러리). body=procedural 은 procedural_memory/dsl/ 에 있다. "
-                "transformation 은 동결 2개(make_grid·coloring), 나머지는 조합 재료.",
+                "transformation 은 동결 하나(coloring), 나머지는 조합 재료.",
         "counts": {k: len(v) for k, v in sorted(by_kind.items())},
         "dsl_specs": by_kind,
     }
