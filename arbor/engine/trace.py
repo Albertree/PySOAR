@@ -33,7 +33,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from soar import Agent  # noqa: E402
 from soar.decide import run_preference_semantics  # noqa: E402
 from soar.preference import SYMBOL_TO_TYPE, PreferenceType  # noqa: E402
-from arbor.expr_solver import PRODUCTIONS, OPERATOR_BODIES  # noqa: E402
 from debugger.dashboard import _kg_detail  # noqa: E402
 
 _TYPE_TO_SYM = {v: k for k, v in SYMBOL_TO_TYPE.items()}

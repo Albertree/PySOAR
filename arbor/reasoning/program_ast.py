@@ -314,7 +314,6 @@ def execute(ast, grid_in, choice=None):
 
 def _execute_grid(body, grid_in, choice):
     """set_grid_size/color/contents → make_grid+coloring lowering. contents 가 산출을 지배."""
-    from procedural_memory.dsl.transformation import make_grid, coloring
     parts = {s["call"]: s["args"] for s in body}
     ct = parts["set_grid_contents"]["contents"]
     if "const" in ct:                     # 상수/결정된 grid = 그대로 산출
