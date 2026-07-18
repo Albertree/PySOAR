@@ -68,7 +68,10 @@ def _disp_grid_leaf(leaf, prop):
     expr=식 그대로(forward). prop ∈ {size,color,contents}. (leaf 가 `program`(coloring 합성)인
     경우는 _display_grid 가 _coloring_seq_lines 로 별도 처리 — 여기로는 들어오지 않는다.)"""
     if "const" in leaf:
-        return json.dumps(leaf["const"])             # size dict / color list / contents 2D 배열 실값
+        v = leaf["const"]
+        if prop == "size" and isinstance(v, dict) and "height" in v:
+            return f"({v['height']}, {v['width']})"  # 리터럴 크기값 (사용자: '(8,8) 같은 값')
+        return json.dumps(v)                         # color list / contents 2D 배열 실값
     if "expr" in leaf:
         return str(leaf["expr"])                     # (forward: H/W 어휘 번역은 별건)
     if "delta" in leaf:
@@ -275,7 +278,7 @@ def _grid_leaf_repr(leaf, prop=""):
     if "const" in leaf:
         v = leaf["const"]
         if isinstance(v, dict) and "height" in v:
-            return f"{{height:{v['height']}, width:{v['width']}}}"
+            return f"({v['height']}, {v['width']})"        # 리터럴 크기값 (사용자: '(8,8) 같은 값')
         return json.dumps(v)                          # color list / contents 2D 배열 실값(grid[NxN] 폐기)
     return str(leaf)
 

@@ -48,10 +48,18 @@ def _find_grid_skeleton(ag):
     return None
 
 
+def _literal_grid_props(out):
+    """그 pair 출력의 리터럴 size/color leaf (예측·pending 아님 — 실제값). size/color 는 실행에
+    안 쓰이는 '선언'(§Round-3 Grid 객체모델; _execute_grid 은 contents 로만 산출)이므로 답 무관 —
+    PAIR.program 을 구체(literal)로 정직화. 예측/일반화는 TASK.solution 의 몫."""
+    colorset = sorted({v for row in out for v in row})
+    return (PA.const({"height": len(out), "width": len(out[0])}), PA.const(colorset))
+
+
 def _assemble_pair_program(ag, code):
-    """grid-skeleton 이 있으면 그 skeleton 의 `set_grid_contents` pending 슬롯을 하강 coloring
-    body(`code`)로 감싼 grid body(3슬롯)를 PAIR.program 으로 반환. skeleton 없으면(순수 pixel
-    문제) `code` 그대로(현행 pixel body)."""
+    """grid-skeleton 이 있으면 그 skeleton 을 pair 프로그램으로 조립: size/color 는 **그 pair 출력의
+    리터럴 const**(예측·pending 아님)로, `set_grid_contents` pending 슬롯은 하강 coloring body(`code`)로
+    감싼 grid body(3슬롯)를 PAIR.program 으로 반환. skeleton 없으면(순수 pixel 문제) `code` 그대로."""
     sk = _find_grid_skeleton(ag)
     if sk is None:
         return code
@@ -60,9 +68,16 @@ def _assemble_pair_program(ag, code):
         coloring_body = json.loads(code)["body"]
     except (ValueError, TypeError, KeyError):
         coloring_body = []                             # 하강 재채색 없었음(항등) → 빈 합성(=identity)
+    k = pair_cursor(ag)
+    size_leaf, color_leaf = _literal_grid_props(ag.task["train"][k]["output"])
     body = []
     for s in gp.get("body") or []:
-        if s.get("call") == "set_grid_contents":
+        call = s.get("call")
+        if call == "set_grid_size":
+            s = PA.set_grid_size(size_leaf)            # per-pair 리터럴(pending/expr 대체)
+        elif call == "set_grid_color":
+            s = PA.set_grid_color(color_leaf)
+        elif call == "set_grid_contents":
             leaf = (s.get("args") or {}).get("contents")
             if isinstance(leaf, dict) and "pending" in leaf:
                 s = PA.set_grid_contents(PA.contents_program(coloring_body))
