@@ -30,6 +30,11 @@ class WorkingMemory:
         self._goals: set[str] = set()
         self._level: dict[str, int] = {}
         self._sorted: "list[Triple] | None" = None   # 결정적 반복순서 캐시(§2-6); add/remove 시 무효화
+        self._idx_id: "dict[str, list[Triple]] | None" = None    # id -> 정렬 버킷(matching 인덱스)
+        self._idx_attr: "dict[str, list[Triple]] | None" = None  # attr -> 정렬 버킷
+
+    def _invalidate(self) -> None:
+        self._sorted = self._idx_id = self._idx_attr = None       # 반복순서·인덱스 캐시 무효화(§2-6)
 
     def _ordered(self) -> "list[Triple]":
         """결정적 정렬 반복순서(캐시). matching() 은 매처가 극빈번 호출하므로 매번 정렬하면 느리다 →
@@ -37,6 +42,16 @@ class WorkingMemory:
         if self._sorted is None:
             self._sorted = sorted(self._wmes, key=_wm_key)
         return self._sorted
+
+    def _build_index(self) -> None:
+        """id·attr 별 정렬 버킷을 mutation 당 1회 구성(상각). 각 버킷은 `_ordered()` 의 부분수열이라
+        반복 순서·결정성이 전체 반복과 동일 → matching() 결과가 선형 스캔 때와 비트 단위로 같다."""
+        idx_id: "dict[str, list[Triple]]" = {}
+        idx_attr: "dict[str, list[Triple]]" = {}
+        for w in self._ordered():
+            idx_id.setdefault(w[0], []).append(w)
+            idx_attr.setdefault(w[1], []).append(w)
+        self._idx_id, self._idx_attr = idx_id, idx_attr
 
     # -- goals / states -------------------------------------------------------
     def mark_goal(self, identifier: str, level: int = 1) -> None:
@@ -57,14 +72,14 @@ class WorkingMemory:
         w = (identifier, attr, value)
         if w not in self._wmes:
             self._wmes.add(w)
-            self._sorted = None                          # 반복순서 캐시 무효화(§2-6)
+            self._invalidate()                           # 반복순서·인덱스 캐시 무효화(§2-6)
         return w
 
     def remove(self, identifier: str, attr: str, value: Any) -> bool:
         w = (identifier, attr, value)
         if w in self._wmes:
             self._wmes.discard(w)
-            self._sorted = None                          # 반복순서 캐시 무효화(§2-6)
+            self._invalidate()                           # 반복순서·인덱스 캐시 무효화(§2-6)
             return True
         return False
 
@@ -76,9 +91,23 @@ class WorkingMemory:
         # `next((.. for .. in wm.matching(..)), default)` 로 '첫 매치' 를 고르고, 매처(production.py)도
         # 이걸 쓰므로, 정렬 안 하면 PYTHONHASHSEED 에 따라 첫 매치/바인딩 순서가 달라져 경계 태스크
         # 결과가 실행마다 뒤집힌다(개발 중 2회 발생). '집합은 순서 무관' 은 틀림 — 첫매치는 순서 의존.
-        for (i, a, v) in self._ordered():
-            if identifier is not None and i != identifier:
-                continue
+        #
+        # 성능(2026-07-18): 매처는 이 함수를 태스크당 수십만~수백만 번 부르는데, 픽셀 레벨로 WM 이
+        # 수천 WME 인 문제에선 매번 전체 리스트를 선형 스캔하면 병목(프로파일 tottime 1위)이었다.
+        # id/attr 인덱스 버킷으로 스캔 범위를 좁힌다 — 버킷은 `_ordered()` 의 부분수열이라 반복 순서·
+        # 결정성이 전체 스캔과 동일(결과 비트 단위 일치). 매처 조건은 항상 attr 을 지정하므로 대부분
+        # id 또는 attr 버킷으로 떨어진다(둘 다 None 인 전체 반복은 사실상 없음).
+        if identifier is not None:
+            if self._idx_id is None:
+                self._build_index()
+            bucket: "Iterable[Triple]" = self._idx_id.get(identifier, ())
+        elif attr is not None:
+            if self._idx_attr is None:
+                self._build_index()
+            bucket = self._idx_attr.get(attr, ())
+        else:
+            bucket = self._ordered()
+        for (i, a, v) in bucket:
             if attr is not None and a != attr:
                 continue
             if value is not None and v != value:

@@ -75,9 +75,10 @@ class _Tracer:
         self.attempts: list = []               # [{answer, correct, hyp}] — 대시보드 후보
 
     def _wm(self):
-        # structured triples (so the dashboard can build the ARCKG tree)
-        return sorted([list(t) for t in self.ag.wm],
-                      key=lambda t: (str(t[0]), str(t[1]), str(t[2])))
+        # structured triples (so the dashboard can build the ARCKG tree). wm.__iter__ 는 이미
+        # 결정적 정렬순(_wm_key = (str id, str attr, str value))으로 내놓으므로 재-sorted() 불필요
+        # (같은 키로 이미 정렬된 데이터의 재정렬 — 매 emit 마다 33M회 비교 오버헤드였다, 2026-07-18).
+        return [list(t) for t in self.ag.wm]
 
     def emit(self, phase, kind, label, highlight=None, detail=None, rule=None, wave=None):
         # 메모리: event 마다 full WM 스냅샷을 들고 있으면 events×WM(대개 WM 수천 WME) 로 곱해져

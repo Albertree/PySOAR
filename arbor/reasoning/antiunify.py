@@ -10,29 +10,28 @@ program 포맷(coloring.py 생성, level-1 flat): P{i}=in_px[idx]; tfg=apply_DSL
 op i = (pixel_index, color). 내부 표현 skeleton={'ops':[(idx|None, color|None)]}.
 
 Task 8 (program-ast 경로): `generalize`/`apply_solution` operator 는 이제 정규식 파싱이 아니라
-`arbor.reasoning.program_ast`(antiunify_ast/execute, AST-json 기반)를 쓴다. 아래 정규식 블록·
-`parse_program`·`_STEP`/`_DEF`/`_BLOB_DEF`/`_BLOB_STEP`·구 `antiunify()`·구 `render_skeleton()`은
-그 경로에서 더 이상 호출되지 않는다(DEPRECATED — 삭제 시 diff 가 커지므로 주석만 남김).
-단 `parse_program` 은 `compress.py`(`_blob_program`)가 여전히 호출한다 — 삭제 금지.
-`_align`/`_align_blobs`/`resolve_slot`/`_resolve_cellset`/`solution_candidates`/`compressible`
-이하 resolve 계열은 program_ast 경로에서도 그대로 재사용된다(§0.5 근거: compare(prog,prog)).
+`arbor.reasoning.program_ast`(antiunify_ast/execute, AST-json 기반)를 쓴다. 구 flat-text
+anti-unify(`antiunify`/`_antiunify_blobs`/`_parse_blob_program`/`render_skeleton`/`execute_solution`)
+는 program_ast 로 완전히 대체돼 삭제됐다(2026-07-18, 호출자 0 검증). 남은 flat-text 도구는 아직
+쓰이는 것만: `parse_program`(compress.py 가 호출)·`_STEP`/`_DEF`/`_BLOB_DEF`·`_is_blob_program`
+(compressible 이 호출)·`_align`/`_align_blobs`(program_ast 가 재사용). `resolve_slot`/`_resolve_cellset`/
+`solution_candidates`/`compressible` 이하 resolve 계열은 program_ast 경로에서도 그대로 쓰인다
+(§0.5 근거: compare(prog,prog)).
 """
 from __future__ import annotations
 
 import itertools
 import re
 
-# ── DEPRECATED (Task 8): 정규식 기반 flat-text 파서 — generalize/apply_solution 는 program_ast(AST-json)
-#    경로를 쓴다. parse_program 은 compress.py 가 여전히 호출(as_source 로 정규화된 flat 텍스트
-#    파싱용) — 삭제 금지. _STEP/_DEF/_BLOB_DEF/_BLOB_STEP 자체는 parse_program/_parse_blob_program
-#    내부에서만 쓰인다.
+# 정규식 기반 flat-text 파서 — generalize/apply_solution 는 program_ast(AST-json) 경로를 쓰지만
+# parse_program 은 compress.py 가 여전히 호출(as_source 로 정규화된 flat 텍스트 파싱), _BLOB_DEF 는
+# _is_blob_program(compressible 호출)이 쓴다.
 _DEF = re.compile(r"^\s*(\w+)\s*=\s*in_px\[(\d+)\]\s*$")
 _STEP = re.compile(r"apply_DSL\([^,]+,\s*coloring,\s*(\w+)\.coord,\s*(\d+)\)")
 # blob(=object-level) 프로그램: compress 가 쓰는 형식. 셀 묶음 하나를 한 색으로 칠한다.
 #   B0 = [7, 8, 13, 14]                          (연결 덩어리 = 픽셀 인덱스 집합)
 #   apply_DSL(tfg0, coloring, B0, 3)             (.coord 없음 → 픽셀 형식과 구분)
 _BLOB_DEF = re.compile(r"^\s*(\w+)\s*=\s*\[([\d,\s]*)\]\s*$")
-_BLOB_STEP = re.compile(r"apply_DSL\([^,]+,\s*coloring,\s*(\w+),\s*(\d+)\)")
 
 
 def parse_program(code: str):
@@ -76,25 +75,6 @@ def _is_blob_program(code):
     return bool(code) and any(_BLOB_DEF.match(ln) for ln in code.splitlines())
 
 
-def _parse_blob_program(code):
-    """DEPRECATED (Task 8): 구 antiunify() 전용 파서 — program_ast.ops_of_ast 로 대체됨(호출자 없음).
-    blob 프로그램 → ops=[(cells=frozenset(idx), color)] (step 순서). 파싱 불가면 None."""
-    if not code or code.strip() in ("{}", ""):
-        return None
-    sets, ops = {}, []
-    for ln in code.splitlines():
-        m = _BLOB_DEF.match(ln)
-        if m:
-            sets[m.group(1)] = frozenset(int(x) for x in m.group(2).split(",") if x.strip())
-            continue
-        m = _BLOB_STEP.search(ln)
-        if m and m.group(1) in sets:
-            ops.append((sets[m.group(1)], int(m.group(2))))
-    if not ops:
-        return None
-    return ops
-
-
 def compressible(programs):
     """pixel 프로그램들이 **op 수 불일치**로 anti-unify 불가한가 (= compress 로 덩어리화하면 도움).
     같은 색 픽셀들이 객체 크기만큼 늘어난 케이스(이동 등)를 잡는다. blob 형식이면 이미 압축됨→False."""
@@ -103,40 +83,6 @@ def compressible(programs):
     if len(ps) < 2:
         return False
     return len({len(p) for p in ps}) > 1        # op 수가 서로 다름
-
-
-def antiunify(programs):
-    """DEPRECATED (Task 8): generalize operator 는 이제 program_ast.antiunify_ast(AST-json) 를
-    쓴다 — 이 함수·아래 _antiunify_blobs 는 호출자 없음(참고용으로만 유지).
-    per-pair program 문자열들 → (skeleton, slots).
-    pixel: skeleton={'ops':[(idx|None,color|None)]}; blob: skeleton={'kind':'blob','ops':[(cells|None,color|None)]}.
-    slots={name:{kind:'src'|'color'|'cellset', pos, values}}. 위치별 COMM=상수, DIFF=변수. 불가 시 (None,None)."""
-    if all(_is_blob_program(p) for p in programs if p and p != "{}"):
-        blobs = [_parse_blob_program(p) for p in programs]
-        blobs = [b for b in blobs if b]
-        if len(blobs) >= 2:
-            return _antiunify_blobs(blobs)
-    progs = [parse_program(p) for p in programs]
-    progs = [p for p in progs if p]
-    if len(progs) < 2:
-        return None, None
-    n = len(progs[0])
-    if any(len(p) != n for p in progs):
-        return None, None                       # 연산 수 다르면 이 골격으론 불가 (→ compress 후보)
-    ref = progs[0]
-    aligned = [ref] + [_align(ref, p) for p in progs[1:]]
-    ops, slots = [], {}
-    for i in range(n):
-        idxs = [a[i][0] for a in aligned]
-        cols = [a[i][1] for a in aligned]
-        sk_idx = idxs[0] if len(set(idxs)) == 1 else None
-        sk_col = cols[0] if len(set(cols)) == 1 else None
-        if sk_idx is None:
-            slots[f"?src{i}"] = {"kind": "src", "pos": i, "values": idxs}
-        if sk_col is None:
-            slots[f"?color{i}"] = {"kind": "color", "pos": i, "values": cols}
-        ops.append((sk_idx, sk_col))
-    return {"ops": ops}, slots
 
 
 def _align_blobs(ref, ops):
@@ -150,30 +96,6 @@ def _align_blobs(ref, ops):
         if score > bestscore:
             bestscore, best = score, list(perm)
     return best
-
-
-def _antiunify_blobs(blobs):
-    """DEPRECATED (Task 8): 구 antiunify() 전용(호출자 없음) — program_ast._antiunify_ast_blob 로 대체.
-    blob 프로그램들(ops=[(cells,color)]) → (skeleton{'kind':'blob'}, slots). 위치별 COMM=상수, DIFF=slot.
-    cellset DIFF → cellset slot(값=pair 별 셀집합; resolve 가 input object 유래 식으로 재표현 = P5 다음단계)."""
-    n = len(blobs[0])
-    if any(len(b) != n for b in blobs):
-        return None, None
-    ref = blobs[0]
-    aligned = [ref] + [_align_blobs(ref, b) for b in blobs[1:]]
-    ops, slots = [], {}
-    for i in range(n):
-        cellsets = [a[i][0] for a in aligned]
-        cols = [a[i][1] for a in aligned]
-        sk_cells = cellsets[0] if len({tuple(sorted(c)) for c in cellsets}) == 1 else None
-        sk_col = cols[0] if len(set(cols)) == 1 else None
-        if sk_cells is None:
-            slots[f"?cells{i}"] = {"kind": "cellset", "pos": i,
-                                   "values": [sorted(c) for c in cellsets]}
-        if sk_col is None:
-            slots[f"?color{i}"] = {"kind": "color", "pos": i, "values": cols}
-        ops.append((sorted(sk_cells) if sk_cells is not None else None, sk_col))
-    return {"kind": "blob", "ops": ops}, slots
 
 
 # ── resolve: 변수 slot → G0 유래 표현식 (generate → train 적용 → 대조 → 생존) ──────
@@ -621,39 +543,3 @@ def solution_candidates(sol, limit=3):
     return out
 
 
-def execute_solution(skeleton, slots, choice, grid_in):   # DEPRECATED 위임
-    """DEPRECATED (Task 8): apply_solution operator 는 이제 program_ast.execute 를 직접 쓴다(skeleton=AST).
-    이 함수는 하위호환 위임 shim 만 남긴다 — slots 인자는 program_ast.execute 가 AST 에서 직접
-    var/const leaf 를 읽으므로 쓰이지 않는다."""
-    from arbor.reasoning.program_ast import execute
-    return execute(skeleton, grid_in, choice=choice)      # skeleton=AST
-
-
-def render_skeleton(skeleton, slots) -> str:
-    """DEPRECATED (Task 8): generalize/apply_solution 는 이제 skeleton(AST-json) 을 json.dumps 로 직접
-    저장한다 — 호출자 없음(참고용으로만 유지). 골격+변수 → TASK.solution 문자열(대시보드·저장)."""
-    if not skeleton:
-        return "{}"
-    if skeleton.get("kind") == "blob":                    # 덩어리(객체) 단위 program
-        cell_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "cellset"}
-        col_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "color"}
-        lines = ["tfg0 = input_grid"]
-        for i, (cells, col) in enumerate(skeleton["ops"]):
-            cs = str(cells) if cells is not None else cell_at[i]
-            c = str(col) if col is not None else col_at[i]
-            lines.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {cs}, {c})  # 객체 덩어리")
-        lines.append(f"output_grid = tfg{len(skeleton['ops'])}")
-        return "\n".join(lines)
-    src_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "src"}
-    col_at = {s["pos"]: n for n, s in slots.items() if s["kind"] == "color"}
-    lines = ["in_px = pixels_of(input_grid)"]
-    for i, (idx, col) in enumerate(skeleton["ops"]):
-        ix = str(idx) if idx is not None else src_at[i]
-        lines.append(f"P{i} = in_px[{ix}]")
-    lines.append("")
-    lines.append("tfg0 = input_grid")
-    for i, (idx, col) in enumerate(skeleton["ops"]):
-        c = str(col) if col is not None else col_at[i]
-        lines.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, P{i}.coord, {c})")
-    lines.append(f"output_grid = tfg{len(skeleton['ops'])}")
-    return "\n".join(lines)
