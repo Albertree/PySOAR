@@ -138,12 +138,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 2: 표시·러너 coord 지원 (dormant)
 
 **Files:**
+- Modify: `arbor/reasoning/program_ast.py` (`to_source` 최상위 — coord/혼합 body robust 처리)
 - Modify: `debugger/reports/program_viewer.py` (`_coloring_seq_lines` 또는 display_source 의 coloring 렌더, 러너 JS `runBody`/ATOM)
 - Test: `tests/test_coord_display.py`
 
 **Interfaces:**
 - Consumes: coord AST(Task 1).
-- Produces: display_source 가 coord 타깃을 `coloring(g, (r,c), color)` 로 렌더. 러너 JS 가 coord 타깃을 실행(격자 (r,c) 채색).
+- Produces: `to_source` 가 최상위 coord(및 coord/pixel 혼합) body 를 `apply_DSL(.., coloring, (r,c), col)` 로 렌더(KeyError 없이). display_source 가 coord 타깃을 `coloring(g, (r,c), color)` 로 렌더. 러너 JS 가 coord 타깃을 실행(격자 (r,c) 채색).
+
+> **필수(Task 1 리뷰 carry):** Task 1 이 만든 `_antiunify_ast_pixel` coord 스켈레톤은 최상위(비-grid) body 로 `to_source`/`as_source` 에 넘어갈 수 있고(비-이동 픽셀 anti-unify → `easy_antiunify_viz.py`·generalize `as_source`), 지금 `to_source` 최상위는 `_LEVEL[tgt["ref"]]` 로 인덱싱해 coord 에서 KeyError. Task 4 가 coord 를 emit 하기 전에 여기서 막아야 한다.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
@@ -151,6 +154,21 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```python
 import debugger.reports.program_viewer as pv
 from arbor.reasoning import program_ast as PA
+
+
+def test_to_source_toplevel_coord_no_keyerror():
+    # 최상위(비-grid) coord body → apply_DSL(.., coloring, (r,c), col) 렌더, KeyError 없음
+    ast = PA.program([PA.step("coloring", target=PA.ref("coord", PA.const([2, 8])), color=PA.const(0))])
+    src = PA.to_source(ast)
+    assert "(2, 8)" in src and "coloring" in src
+
+
+def test_to_source_mixed_coord_pixel_body():
+    # coord const + pixel var(slot) 혼합(=_antiunify_ast_pixel 산물 형태) 도 렌더
+    body = [PA.step("coloring", target=PA.ref("coord", PA.const([0, 1])), color=PA.const(3)),
+            PA.step("coloring", target=PA.ref("pixel", PA.var("?src1")), color=PA.const(4))]
+    src = PA.to_source(PA.program(body))
+    assert "(0, 1)" in src                              # coord 는 리터럴, pixel var 는 기존 표기
 
 
 def test_display_source_renders_literal_coord():
@@ -163,9 +181,33 @@ def test_display_source_renders_literal_coord():
 - [ ] **Step 2: 실패 확인**
 
 Run: `PYTHONHASHSEED=0 python -m pytest tests/test_coord_display.py -v`
-Expected: FAIL — display_source 가 coord 를 리터럴로 렌더 안 함.
+Expected: FAIL — `to_source` 최상위 coord 에서 `KeyError: 'coord'`, display_source 도 coord 미렌더.
 
-- [ ] **Step 3: display_source + 러너 coord 렌더/실행**
+- [ ] **Step 3a: `to_source` 최상위 coord/혼합 body robust 처리**
+
+`arbor/reasoning/program_ast.py` `to_source` 의 pixel/object 계열 블록(`_LEVEL[lvl]` 인덱싱)을 coord 를 인라인 처리하도록:
+```python
+    # ── pixel/object/coord 계열 ──
+    src_lines, seen = [], set()
+    for s in body:
+        lvl = s["args"]["target"]["ref"]
+        if lvl in _LEVEL and lvl not in seen:                 # coord 는 헤더(in_px=..) 불필요
+            seen.add(lvl); src_lines.append(_LEVEL[lvl][0])
+    defs, steps = list(src_lines), ["tfg0 = input_grid"]
+    for i, s in enumerate(body):
+        tgt = s["args"]["target"]; col = _leaf_src(s["args"]["color"])
+        if tgt["ref"] == "coord":                             # 리터럴 좌표 직접
+            pos = tuple(tgt["index"]["const"]) if "const" in tgt["index"] else _leaf_src(tgt["index"])
+            steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {pos}, {col})")
+        else:
+            _, ref_name, prefix = _LEVEL[tgt["ref"]]
+            defs.append(f"{prefix}{i} = {ref_name}[{_leaf_src(tgt['index'])}]")
+            steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {prefix}{i}.coord, {col})")
+    steps.append(f"output_grid = tfg{len(body)}")
+    return "\n".join(defs + [""] + steps)
+```
+
+- [ ] **Step 3b: display_source + 러너 coord 렌더/실행**
 
 `debugger/reports/program_viewer.py` 의 coloring 스텝 렌더 함수(`_coloring_seq_lines`, 픽셀/오브젝트/cellset 분기 있는 곳)에 coord 분기 추가 — cellset/pixel 분기 옆에:
 ```python
@@ -192,8 +234,8 @@ Expected: `+1` (기존 대비 신규 1) passed, `10 failed` 불변.
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add debugger/reports/program_viewer.py tests/test_coord_display.py
-git commit -m "feat(report): display_source·러너 coord 타깃 렌더/실행 지원(dormant)
+git add arbor/reasoning/program_ast.py debugger/reports/program_viewer.py tests/test_coord_display.py
+git commit -m "feat(report): to_source 최상위 coord + display_source·러너 coord 렌더/실행(dormant)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
