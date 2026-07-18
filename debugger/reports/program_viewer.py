@@ -638,6 +638,10 @@ CSS = """
    블록을 끝내버려, 그 뒤 CSS 전부가 화면에 그냥 텍스트로 노출되는 사고가 난다 — 실제로 한 번 냈던
    실수라 여기 남겨 재발 방지.) */
 *,*::before,*::after{box-sizing:border-box}
+/* 최상단 문제 리스트 박스: 풀림=초록·안풀림=빨강 테두리(§2-5 풀이상태 가시화). EV.CSS(.tabs a.on)
+   뒤에 와서 우선 → 현재 선택 탭(.on 파란 배경)에서도 풀이상태 테두리가 유지된다. */
+.tabs a.solved{border-color:#3fb950}
+.tabs a.unsolved{border-color:#f85149}
 .views{display:flex;gap:10px;align-items:flex-start;flex-wrap:nowrap;margin:6px 0 14px}
 .view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:0 0 auto}
 /* ③ 시각화 pane 만 폭을 더 넓게: 색값 박스가 한 줄에서 안 밀려나려면 ③ pane 자체가 coloring
@@ -929,15 +933,20 @@ def build(tids=None, dataset="easy", out_name="program_report_all.html",
     if tids is None:
         tids = [t for t, _ in list_tasks(dataset)]
     tids = [t for t in tids if t in paths]                 # 존재하는 것만
-    tabs = "".join(f'<a href="#{t}" data-t="{t}">{_tab_label(t)}</a>' for t in tids)
     tasks = {t: load_task(paths[t]) for t in tids}
     runner_data = []
     secs_list = []
+    solved = {}
     for t in tids:
         asts, pairs, solution, attempts = _collect(t, tasks[t])
+        solved[t] = bool(attempts) and any(a["correct"] for a in attempts)   # 정답 attempt 존재 = 풀림(task_section:606 과 동일)
         runner_data.extend(_runner_payload(t, asts, pairs, tasks[t]))
         secs_list.append(task_section(t, tasks[t], precomputed=(asts, pairs, solution, attempts)))
     secs = "".join(secs_list)
+    # 최상단 문제 리스트: solved 판정으로 초록/빨강 테두리 클래스 부여(§2-5). collect 뒤라 solved 확정됨.
+    tabs = "".join(
+        f'<a href="#{t}" data-t="{t}" class="{"solved" if solved[t] else "unsolved"}">{_tab_label(t)}</a>'
+        for t in tids)
     js = ("<script>var TIDS=%s;function sh(){var h=location.hash.slice(1);"
           "if(!document.getElementById(h))h=TIDS[0];"
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(s.id===h)?'':'none'});"
