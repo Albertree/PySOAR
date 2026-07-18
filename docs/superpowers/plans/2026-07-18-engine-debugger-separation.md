@@ -485,10 +485,10 @@ def run_solve(tid, task, max_cycles=500, use_cache=True, mode="debug"):
     else:
         tr = _Tracer(task, tid, setup=setup_focus_agent)     # JournalSink 기본
         tr.run(max_cycles=max_cycles)
-        from arbor.engine.renderer import render
-        events, wm_states = render(tr.sink)
-        result = {"events": events, "wm": [list(t) for t in tr.ag.wm],
-                  "wm_states": wm_states, "attempts": tr.attempts, "error": None}
+        # tr.events/tr._wm_states = lazy render+memoize(Task 3) → 단일 render 재사용
+        # (render(tr.sink) 직접 호출은 run() 의 return self.events 가 이미 튕긴 render 와 겹쳐 이중 render).
+        result = {"events": tr.events, "wm": [list(t) for t in tr.ag.wm],
+                  "wm_states": tr._wm_states, "attempts": tr.attempts, "error": None}
     if use_cache:
         try:
             os.makedirs(_CACHE_DIR, exist_ok=True)
