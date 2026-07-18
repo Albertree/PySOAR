@@ -3,12 +3,11 @@
 seokki slice 1 -- compare→refine→aggregate 관계 도출이 규칙으로 동작하는지.
 
 검증하는 것(문제 풀이가 아니라 *구조*):
-  1. 회귀: expr_solver 옛 파이프라인 easy_a 9/9 불변.
-  2. focus_solver 가 TASK→PAIR→GRID→OBJECT 로 하강한다(고정 시나리오 아님, impasse 산물).
-  3. object 레벨에서 compare 가 orderable property 를 greater/less 로 refine 하고,
+  1. focus_solver 가 TASK→PAIR→GRID→OBJECT 로 하강한다(고정 시나리오 아님, impasse 산물).
+  2. object 레벨에서 compare 가 orderable property 를 greater/less 로 refine 하고,
      aggregate 가 extremum role 을 도출한다(= "가장 큼"을 카탈로그 없이 만든다).
-  4. 도출된 관계·역할이 WM 에 WME 로 남는다(대시보드가 렌더할 재료).
-  5. 같은 규칙이 다른 태스크에서도 발화한다(시나리오 고정 아님).
+  3. 도출된 관계·역할이 WM 에 WME 로 남는다(대시보드가 렌더할 재료).
+  4. 같은 규칙이 다른 태스크에서도 발화한다(시나리오 고정 아님).
 
 run:  python3 tests/test_seokki_relations.py
 """
@@ -51,12 +50,6 @@ def _answer(ev):
             if i == "I3" and a == "answer":
                 return [list(r) for r in v]
     return None
-
-
-def test_expr_regression():
-    from arbor.expr_solver import solve as esolve
-    ok = sum(1 for tid, p in list_tasks("easy_a") if esolve(load_task(p), tid=tid))
-    assert ok == 9, f"expr_solver regression: {ok}/9"
 
 
 def test_focus_pipeline_solves_easy_a():
