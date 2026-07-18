@@ -62,6 +62,7 @@ class _Tracer:
         self.ag = setup(task, tid)             # io + the solver's input function
         from arbor.engine.sink import JournalSink
         self.sink = sink if sink is not None else JournalSink(self.ag)
+        self._rendered = None                       # (events, wm_states) 캐시 — 최초 접근 시 1회 render
         self.task = task
         self.cycle = 0
         self._cands: set = set()               # materialised ^operator + WMEs
@@ -81,13 +82,19 @@ class _Tracer:
         # (같은 키로 이미 정렬된 데이터의 재정렬 — 매 emit 마다 33M회 비교 오버헤드였다, 2026-07-18).
         return [list(t) for t in self.ag.wm]
 
+    def _render(self):
+        if self._rendered is None:
+            from arbor.engine.renderer import render
+            self._rendered = render(self.sink)      # journal → (events, wm_states), 1회 memoize
+        return self._rendered
+
     @property
     def events(self):
-        return self.sink.events
+        return self._render()[0]
 
     @property
     def _wm_states(self):
-        return self.sink._wm_states
+        return self._render()[1]
 
     def emit(self, phase, kind, label, highlight=None, detail=None, rule=None, wave=None):
         self.sink.event(phase, kind, label, self.cycle, [g.id for g in self.ag.stack],

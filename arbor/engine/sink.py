@@ -3,43 +3,37 @@
 
 Engine(_Tracer.run 사이클)은 방출 지점마다 sink.event(...) 만 호출한다(의존성 역전).
 NullSink = headless(채점·대량; 비용 0). JournalSink = debug.
-(stage b: JournalSink 는 기존 emit 과 동일하게 full 스냅샷+dedup — byte 동일 검증용.
- stage c 에서 event-sourcing 델타 + Renderer 로 교체.)"""
+(stage c: event-sourcing 델타 기록 — 스냅샷은 Renderer(arbor/engine/renderer.py)가
+ journal 을 replay 해서 사후 재구성한다.)"""
 from __future__ import annotations
-
-from soar.wm import _wm_key
 
 
 class NullSink:
-    """headless: 방출 no-op. wm.journal 도 안 붙여 실행이 방출 비용을 전혀 안 낸다."""
-    events: list = []
-    _wm_states: list = []
+    """headless: 방출 no-op. wm.journal 을 안 붙여 실행이 방출 비용을 전혀 안 낸다.
+    render(NullSink) 이 빈 events/wm_states 를 내도록 seed/wm_log/raw_events 는 빈 리스트."""
+    seed: list = []
+    wm_log: list = []
+    raw_events: list = []
 
     def event(self, *a, **k):
         pass
 
 
 class JournalSink:
-    """debug(stage b): 기존 _Tracer.emit 로직을 그대로 옮긴 것 — full 스냅샷 + 연속 동일 dedup."""
+    """debug(stage c): 이벤트와 WM mutation 을 append-only journal 로 기록.
+    seed = 부착 시점 WM(이후 델타의 기준점). wm_log = wm.add/remove 가 append 하는 델타.
+    event() 은 그 순간 wm_log 길이(cursor)만 실어 전체 WM 을 안 뜬다 → 실행 중 O(1)."""
     def __init__(self, agent):
         self.ag = agent
-        self.events: list = []
-        self._wm_states: list = []
-        self._last_key = None
-        self._last_si = -1
+        self.raw_events: list = []
+        self.wm_log: list = []
+        self.seed = list(agent.wm)                  # 부착 전 초기 WM — Renderer replay 시작점
+        agent.wm.journal = self.wm_log              # 이후 모든 mutation 이 wm_log 로
 
     def event(self, phase, kind, label, cycle, goal_stack,
               highlight=None, detail=None, rule=None, wave=None):
-        wm = [list(t) for t in self.ag.wm]           # wm.__iter__ 는 이미 결정적 정렬순(_wm_key)
-        key = tuple(tuple(t) for t in wm)
-        if key == self._last_key:
-            si = self._last_si
-        else:
-            si = len(self._wm_states)
-            self._wm_states.append(wm)
-            self._last_key, self._last_si = key, si
-        self.events.append({
-            "seq": len(self.events), "phase": phase, "kind": kind, "label": label,
-            "cycle": cycle, "wave": wave, "highlight": highlight or [],
-            "wm_state": si, "goal_stack": list(goal_stack), "detail": detail, "rule": rule,
+        self.raw_events.append({
+            "phase": phase, "kind": kind, "label": label, "cycle": cycle, "wave": wave,
+            "highlight": highlight or [], "detail": detail, "rule": rule,
+            "goal_stack": list(goal_stack), "cursor": len(self.wm_log),
         })
