@@ -207,18 +207,22 @@ def to_source(ast) -> str:
         return _to_source_grid(body)
     if _is_cellset_body(body):
         return _to_source_blob(body)
-    # ── pixel/object 계열 (기존) ──
+    # ── pixel/object/coord 계열 ──
     src_lines, seen = [], set()
     for s in body:
         lvl = s["args"]["target"]["ref"]
-        if lvl not in seen:
+        if lvl in _LEVEL and lvl not in seen:                 # coord 는 헤더(in_px=..) 불필요
             seen.add(lvl); src_lines.append(_LEVEL[lvl][0])
     defs, steps = list(src_lines), ["tfg0 = input_grid"]
     for i, s in enumerate(body):
-        tgt = s["args"]["target"]
-        _, ref_name, prefix = _LEVEL[tgt["ref"]]
-        defs.append(f"{prefix}{i} = {ref_name}[{_leaf_src(tgt['index'])}]")
-        steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {prefix}{i}.coord, {_leaf_src(s['args']['color'])})")
+        tgt = s["args"]["target"]; col = _leaf_src(s["args"]["color"])
+        if tgt["ref"] == "coord":                             # 리터럴 좌표 직접
+            pos = tuple(tgt["index"]["const"]) if "const" in tgt["index"] else _leaf_src(tgt["index"])
+            steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {pos}, {col})")
+        else:
+            _, ref_name, prefix = _LEVEL[tgt["ref"]]
+            defs.append(f"{prefix}{i} = {ref_name}[{_leaf_src(tgt['index'])}]")
+            steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {prefix}{i}.coord, {col})")
     steps.append(f"output_grid = tfg{len(body)}")
     return "\n".join(defs + [""] + steps)
 

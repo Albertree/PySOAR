@@ -93,6 +93,9 @@ def _coloring_steps(body):
         if ref in _ACCESSOR:
             idx = _disp_leaf(tgt["index"])
             label = f"{_ACCESSOR[ref]}(input_grid)[{idx}].coord"
+        elif ref == "coord":                          # 리터럴 좌표 직접
+            r, c = tgt["index"]["const"]
+            label = f"({r}, {c})"
         elif ref == "cellset":                        # a-h 밖(정직 표기 — 러너 미지원, coloring 은 단일좌표만)
             label = f"cellset={_disp_leaf(tgt['cells'])}"
         else:
@@ -152,6 +155,9 @@ def _display_pixel(body):
         if ref in _ACCESSOR:                          # pixel/object: 단일 좌표 채색
             idx = _disp_leaf(tgt["index"])
             lines.append(f"g = coloring(g, {_ACCESSOR[ref]}(input_grid)[{idx}].coord, {col})")
+        elif ref == "coord":                          # 리터럴 좌표 직접
+            r, c = tgt["index"]["const"]
+            lines.append(f"g = coloring(g, ({r}, {c}), {col})")
         elif ref == "cellset":                        # blob: 셀 집합 (a–h 밖 — 정직한 다중형)
             cl = tgt["cells"]
             cells = _disp_leaf(cl)
@@ -390,6 +396,9 @@ def _pixel_step_rows(ast, outline=None):
         if ref in _ACCESSOR:
             idx = _disp_leaf(tgt["index"])
             label = f"{_ACCESSOR[ref]}(input_grid)[{idx}].coord"
+        elif ref == "coord":
+            r, c = tgt["index"]["const"]
+            label = f"({r}, {c})"
         elif ref == "cellset":
             label = f"cells {_disp_leaf(tgt['cells'])}"
         else:
@@ -858,7 +867,10 @@ function runBody(code, input){
   }
   // 순차 대입 body(g0 = g.contents; gN = coloring(gN-1, pos, color); …; result = gN) 는 아래 generic
   // '이름 = 식' 처리(∘ 합성 폐기 이후 특수 분기 불필요 — name→ATOM[name], g→g, output_grid→output 만
-  // 구분하면 됨)와 g.prop = 식(mDot) 만으로 충분히 재현된다.
+  // 구분하면 됨)와 g.prop = 식(mDot) 만으로 충분히 재현된다. 단, coord 타깃은 display_source 가
+  // Python 튜플 표기 `(r, c)` 를 그대로 찍기 때문에 evalExpr(new Function 의 콤마연산자)로 넘기면
+  // "(2, 8)" 이 배열이 아니라 콤마연산자로 평가돼(마지막 값 8) coloring 이 깨진다 — mCoord 로 그
+  // 좌표 리터럴만 별도 파싱해 [r,c] 배열로 만들어 넘긴다(mDot/mFor 와 같은 급의 특수 분기).
   var lines = code.split("\n");
   for(var i=0;i<lines.length;i++){
     var ln = lines[i].trim();
@@ -874,6 +886,15 @@ function runBody(code, input){
       for(var k=0;k<it.length;k++){ ATOM[mFor[1]]=it[k];
         g=(new Function("ATOM","g","input_grid","divmod","with(ATOM){return ("+mb[1]+");}"))(ATOM,g,INPUT,ATOM.divmod); }
       continue; }
+    var mCoord = ln.match(/^(\w+)\s*=\s*coloring\((\w+),\s*\((-?\d+),\s*(-?\d+)\),\s*(.+)\)$/);  // 좌표 리터럴 (r,c)
+    if(mCoord){
+      var _src = (mCoord[2]==="g") ? g : ATOM[mCoord[2]];
+      var _pos = [parseInt(mCoord[3],10), parseInt(mCoord[4],10)];
+      var _col = evalExpr(mCoord[5]);
+      var _res = ATOM.coloring(_src, _pos, _col);
+      if(mCoord[1]==="g") g=_res; else if(mCoord[1]==="output_grid") output=_res; else ATOM[mCoord[1]]=_res;
+      continue;
+    }
     var m = ln.match(/^(\w+)\s*=\s*(.+)$/);
     if(!m) throw new Error("해석 불가: "+ln);
     var val = evalExpr(m[2]);
