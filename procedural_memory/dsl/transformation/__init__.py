@@ -19,6 +19,13 @@ def coloring(grid, position, color):
     return out
 
 
+@dsl("transformation", ["grid", "size"], "grid", effect=effect("create", "grid"))
+def set_grid_size(grid, size):
+    """G1 의 차원 선언. **선언형(make_grid 없이)** — 산출은 contents 가 지배하고 size 는 표시·검증용
+    주장(Round-3 Grid 객체모델: valid iff size==dims(contents)). set_grid_color 와 동형."""
+    return grid                          # size 는 표시·검증용; 산출은 contents 지배
+
+
 @dsl("transformation", ["grid", "color"], "grid", effect=effect("recolor", "grid"))
 def set_grid_color(grid, color):
     """G1 의 base/palette 설정. color 집합의 base(fill) 로 배경 확정 — 나머지 색은 contents 가 채움."""

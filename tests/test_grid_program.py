@@ -81,12 +81,11 @@ class TestGridBuilder(unittest.TestCase):
 
 
 class TestGridDSLRegistered(unittest.TestCase):
-    def test_setters_in_specs(self):   # set_grid_size 는 DSL 미등록(AST 라벨만; make_grid 제거로 동반 삭제)
+    def test_setters_in_specs(self):   # set_grid_size 유지(선언형; make_grid 없이). 3 setter 등록.
         from procedural_memory.dsl.registry import SPECS
-        for name in ("set_grid_color", "set_grid_contents"):
+        for name in ("set_grid_size", "set_grid_color", "set_grid_contents"):
             self.assertIn(name, SPECS)
             self.assertEqual(SPECS[name]["kind"], "transformation")
-        self.assertNotIn("set_grid_size", SPECS)
     def test_frozen_atom_is_coloring_only(self):   # coloring 단독 동결 원자(make_grid 제거)
         from procedural_memory.dsl.registry import SPECS
         self.assertIn("coloring", SPECS); self.assertNotIn("make_grid", SPECS)
