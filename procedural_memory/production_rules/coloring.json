@@ -3,7 +3,7 @@
   "doc": "기본 DSL(contents 슬롯). object/pixel 모두 recolor-rel-pending(compare relation 존재 신호) 에서 발화 — object 는 object relation(E_G0Oi-G1Oj), pixel 은 pixel relation(E_G0Xi-G1Xi) 에서 좌표·색을 읽어 frozen coloring 으로 시뮬 grid 를 칠함. program 의 grid_contents 를 채운다",
   "propose": [
     {
-      "name": "propose*coloring-pixel-rel",
+      "name": "propose*coloring",
       "order": 11,
       "conditions": [
         {

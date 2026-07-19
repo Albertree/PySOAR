@@ -100,7 +100,7 @@ def _op_hypothesize(ag):
         if rels:
             for E in rels:
                 ag.wm.add(sid, "recolor-rel", E)                # coloring body 가 이걸 스캔해 전부 칠함
-            # propose*coloring-pixel-rel 은 **존재 신호 하나**(recolor-rel-pending)로만 발화한다 —
+            # propose*coloring 은 **존재 신호 하나**(recolor-rel-pending)로만 발화한다 —
             # `(<s> ^recolor-rel <e>)` 로 직접 매칭하면 relation 마다 별도 <e> 바인딩 → 매 relation 당
             # 별개의 operator(<o>)가 제안돼 TIE(동일 이름 operator 복수, 미처리)로 run 이 죽음을 실측
             # (move000a 가 score 0/60). "한 operator 가 전부 처리" 모델 유지엔 단일 scalar 게이트가

@@ -124,7 +124,7 @@ def _op_coloring(ag):
     """**coloring DSL operator (apply body = 원자연산만)** — xform 없이 compare relation 에서 직접
     읽어 칠한다(Part B). pixel recolor-rel 이 있으면 pixel 경로(`_op_coloring_pixel_rel`), 없고
     object recolor-rel 이 있으면 object 경로(`_op_coloring_object_rel`) — 둘 다 미적용분을 **한 번에**
-    처리. 어느 쪽도 없으면 colored-all(→ verify). '무엇을/언제'는 **규칙**(propose*coloring-pixel-rel:
+    처리. 어느 쪽도 없으면 colored-all(→ verify). '무엇을/언제'는 **규칙**(propose*coloring:
     recolor-rel-pending 존재)이 정한다."""
     sid = ag.stack[-1].id
     if _op_coloring_pixel_rel(ag, sid):        # PIXEL: recolor-rel 이 있으면 relation 경로로 처리·종료
