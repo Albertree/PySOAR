@@ -601,11 +601,13 @@ def _grid_step_rows(ast, outline=None, slot_exprs=None, cell_w=None):
         f'<div class="row">{opb("set_grid_size")}<span class="h"></span>{colr(_grid_leaf_repr(sz, "size"), size_cls)}</div>',
         f'<div class="row">{opb("set_grid_color")}<span class="h"></span>{_colorval(colr(_grid_leaf_repr(co, "color"), color_cls), color_sw)}</div>',
     ]
-    if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(①과 같은 재료)
+    if "program" in ct:                        # contents = 하강 coloring 합성 → 평탄 선형 시퀀스
         top.append(f'<div class="row">{opb("set_grid_contents")}</div>')
         step_outline = outline["contents"]["steps"] if outline else None
         inner_rows = _coloring_flow_rows(ct["program"]["body"], step_outline, slot_exprs, cell_w)
-        body_html = "".join(top) + f'<div class="nestedflow">{"".join(inner_rows)}</div>'
+        # 사용자 2026-07-20: coloring 을 여러번 해도 하나로 묶지(중첩 .nestedflow) 않고, 각 coloring 을
+        # input_grid→…→output_grid 메인 선형 시퀀스에 직접 스텝으로 놓는다(변형 시퀀스가 잘 보이게).
+        body_html = "".join(top) + "".join(inner_rows)
     else:
         contents_cls = outline["contents"]["cls"] if outline else ""
         top.append(f'<div class="row">{opb("set_grid_contents")}<span class="h"></span>'
