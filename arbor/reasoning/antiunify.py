@@ -176,12 +176,11 @@ def _shape_key(cells):
 
 def _selectors(comps_list):
     """소스-객체 선택자 = **변화객체 비교(COMM/DIFF)로 도출**한다. 우선순위:
-      1. 속성값 COMM (색·모양·크기의 특정 값이 각 grid 에서 유일) — '같은 것'으로 바로 해결.
-      2. 크기 **비교** 극값(모두보다 큼/작음 = 유일 최대/최소) — §4-2 요소간 larger_than 비교로 도출.
-         (M2 처럼 '전경 객체 1개'는 '바탕보다 작은 것'=smallest 로, M4/크기 mover 는 largest 로 잡힌다.)
+      1. 속성값 COMM (색·모양·크기·위치의 특정 값이 각 grid 에서 유일) — '같은 것'으로 바로 해결.
+      2. **Boundedness**(Spelke core object): 단일색에 둘러싸인 '경계 있는 객체'(figure). 크기 극값
+         (smallest/largest = 사전지식)은 제거하고 이 원리로 대체(2026-07-19 사용자).
     §2-2/사용자(2026-07-17): 객체를 **나열해 N번째**를 집는 rank 열거(min/max/#2 메뉴)는 추가 편향이라
-    안 쓴다 — 극값은 나열이 아니라 '모두와 비교' 결과다. #2 류 임의 순위는 제거.
-    반환 = [(name, fn(comps)->cells|None)]. resolve 가 train mover 재현하는 선택자만 채택."""
+    안 쓴다. 반환 = [(name, fn(comps)->cells|None)]. resolve 가 train mover 재현하는 선택자만 채택."""
     # 선택자 = comps → **매치되는 모든 객체 리스트**(scan 순, 결정적). 모호(여러 개)해도 버리지 않는다:
     # train 은 그 중 mover 를 포함하면 유효(사용자 2026-07-18 "유일 아니어도 mover 를 포함"), test 는
     # 후보를 열거해 시도(apply→오답→다음 후보). 예전 '유일=None' 대신 리스트 → 호출측이 후보를 다룬다.
@@ -200,16 +199,23 @@ def _selectors(comps_list):
     def by_col(cv):                                       # 위치 값: left-col 앵커 == cv
         return lambda comps: [cells for cells, _ in comps if min(c for _, c in cells) == cv]
 
-    def by_extreme(largest):
-        # 크기 극값 = 모두와 비교해 더 큼/작음(§4-2). 동률이면 그 동률 전부(모호 → 열거).
-        def pick(comps):
-            if not comps:
-                return []
-            tgt = max(len(c) for c, _ in comps) if largest else min(len(c) for c, _ in comps)
-            return [c for c, _ in comps if len(c) == tgt]
-        return pick
+    def by_bounded(comps):
+        # Boundedness(Spelke core object): 단일 색에 둘러싸인 = 뚜렷한 경계를 가진 객체(figure).
+        # 이동 후 배경색이 된 잔여셀은 배경에 흡수돼 독립 경계가 없다. 크기/count/max 사전지식 없이
+        # '경계 있는 객체'를 지목 — 여럿이면 _resolve_cellset 이 목적지 모양-매칭으로 최종 선택.
+        cellcol = {cell: col for cells, col in comps for cell in cells}
+        out = []
+        for cells, _col in comps:
+            cset = set(cells); adj = set()
+            for (r, c) in cells:
+                for nb in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+                    if nb in cellcol and nb not in cset:
+                        adj.add(cellcol[nb])
+            if len(adj) == 1:                            # 단일색에 둘러싸임 = 경계 뚜렷
+                out.append(cells)
+        return out
 
-    prop, rel = [], []
+    prop = []
     if comps_list:                                        # 전 grid 공통 값만(선택자가 test 에도 성립하려면)
         common_col = set.intersection(*[{col for _, col in cs} for cs in comps_list])
         for c in sorted(common_col):
@@ -217,7 +223,9 @@ def _selectors(comps_list):
         common_shp = set.intersection(*[{_shape_key(cells) for cells, _ in cs} for cs in comps_list])
         for i, shp in enumerate(sorted(common_shp, key=lambda s: (len(s), sorted(s)))):
             prop.append((f"shape#{i}", by_shape(shp)))
-        rel = [("smallest", by_extreme(False)), ("largest", by_extreme(True))]   # 크기 비교 극값(§4-2)
+        # (2026-07-19) 크기 극값(smallest/largest) 제거 — '가장 작다/크다'는 사전지식(사용자). 대신
+        # **Boundedness**(Spelke core object): 단일색에 둘러싸인 '경계 있는 객체'(figure)를 크기 없이 지목.
+        prop.append(("bounded", by_bounded))
         common_sz = set.intersection(*[{len(cells) for cells, _ in cs} for cs in comps_list])
         for z in sorted(common_sz):
             prop.append((f"size={z}", by_size(z)))
@@ -229,7 +237,7 @@ def _selectors(comps_list):
         common_c = set.intersection(*[{min(c for _, c in cells) for cells, _ in cs} for cs in comps_list])
         for cv in sorted(common_c):
             prop.append((f"col={cv}", by_col(cv)))
-    return prop + rel                                     # 속성값 COMM 우선, 크기비교 극값은 fallback
+    return prop                                           # 속성값 COMM + Boundedness
 
 
 def _one(ms):
