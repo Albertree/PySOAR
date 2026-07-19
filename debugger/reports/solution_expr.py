@@ -50,19 +50,20 @@ def move_to_vector(row_tok, col_tok, objvar):
         if r[1] == 0 and c[1] == 0:
             return coord
         return f"{coord} + ({r[1]}, {c[1]})"
-    # 둘 다 격자코너
+    # 둘 다 격자코너: GRID 는 size/color/contents 만 가짐(코너 property 없음). 격자 우하코너 = (H-1, W-1)
+    # = (height(input_grid)-1, width(input_grid)-1). bottom_right(input_grid) 는 무효(사용자 2026-07-20).
     if r[0] == "corner" and c[0] == "corner":
-        return f"{coord} - bottom_right({objvar}) + bottom_right(input_grid)"
+        return f"{coord} - bottom_right({objvar}) + (height(input_grid) - 1, width(input_grid) - 1)"
     # 앵커 성분(각 축)과 target 성분
-    def _anchor(comp, axis):                       # axis: 'r'|'c'
+    def _anchor(comp, axis):                       # axis: 'row'|'col'
         if comp == "tl":
             return f"top_left({objvar}).{axis}"
         if comp == "br":
             return f"bottom_right({objvar}).{axis}"
         return "0"                                 # 상대축은 anchor 0
     def _target(kind, tgt, axis):
-        if kind == "corner":
-            return f"bottom_right(input_grid).{axis}"
+        if kind == "corner":                       # row→height, col→width (H-1 / W-1)
+            return f"{'height' if axis == 'row' else 'width'}(input_grid) - 1"
         return str(tgt)                            # rel Δ / abs v / br v / edge 0
     ar, ac = _anchor(r[2], "row"), _anchor(c[2], "col")
     tr, tc = _target(r[0], r[1], "row"), _target(c[0], c[1], "col")

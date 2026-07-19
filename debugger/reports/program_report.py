@@ -232,11 +232,13 @@ def _coloring_steps(body, slot_exprs=None):
         elif ref == "coord":                          # 리터럴 좌표 직접
             r, c = tgt["index"]["const"]
             label = f"({r}, {c})"
-        elif ref == "cellset":                        # blob: resolved 이동식이 있으면 명확화, 없으면 정직 raw
+        elif ref == "cellset":                        # blob: resolved 이동식이 있으면 ①과 같은 표현식, 없으면 raw
             cl = tgt["cells"]
             var = cl.get("var") if isinstance(cl, dict) else None
-            if slot_exprs and var in slot_exprs:
-                label = _pretty_move(slot_exprs[var]); resolved = True
+            if slot_exprs and var in slot_exprs:      # ③ 을 ① text(render_solution_lines)와 같은 함수식으로
+                rt, ct, _sel = SE._split_move(slot_exprs[var])
+                label = SE.move_to_vector(rt, ct, "obj0") if rt else "coordinate(obj0)"
+                resolved = True
             else:
                 label = f"cellset={_disp_leaf(cl)}"
         else:
@@ -430,18 +432,41 @@ def _is_matrix(v):
         isinstance(row, list) and all(isinstance(x, int) for x in row) for row in v)
 
 
-def ast_tree(node):
+def _slot_expr_leaf(rv):
+    """resolved 슬롯값 → ①③과 같은 함수식 (move[..]→벡터식, color@..→color(obj0))."""
+    if rv.startswith("move["):
+        rt, ct, _sel = SE._split_move(rv)
+        return SE.move_to_vector(rt, ct, "obj0") if rt else "coordinate(obj0)"
+    if rv.startswith("color@"):
+        return "color(obj0)"
+    return rv
+
+
+def ast_tree(node, slot_exprs=None):
+    """② AST 트리. slot_exprs(선택) 있으면 TASK.solution 의 cellset/color 슬롯 var 노드를 ①③과 같은
+    함수식 leaf 로 치환한다(사용자 2026-07-20: ②도 ①에 맞춰 표현식으로)."""
+    if slot_exprs and isinstance(node, dict):
+        if "var" in node and node["var"] in slot_exprs:               # ?c.colorN 등 직접 var
+            return f'<span class="leaf">{html.escape(_slot_expr_leaf(slot_exprs[node["var"]]))}</span>'
+        if node.get("ref") == "cellset":                              # cellset target 통째
+            cv = (node.get("cells") or {}).get("var")
+            if cv in slot_exprs:
+                return f'<span class="leaf">{html.escape(_slot_expr_leaf(slot_exprs[cv]))}</span>'
     if isinstance(node, dict):
-        rows = "".join(f'<li><span class="k">{html.escape(str(k))}</span>{ast_tree(v)}</li>'
-                        for k, v in node.items())
-        return f'<ul class="astree">{rows}</ul>'
+        lis = []
+        for k, v in node.items():
+            if slot_exprs and str(k) in slot_exprs:                   # slots 딕셔너리 키(?c.cellsN) → 표현식
+                lis.append(f'<li><span class="leaf">{html.escape(_slot_expr_leaf(slot_exprs[str(k)]))}</span></li>')
+            else:
+                lis.append(f'<li><span class="k">{html.escape(str(k))}</span>{ast_tree(v, slot_exprs)}</li>')
+        return f'<ul class="astree">{"".join(lis)}</ul>'
     if _is_matrix(node):
         mat = "\n".join(" ".join(str(x) for x in row) for row in node)
         return f'<pre class="astmat">{html.escape(mat)}</pre>'
     if isinstance(node, list):
         if not node:
             return '<span class="leaf">[]</span>'
-        rows = "".join(f'<li>{ast_tree(v)}</li>' for v in node)
+        rows = "".join(f'<li>{ast_tree(v, slot_exprs)}</li>' for v in node)
         return f'<ul class="astree astlist">{rows}</ul>'
     return f'<span class="leaf">{html.escape(json.dumps(node))}</span>'
 
@@ -533,10 +558,12 @@ def _coloring_flow_rows(body, outline=None, slot_exprs=None):
         col = col_leaf.get("const")
         sw = _swatches([col]) if isinstance(col, int) else ""
         o = outline[i] if (outline and i < len(outline)) else {}
+        cvar = col_leaf.get("var")                    # ?c.colorN(slot) → color(obj0) (①과 일치)
+        col_txt = "color(obj0)" if (slot_exprs and cvar in slot_exprs) else _disp_leaf(col_leaf)
         rows.append(
             f'<div class="row">{opb("coloring")}<span class="h"></span>'
             f'{dest_box(st["label"], o.get("idx", ""))}<span class="h"></span>'
-            f'{_colorval(colr(_disp_leaf(col_leaf), o.get("col", "")), sw)}</div><div class="v"></div>')
+            f'{_colorval(colr(col_txt, o.get("col", "")), sw)}</div><div class="v"></div>')
     return rows
 
 
@@ -603,14 +630,17 @@ def _pixel_step_rows(ast, outline=None, slot_exprs=None):
     return rows
 
 
-def _viz(ast, ex, ghost=False, outline=None, slot_exprs=None):
+def _viz(ast, ex, ghost=False, outline=None, slot_exprs=None, endpoints=True):
     """두 계열 공통 box-flow: input_grid 썸네일 → 스텝들 → output_grid 썸네일.
     ghost=True 면 overlay(§8 TASK.solution 가로 레이아웃 중간 열)용 반투명 사본
     (easy_antiunify_viz.flow(ghost=True) 와 같은 클래스 이름 재사용 — .ovl/.ghost CSS 는 _EV_CSS 것).
     outline(선택) = _compare_asts() 가 낸 Step B COMM/DIFF class dict — 끝점(input_grid/output_grid)
     행에는 적용하지 않는다(§Step B — 끝점은 비교/표기 대상 밖).
-    slot_exprs(선택) = TASK.solution cellset 변수 → resolved 이동식(①과 같은 명확 표현)."""
-    g0, g1 = _endpoint_rows(ex)
+    slot_exprs(선택) = TASK.solution cellset 변수 → resolved 이동식(①과 같은 명확 표현).
+    endpoints=False 면 input/output grid 썸네일을 뺀다 — Step B overlay 에서 두 겹치는 flow 의 크기가
+    격자(납작/세로긴) 차이로 어긋나 열이 안 맞던 문제 해결(사용자 2026-07-20: 겹치는 두 그림은 완전히
+    같은 크기여야 한다 → 끝단 grid 제외, step 박스만 정렬 비교)."""
+    g0, g1 = _endpoint_rows(ex) if endpoints else ("", "")
     steps = (_grid_step_rows(ast, outline, slot_exprs) if PA._is_grid_body(ast.get("body") or [])
              else _pixel_step_rows(ast, outline, slot_exprs))
     cls = "flow ghost" if ghost else "flow"
@@ -788,7 +818,7 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
             f'<div class="view"><div class="vt">① text (통일 body · 실행형)</div>'
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
             f'<pre class="src">{html.escape(src_text)}</pre></div>'
-            f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast)}</div>'
+            f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast, slot_exprs)}</div>'
             f'<div class="view viz"><div class="vt">③ 시각화</div>{_viz(ast, ex, slot_exprs=slot_exprs)}</div>'
             f'</div></div>')
 
@@ -813,7 +843,8 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         # → COMM(녹색 .comm)/DIFF(빨강 .diff) outline 을 solid layer 에 입힌다(_EV_CSS 재사용, 신규
         # 색 정의 없음). solid+ghost 겹침 자체는 기존 .ovl/.ghost 그대로.
         outline = _compare_asts(a0, a1)
-        overlay = (f'<div class="ovl">{_viz(a0, ex0, outline=outline)}{_viz(a1, ex1, ghost=True)}</div>'
+        overlay = (f'<div class="ovl">{_viz(a0, ex0, outline=outline, endpoints=False)}'
+                   f'{_viz(a1, ex1, ghost=True, endpoints=False)}</div>'
                    f'<div class="legend"><span class="lg comm">COMM(일치) = 녹색</span>'
                    f'<span class="lg diff">DIFF(어긋남) = 빨강</span></div>')
         box = f'<div class="innerbox"><div class="lab">PROGRAM COMPARISON</div>{overlay}</div>'

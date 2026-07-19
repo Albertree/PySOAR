@@ -45,7 +45,7 @@ class TestMoveToVector(unittest.TestCase):
 
     def test_grid_corner(self):
         self.assertEqual(move_to_vector("H-h", "W-w", "obj0"),
-                         "coordinate(obj0) - bottom_right(obj0) + bottom_right(input_grid)")
+                         "coordinate(obj0) - bottom_right(obj0) + (height(input_grid) - 1, width(input_grid) - 1)")
 
     def test_mixed_abs_row_br_col(self):
         # 축별 다른 모델: row 절대=1, col BR=2 → 성분별 anchor/target
