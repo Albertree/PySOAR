@@ -1,0 +1,6 @@
+idx,file_2ex,file_3ex,object_branch,selection,change_count
+1,objc_000a.json,objc_000b.json,single,,
+2,objc_000c.json,objc_000d.json,multi,color,single
+3,objc_000e.json,objc_000f.json,multi,size,single
+4,objc_000g.json,objc_000h.json,multi,shape,single
+5,objc_000i.json,objc_000j.json,multi,position,single
