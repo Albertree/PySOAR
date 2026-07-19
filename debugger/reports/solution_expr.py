@@ -72,3 +72,73 @@ def move_to_vector(row_tok, col_tok, objvar):
         return f"{coord} - {whole}({objvar}) + ({tr}, {tc})"
     # 혼합: 성분별 anchor
     return f"{coord} - ({ar}, {ac}) + ({tr}, {tc})"
+
+
+def _split_move(resolved_val):
+    """'move[ROW,COL]@sel' → (row_tok, col_tok, sel). 파싱 실패 시 (None,None,None)."""
+    m = re.match(r"^move\[(.+?),(.+?)\](?:@(.+))?$", resolved_val)
+    if not m:
+        return None, None, None
+    return m.group(1), m.group(2), (m.group(3) or None)
+
+
+def _sel_of(resolved_val):
+    """resolved 값의 @선택자 ('move[..]@color=2'→'color=2', 'color@bounded'→'bounded')."""
+    return resolved_val.rsplit("@", 1)[1] if "@" in resolved_val else None
+
+
+def render_solution_lines(solution_ast, resolved, comm, shapes):
+    """설계 §5 형태의 표시줄 리스트. 시각화-먼저(솔버 데이터 재표기). 결정적."""
+    body = solution_ast.get("body") or []
+    parts = {s["call"]: s["args"] for s in body}
+    # 1) 공통 선택자 → 객체 바인딩 obj0 (선택자-일관: 모든 슬롯 동일 @sel)
+    sel = next((_sel_of(v) for v in resolved.values() if _sel_of(v)), None)
+    cond, shape_ref = selector_to_condition(sel)
+    lines = []
+    if shape_ref is not None:
+        lines.append(f"{shape_ref} = {shapes.get(shape_ref, '[]')}")
+    lines.append(f"obj0 = select(object, {cond})")
+    objvar = "obj0"
+    var_i = [0]
+
+    def _new_var():
+        var_i[0] += 1
+        return f"?var{var_i[0]}"
+
+    # 2) set_grid_size (COMM→리터럴, DIFF→변수화)
+    sz = parts["set_grid_size"]["size"]
+    if comm.get("size", True):
+        v = sz.get("const") or {}
+        lit = f"({v.get('height')}, {v.get('width')})" if isinstance(v, dict) else str(v)
+        lines.append(f"set_grid_size = {lit}")
+    else:
+        vn = _new_var(); lines.append(f"{vn} = size(input_grid)")
+        lines.append(f"set_grid_size = {vn}")
+    # 3) set_grid_color
+    co = parts["set_grid_color"]["color"]
+    if comm.get("color", True):
+        lines.append(f"set_grid_color = {co.get('const', co.get('expr'))}")
+    else:
+        vn = _new_var(); lines.append(f"{vn} = color(input_grid)")
+        lines.append(f"set_grid_color = {vn}")
+    # 4) coloring 스텝 (cellset=DIFF 슬롯 → 변수화; color=const→리터럴/var→color(obj))
+    prog = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
+    for s in prog:
+        tgt = s["args"]["target"]; colr = s["args"]["color"]
+        cell_var = tgt.get("cells", {}).get("var") if tgt.get("ref") == "cellset" else None
+        # 좌표 변수
+        if cell_var and cell_var in resolved:
+            rt, ct, _ = _split_move(resolved[cell_var])
+            expr = move_to_vector(rt, ct, objvar) if rt else f"coordinate({objvar})"
+        else:
+            expr = f"coordinate({objvar})"
+        vcoord = _new_var(); lines.append(f"{vcoord} = {expr}")
+        # 색
+        if "const" in colr:
+            cterm = str(colr["const"])
+        else:
+            cvar = colr.get("var")
+            vcol = _new_var(); lines.append(f"{vcol} = color({objvar})")
+            cterm = vcol
+        lines.append(f"coloring({vcoord}, {cterm})")
+    return lines

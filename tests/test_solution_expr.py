@@ -1,5 +1,5 @@
 import unittest
-from debugger.reports.solution_expr import selector_to_condition, move_to_vector
+from debugger.reports.solution_expr import selector_to_condition, move_to_vector, render_solution_lines
 
 
 class TestSelectorToCondition(unittest.TestCase):
@@ -51,6 +51,49 @@ class TestMoveToVector(unittest.TestCase):
         # 축별 다른 모델: row 절대=1, col BR=2 → 성분별 anchor/target
         self.assertEqual(move_to_vector("=1", "BR=2", "obj0"),
                          "coordinate(obj0) - (top_left(obj0).row, bottom_right(obj0).col) + (1, 2)")
+
+
+class TestRenderSolutionLines(unittest.TestCase):
+    def _sol(self):
+        return {"body": [
+            {"call": "set_grid_size", "args": {"size": {"const": {"height": 8, "width": 8}}}},
+            {"call": "set_grid_color", "args": {"color": {"expr": "color(input_grid)"}}},
+            {"call": "set_grid_contents", "args": {"contents": {"program": {"body": [
+                {"call": "coloring", "args": {"target": {"ref": "cellset", "cells": {"var": "?c.cells0"}},
+                                              "color": {"const": 0}}},
+                {"call": "coloring", "args": {"target": {"ref": "cellset", "cells": {"var": "?c.cells1"}},
+                                              "color": {"var": "?c.color1"}}},
+            ]}}}}]}
+
+    def test_move000a_shape_relative(self):
+        resolved = {"?c.cells0": "move[r0+0,c0+0]@shape#0",
+                    "?c.cells1": "move[r0+1,c0+1]@shape#0",
+                    "?c.color1": "color@shape#0"}
+        lines = render_solution_lines(self._sol(), resolved,
+                                      {"size": True, "color": False},
+                                      {"shape0": [[1, -1], [1, 1]]})
+        text = "\n".join(lines)
+        self.assertIn("shape0 = [[1, -1], [1, 1]]", text)
+        self.assertIn("obj0 = select(object, shape(o) == shape0)", text)
+        self.assertIn("set_grid_size = (8, 8)", text)                 # COMM → 리터럴
+        self.assertIn("?var1 = color(input_grid)", text)              # DIFF color → 변수
+        self.assertIn("set_grid_color = ?var1", text)
+        self.assertIn("?var2 = coordinate(obj0)", text)               # cells0 제자리
+        self.assertIn("coloring(?var2, 0)", text)                     # 지우기(색0 리터럴)
+        self.assertIn("?var3 = coordinate(obj0) + (1, 1)", text)      # cells1 상대이동
+        self.assertIn("?var4 = color(obj0)", text)                    # color1
+        self.assertIn("coloring(?var3, ?var4)", text)
+        self.assertNotIn("cellset", text)                            # raw cellset 제거
+        self.assertNotIn("?c.", text)                                # 내부 슬롯명 노출 안 함
+
+    def test_bounded_br_uses_color_not_zero(self):
+        resolved = {"?c.cells0": "move[r0+0,c0+0]@bounded",
+                    "?c.cells1": "move[BR=2,BR=2]@bounded",
+                    "?c.color1": "color@bounded"}
+        text = "\n".join(render_solution_lines(self._sol(), resolved,
+                        {"size": True, "color": False}, {}))
+        self.assertIn("obj0 = select(object, color(o) != 0)", text)
+        self.assertIn("coordinate(obj0) - bottom_right(obj0) + (2, 2)", text)
 
 
 if __name__ == "__main__":
