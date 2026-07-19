@@ -152,19 +152,30 @@ def _resolve_decision(cands):
 
 def _color_map_search(train):
     """전 train pair 를 셀 단위로 훑어 **입력색→출력색 전역 함수**를 도출(크기 COMM 인 pair 만).
-    한 입력색이 두 출력색으로 가면(=전역 함수 아님, 객체·위치 의존) None. 일관하면 그 map 반환."""
+    한 입력색이 두 출력색으로 가면(=전역 함수 아님, 객체·위치 의존) None. 일관하면 그 map 반환.
+
+    (2026-07-19) **교차-pair 근거 요구**: 비항등 매핑 s→t(s≠t)는 색 s 가 **2개 이상 pair** 에
+    나타날 때만 전역규칙으로 인정한다. 단일 pair 에만 나온 색은 그 pair 의 객체/인스턴스일 뿐
+    '전역 색규칙'의 근거가 아니라, test 의 못 본 색으로 일반화 못 한다(예: objc_000b 는 pair 마다
+    다른 전경색 2·9·1 이 각각 8 로 가는데 각 색이 1 pair 뿐 → 우연 합집합, 실제 규칙은 '전경→8').
+    근거 없는 매핑이 하나라도 있으면 전역맵 무효(None) → contents DESCEND → 객체 대응(compress)로."""
     if any(len(e["input"]) != len(e["output"]) or len(e["input"][0]) != len(e["output"][0])
            for e in train):
         return None
-    mp = {}
+    mp, support = {}, {}
     for e in train:
         i, o = e["input"], e["output"]
+        seen = set()
         for r in range(len(i)):
             for c in range(len(i[0])):
                 a, b = i[r][c], o[r][c]
                 if a in mp and mp[a] != b:
                     return None
-                mp[a] = b
+                mp[a] = b; seen.add(a)
+        for s in seen:
+            support[s] = support.get(s, 0) + 1
+    if any(s != t and support.get(s, 0) < 2 for s, t in mp.items()):
+        return None                                          # 비항등 매핑에 교차-pair 근거 없음 → 전역맵 무효
     return mp
 
 
