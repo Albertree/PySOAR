@@ -90,21 +90,23 @@ def _build_agenda(ag, sid, group):
 
     elif kind == "object":
         # OBJECT: G0→G1 transformation 은 **한 PAIR 안**에서 찾는다 (사용자 교정 2026-07-10).
-        # inter-PAIR object 비교(P1·P2 의 G0×G1 매칭)는 **하지 않는다** — 변환은 P0 하나에서
-        # 도출하고, 다른 pair 는 나중에 그 변환을 *선택적으로 적용·검증*(부하 O(n²)→피함).
-        # 그래서 여기선 **첫 train pair 한 개**의 G0-objs ↔ G1-objs 대응만 만든다.
+        # inter-PAIR object 비교(P1 의 G0×P2 의 G1 매칭 등)는 **하지 않는다** — 변환은 pair 마다
+        # 그 pair 의 G0-objs ↔ G1-objs 대응만 본다(부하 O(n²)→피함).
+        # (Task 3a, 2026-07-19) grid `within` 분기처럼 **G0·G1 둘 다 있는 모든 train pair** 를 찾아
+        # pair 마다 cmp:match 를 하나씩 깐다 — 각 pair 의 `E_G0Oi-G1Oj` object 관계가 WM 에 남는다.
         bygrid, bypair = {}, {}
         for o in group:
             bygrid.setdefault(par[o], []).append(o)             # object → 그 grid
         for g in bygrid:
             bypair.setdefault(par[g], []).append(g)             # grid → 그 pair
         train = sorted(pp for pp, gs in bypair.items() if len(gs) >= 2)   # G0·G1 다 있는 pair
-        if train:
-            p = train[0]                                        # 첫 PAIR 만 (다음 PAIR 로 안 넘어감)
+        order = 0
+        for p in train:
             g0, g1 = sorted(bypair[p])
             cid = f"{sid}.cmp:match.{p.split('.')[-1]}"
             ag.wm.add(cid, "g0", g0); ag.wm.add(cid, "g1", g1); ag.wm.add(cid, "pair", p)
-            specs.append((cid, "match", 0))
+            specs.append((cid, "match", order)); order += 1
+        if train:
             ag.wm.add(sid, "to-hypothesize", "yes")             # match 끝나면 hypothesize 발화(OBJECT 만)
     elif kind == "pixel":
         # PIXEL: GRID.pixels 를 G0·G1 로 나눠 **G0-pixels ↔ G1-pixels 교차 비교**(cross-grid 우선 —
