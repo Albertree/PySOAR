@@ -82,9 +82,24 @@ def _split_move(resolved_val):
     return m.group(1), m.group(2), (m.group(3) or None)
 
 
+def _strip_vspace(sel):
+    """선택자 뒤에 붙는 version-space 가설 인덱스 suffix('...#k', k=정수) 제거 — 모호(K>1)할 때만
+    resolve 가 전체 이름 끝에 최종 '#k' 를 덧붙인다(arbor/reasoning/antiunify.py `_push`/`resolve_slot`,
+    §2026-07-20 조사). `shape#N` 은 그 자체가 base 선택자 이름(N=shape class index)이라 보존 —
+    'shape#0#1' 처럼 뒤에 또 버전 suffix 가 붙은 경우만 그 마지막 '#k' 를 벗긴다."""
+    m = re.match(r"^shape#\d+#\d+$", sel)
+    if m:
+        return sel.rsplit("#", 1)[0]
+    if not sel.startswith("shape#") and re.match(r"^.+#\d+$", sel):
+        return sel.rsplit("#", 1)[0]
+    return sel
+
+
 def _sel_of(resolved_val):
-    """resolved 값의 @선택자 ('move[..]@color=2'→'color=2', 'color@bounded'→'bounded')."""
-    return resolved_val.rsplit("@", 1)[1] if "@" in resolved_val else None
+    """resolved 값의 @선택자 ('move[..]@color=2'→'color=2', 'color@bounded'→'bounded').
+    version-space suffix('@bounded#0'→'bounded')는 _strip_vspace 로 제거."""
+    sel = resolved_val.rsplit("@", 1)[1] if "@" in resolved_val else None
+    return _strip_vspace(sel) if sel else sel
 
 
 def render_solution_lines(solution_ast, resolved, comm, shapes):
@@ -108,8 +123,13 @@ def render_solution_lines(solution_ast, resolved, comm, shapes):
     # 2) set_grid_size (COMM→리터럴, DIFF→변수화)
     sz = parts["set_grid_size"]["size"]
     if comm.get("size", True):
-        v = sz.get("const") or {}
-        lit = f"({v.get('height')}, {v.get('width')})" if isinstance(v, dict) else str(v)
+        v = sz.get("const")
+        if isinstance(v, dict):
+            lit = f"({v.get('height')}, {v.get('width')})"
+        elif v is not None:
+            lit = str(v)
+        else:
+            lit = str(sz.get("expr"))                 # const 없음(예: size(input_grid)) → expr fallback
         lines.append(f"set_grid_size = {lit}")
     else:
         vn = _new_var(); lines.append(f"{vn} = size(input_grid)")
@@ -137,7 +157,6 @@ def render_solution_lines(solution_ast, resolved, comm, shapes):
         if "const" in colr:
             cterm = str(colr["const"])
         else:
-            cvar = colr.get("var")
             vcol = _new_var(); lines.append(f"{vcol} = color({objvar})")
             cterm = vcol
         lines.append(f"coloring({vcoord}, {cterm})")

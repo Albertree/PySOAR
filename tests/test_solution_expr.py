@@ -95,6 +95,19 @@ class TestRenderSolutionLines(unittest.TestCase):
         self.assertIn("obj0 = select(object, color(o) != 0)", text)
         self.assertIn("coordinate(obj0) - bottom_right(obj0) + (2, 2)", text)
 
+    def test_size_comm_no_const_falls_back_to_expr(self):
+        # 실제 move000a 솔루션처럼 set_grid_size 가 const 없이 expr 만 갖는 경우(§Task 5 CRITICAL fix
+        # — comm["size"]=True 인데 sz.get("const") 가 없으면 (None, None) 을 렌더하던 버그).
+        sol = self._sol()
+        sol["body"][0] = {"call": "set_grid_size", "args": {"size": {"expr": "size(input_grid)"}}}
+        resolved = {"?c.cells0": "move[r0+0,c0+0]@bounded",
+                    "?c.cells1": "move[BR=2,BR=2]@bounded",
+                    "?c.color1": "color@bounded"}
+        text = "\n".join(render_solution_lines(sol, resolved,
+                        {"size": True, "color": False}, {}))
+        self.assertIn("set_grid_size = size(input_grid)", text)
+        self.assertNotIn("(None, None)", text)
+
 
 if __name__ == "__main__":
     unittest.main()

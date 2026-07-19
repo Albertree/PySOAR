@@ -351,18 +351,20 @@ def _runner_payload(tid, asts, pairs, task):
 
 # ── Step 1: 수집 — 솔버 1 회 실행해 example PAIR.program(AST) 전부 + TASK.solution 을 WM 실측값으로 ──
 def _collect(tid, task):
-    """(pair_asts, pair_indices, solution_ast, attempts, slot_exprs) 반환.
+    """(pair_asts, pair_indices, solution_ast, attempts, slot_exprs, slots) 반환.
     program/solution 없으면 각각 [] / None(정직하게 미해결).
     pair_indices[k] = asts[k] 가 실제로 속한 train index — 중간 pair 에 program 이 없으면
     asts 의 리스트 위치가 train index 와 어긋나므로, 그 실제 index 를 나란히 carry 한다
     (T5 index-carry 가드 — false-green 방지: 다른 pair 의 input 과 program 이 잘못 짝지어지는 것 방지).
     slot_exprs = {`?c.cellsN` → resolved 이동식} — WM 의 `T.property ^resolved` 에서 수집,
-    solution 의 cellset 변수를 명확한 move 표현식으로 렌더하는 데 쓴다(§사용자 2026-07-20)."""
+    solution 의 cellset 변수를 명확한 move 표현식으로 렌더하는 데 쓴다(§사용자 2026-07-20).
+    slots = {`?c.X` → [pair0_cells, pair1_cells, ...]} — WM 의 `T.property ^slot` 에서 수집,
+    shape# 선택자의 실제 mover shape 를 재구성(_shapes_for)하는 데 쓴다(Task 5)."""
     try:
         from debugger.solve_cache import run_solve
         r = run_solve(tid, task, max_cycles=500)      # 1회 solve(+캐시) — dashboard 와 공유(재실행 X)
     except Exception:                                 # noqa: BLE001 — 리포트 생성용, 한 태스크 예외가 전체를 죽이지 않게
-        return [], [], None, [], {}
+        return [], [], None, [], {}, {}
     wm, attempts = r["wm"], r["attempts"]
     T = f"T{tid}"
     asts = []
@@ -392,7 +394,17 @@ def _collect(tid, task):
         if a == "resolved" and isinstance(v, str) and v.startswith("?c.") and "=" in v:
             var, _, rhs = v.partition("=")            # 첫 '=' 기준 (rhs 의 BR=2·color=2 는 보존)
             slot_exprs[var.strip()] = rhs.strip()
-    return asts, pairs, solution, attempts, slot_exprs
+    slot_vals = {}                                    # {?c.X: [pair0_cells, pair1_cells, ...]}
+    for (i, a, v) in wm:
+        if a == "slot" and isinstance(v, str) and v.startswith("?c."):
+            nm = v.split("[", 1)[0]
+            mm = re.search(r"=(?:DIFF|COMM)?(\[.*\])$", v)
+            if mm:
+                try:
+                    slot_vals[nm] = json.loads(mm.group(1))
+                except (ValueError, TypeError):
+                    pass
+    return asts, pairs, solution, attempts, slot_exprs, slot_vals
 
 
 # ── Step 2a: ② AST 트리 — 원본 dict/list(JSON) 를 그대로 nested 렌더 ──────────────────────────
@@ -730,14 +742,18 @@ def _render_header_safe(ast, g0):
 
 
 # ── 3-뷰 한 pair(또는 TASK.solution) 블록 (①②③ 은 같은 AST 의 세 표현 — 모듈 docstring 참고) ──
-def _pair_block(label, ast, ex, slot_exprs=None):
+def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
+    """sol_lines(선택) = SE.render_solution_lines 결과 — 있으면 ① 의 <pre class="src"> 본문을
+    이걸로 대체(② AST 트리·③ 시각화는 그대로, 러너-안전 display_source 는 PAIR program 에서만 계속
+    쓰인다 — Task 5 §Global Constraints)."""
     g0 = ex["input"]
+    src_text = "\n".join(sol_lines) if sol_lines is not None else display_source(ast, slot_exprs)
     return (f'<div class="pair">'
             f'<div class="lab">{html.escape(str(label))}</div>'
             f'<div class="views">'
             f'<div class="view"><div class="vt">① text (통일 body · 실행형)</div>'
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
-            f'<pre class="src">{html.escape(display_source(ast, slot_exprs))}</pre></div>'
+            f'<pre class="src">{html.escape(src_text)}</pre></div>'
             f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast)}</div>'
             f'<div class="view viz"><div class="vt">③ 시각화</div>{_viz(ast, ex, slot_exprs=slot_exprs)}</div>'
             f'</div></div>')
@@ -749,7 +765,7 @@ def _pair_block(label, ast, ex, slot_exprs=None):
 #    그대로). 셋을 색으로 구분된 카드에 담아 한 컨테이너(가로 스크롤)에 나란히 놓는다. overlay 는
 #    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — _EV_CSS 에
 #    이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
-def _solution_row(ast_ex_pairs, solution, slot_exprs=None):
+def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None):
     pair_boxes = "".join(
         f'<div class="innerbox">{_pair_block(f"PAIR {p + 1}", a, ex)}</div>'
         for a, ex, p in ast_ex_pairs)
@@ -772,7 +788,7 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None):
 
     if solution is not None:
         sol_ex = ast_ex_pairs[0][1]
-        sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex, slot_exprs)}</div>'
+        sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex, slot_exprs, sol_lines)}</div>'
         steps.append(f'<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
                       f'<div class="stepCcontent">{sol_box}</div></div>')
     else:
@@ -834,7 +850,7 @@ def _top_thumbs(task):
 def task_section(tid, task, precomputed=None):
     thumbs = _top_thumbs(task)
 
-    asts, pairs, solution, attempts, slot_exprs = precomputed if precomputed else _collect(tid, task)
+    asts, pairs, solution, attempts, slot_exprs, slot_vals = precomputed if precomputed else _collect(tid, task)
     if not asts:
         same = all(len(e["input"]) == len(e["output"]) and len(e["input"][0]) == len(e["output"][0])
                    for e in task["train"])
@@ -851,7 +867,12 @@ def task_section(tid, task, precomputed=None):
                 f'<div class="thumbs">{thumbs}</div><p class="note">{html.escape(why + done)}</p>{extra}</section>')
 
     ast_ex_pairs = [(a, task["train"][p], p) for a, p in zip(asts, pairs)]
-    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs)
+    sol_lines = None
+    if solution is not None:
+        comm = _solution_comm(asts)
+        shapes = _shapes_for(slot_exprs, slot_vals, [task["train"][p]["input"] for p in pairs])
+        sol_lines = SE.render_solution_lines(solution, slot_exprs, comm, shapes)
+    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines)
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
             f'<div class="thumbs">{thumbs}</div>{solrow}</section>')
@@ -1189,10 +1210,10 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
     secs_list = []
     solved = {}
     for t in tids:
-        asts, pairs, solution, attempts, slot_exprs = _collect(t, tasks[t])
+        asts, pairs, solution, attempts, slot_exprs, slot_vals = _collect(t, tasks[t])
         solved[t] = bool(attempts) and any(a["correct"] for a in attempts)   # 정답 attempt 존재 = 풀림(task_section:606 과 동일)
         runner_data.extend(_runner_payload(t, asts, pairs, tasks[t]))
-        secs_list.append(task_section(t, tasks[t], precomputed=(asts, pairs, solution, attempts, slot_exprs)))
+        secs_list.append(task_section(t, tasks[t], precomputed=(asts, pairs, solution, attempts, slot_exprs, slot_vals)))
     secs = "".join(secs_list)
     # 최상단 문제 리스트: solved 판정으로 초록/빨강 테두리 클래스 부여(§2-5). collect 뒤라 solved 확정됨.
     tabs = "".join(
