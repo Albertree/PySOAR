@@ -432,6 +432,17 @@ def resolve_slot(slot, train, test_input=None):
     N = len(vals)
     if N != len(train):
         return [], [("<len-mismatch>", False)]
+    # grid-declarative slot(G1 의 size/color): `_execute_grid` 은 **contents 만** 산출하므로 이 값은
+    # 실행에 전혀 안 쓰인다. per-pair 리터럴이 pair 마다 달라 slot(변수)이 됐어도 답과 무관 → 입력관계로
+    # 일반화해 survivor 를 낸다(옛 버그: size 핸들러 없음→dict//int; grid color→set(vals) unhashable).
+    # kind='size' 는 grid 전용. kind='color' 는 grid(값=AST dict)와 pixel(값=int)이 kind 를 공유하니
+    # **dict 값일 때만** grid-color 로 처리(pixel 정수색은 아래 기존 경로 유지).
+    if slot["kind"] == "size":
+        return ([("size(input_grid)", lambda g: {"height": len(g), "width": len(g[0])})],
+                [("size(input_grid)", True)])
+    if slot["kind"] == "color" and any(isinstance(v, dict) for v in vals):
+        return ([("color(input_grid)", lambda g: sorted({x for row in g for x in row}))],
+                [("color(input_grid)", True)])
     comps = [_components(e["input"]) for e in train]
     sels = _selectors(comps)
     test_comps = _components(test_input) if test_input else None
