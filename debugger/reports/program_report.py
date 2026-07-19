@@ -475,6 +475,29 @@ def ast_tree(node, slot_exprs=None):
     return f'<span class="leaf">{html.escape(json.dumps(node))}</span>'
 
 
+# ── TASK.solution 표현식 코드 → 트리(②)/박스(③) — 하나의 코드를 구조로 렌더(사용자 2026-07-20) ──
+def _expr_tree_html(node):
+    """expr AST 노드 → 중첩 트리 <li>(SE.node_label_children 소비)."""
+    label, children = SE.node_label_children(node)
+    lab = f'<span class="etn">{html.escape(str(label))}</span>'
+    if not children:
+        return f'<li>{lab}</li>'
+    inner = "".join(_expr_tree_html(c) for c in children)
+    return f'<li>{lab}<ul class="et">{inner}</ul></li>'
+
+
+def _program_tree_html(lines, box=False):
+    """표시줄(코드) 전체 → 문장별 중첩 트리. ②=AST 트리, ③=박스형(progbox) — 같은 파싱, CSS 로만 구분."""
+    lis = []
+    for st in SE.parse_program(lines):
+        if st["k"] == "assign":
+            lis.append(f'<li><span class="asn">{html.escape(st["lhs"])} =</span>'
+                       f'<ul class="et">{_expr_tree_html(st["rhs"])}</ul></li>')
+        else:
+            lis.append(_expr_tree_html(st["e"]))
+    return f'<ul class="astree prog{" progbox" if box else ""}">{"".join(lis)}</ul>'
+
+
 # ── Step 2b: ③ 시각화 — grid=3-property box-flow / pixel·object=coloring flow(easy_antiunify_viz 재사용) ──
 def _is_grid_literal(v):
     return isinstance(v, list) and bool(v) and isinstance(v[0], list)
@@ -811,23 +834,27 @@ def _render_header_safe(ast, g0):
 
 
 # ── 3-뷰 한 pair(또는 TASK.solution) 블록 (①②③ 은 같은 AST 의 세 표현 — 모듈 docstring 참고) ──
-def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None, bind_lines=None):
-    """sol_lines(선택) = SE.render_solution_lines 결과 — 있으면 ① 의 <pre class="src"> 본문을
-    이걸로 대체(러너-안전 display_source 는 PAIR program 에서만 계속 쓰인다 — Task 5 §Global Constraints).
-    bind_lines(선택) = 객체 선정 preamble(shape0=…, obj0=select(object,…)) — ②③ 앞에 붙여, 시각화만
-    봐도 obj0 가 무엇이고 어떻게 선정됐는지 보이게 한다(사용자 2026-07-20)."""
+def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
+    """sol_lines(선택) = SE.render_solution_lines 결과. 있으면 TASK.solution 이므로 ①=그 텍스트,
+    ②=그 코드의 AST 트리, ③=그 코드의 박스형 시각화(하나의 코드를 세 표현으로 — 사용자 2026-07-20).
+    없으면(PAIR program) 기존대로 ①=display_source(러너-안전)·②=raw AST·③=grid box-flow."""
     g0 = ex["input"]
-    src_text = "\n".join(sol_lines) if sol_lines is not None else display_source(ast, slot_exprs)
-    bind = (f'<pre class="bind">{html.escape(chr(10).join(bind_lines))}</pre>'
-            if bind_lines else "")
+    if sol_lines is not None:
+        src_text = "\n".join(sol_lines)
+        tree2 = _program_tree_html(sol_lines)
+        viz3 = _program_tree_html(sol_lines, box=True)
+    else:
+        src_text = display_source(ast, slot_exprs)
+        tree2 = ast_tree(ast, slot_exprs)
+        viz3 = _viz(ast, ex, slot_exprs=slot_exprs)
     return (f'<div class="pair">'
             f'<div class="lab">{html.escape(str(label))}</div>'
             f'<div class="views">'
             f'<div class="view"><div class="vt">① text (통일 body · 실행형)</div>'
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
             f'<pre class="src">{html.escape(src_text)}</pre></div>'
-            f'<div class="view"><div class="vt">② AST 트리</div>{bind}{ast_tree(ast, slot_exprs)}</div>'
-            f'<div class="view viz"><div class="vt">③ 시각화</div>{bind}{_viz(ast, ex, slot_exprs=slot_exprs)}</div>'
+            f'<div class="view"><div class="vt">② AST 트리</div>{tree2}</div>'
+            f'<div class="view viz"><div class="vt">③ 시각화</div>{viz3}</div>'
             f'</div></div>')
 
 
@@ -837,7 +864,7 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None, bind_lines=None
 #    그대로). 셋을 색으로 구분된 카드에 담아 한 컨테이너(가로 스크롤)에 나란히 놓는다. overlay 는
 #    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — _EV_CSS 에
 #    이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
-def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, groupings=None, bind_lines=None):
+def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, groupings=None):
     pair_boxes = "".join(
         f'<div class="innerbox">{_pair_block(f"PAIR {p + 1}", a, ex)}</div>'
         for a, ex, p in ast_ex_pairs)
@@ -865,7 +892,7 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
 
     if solution is not None:
         sol_ex = ast_ex_pairs[0][1]
-        sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex, slot_exprs, sol_lines, bind_lines)}</div>'
+        sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex, slot_exprs, sol_lines)}</div>'
         steps.append(f'<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
                       f'<div class="stepCcontent">{sol_box}</div></div>')
     else:
@@ -946,13 +973,11 @@ def task_section(tid, task, precomputed=None):
 
     ast_ex_pairs = [(a, task["train"][p], p) for a, p in zip(asts, pairs)]
     sol_lines = None
-    bind_lines = None
     if solution is not None and PA._is_grid_body(solution.get("body") or []):
         comm = _solution_comm(asts)
         shapes = _shapes_for(slot_exprs, slot_vals, [task["train"][p]["input"] for p in pairs])
         sol_lines = SE.render_solution_lines(solution, slot_exprs, comm, shapes)
-        bind_lines = SE.object_binding_lines(slot_exprs, shapes)
-    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings, bind_lines)
+    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings)
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
             f'<div class="thumbs">{thumbs}</div>{solrow}</section>')
@@ -996,6 +1021,19 @@ CSS = """
 .astree li{border-left:1px dashed #2a3038;padding-left:10px;margin:2px 0}
 .k{color:#7fb2e0;margin-right:6px}
 .leaf{color:#e6c99a}
+/* TASK.solution 코드 트리(② prog)·박스형(③ progbox) — 하나의 코드를 구조로 */
+.prog{list-style:none;margin:0;padding-left:0}
+.prog .et{list-style:none;margin:0;padding-left:13px}
+.prog>li{border-left:none;padding:3px 0;margin:3px 0}
+.prog .asn{color:#e0a552;font-weight:600;margin-right:6px}
+.prog .etn{color:#bcd8f5}
+.prog .et>li>.etn{color:#7fd0c0}          /* 함수/연산자 노드 */
+.progbox{padding-left:0}
+.progbox .etn{display:inline-block;border:1px solid #33506e;border-radius:5px;padding:0 6px;
+ background:#16202c;color:#cfe3f5;margin:1px 0}
+.progbox .et{padding-left:16px;border-left:2px solid #24384c}
+.progbox .asn{display:inline-block;border:1px solid #6a5220;border-radius:5px;padding:0 6px;
+ background:#2a2313;color:#e0a552}
 .astmat{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 8px;margin:2px 0 2px 14px;
  font:11px/1.4 ui-monospace,monospace;color:#e6c99a}
 .cmat{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 9px;margin:0;

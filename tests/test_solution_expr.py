@@ -109,5 +109,32 @@ class TestRenderSolutionLines(unittest.TestCase):
         self.assertNotIn("(None, None)", text)
 
 
+class TestExprParser(unittest.TestCase):
+    def test_roundtrip(self):
+        from debugger.reports.solution_expr import parse_expr, expr_str
+        for s in [
+            "coordinate(obj0)",
+            "coordinate(obj0) + (1, 1)",
+            "coordinate(obj0) - bottom_right(obj0) + (height(input_grid) - 1, width(input_grid) - 1)",
+            "select(object, shape(o) == shape0)",
+            "select(object, color(o) != 0 and area(o) == 1)",
+            "top_left(obj0).row",
+        ]:
+            self.assertEqual(expr_str(parse_expr(s)), s)
+
+    def test_program_statements(self):
+        from debugger.reports.solution_expr import parse_program
+        stmts = parse_program(["obj0 = select(object, color(o) != 0)", "coloring(?var2, 0)"])
+        self.assertEqual(stmts[0]["k"], "assign")
+        self.assertEqual(stmts[0]["lhs"], "obj0")
+        self.assertEqual(stmts[1]["k"], "stmt")
+
+    def test_label_children(self):
+        from debugger.reports.solution_expr import parse_expr, node_label_children
+        label, kids = node_label_children(parse_expr("coordinate(obj0)"))
+        self.assertEqual(label, "coordinate")
+        self.assertEqual(len(kids), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

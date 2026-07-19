@@ -170,3 +170,197 @@ def render_solution_lines(solution_ast, resolved, comm, shapes):
             cterm = vcol
         lines.append(f"coloring({vcoord}, {cterm})")
     return lines
+
+
+# ══ 표현식 코드 → AST 파서 (②AST 트리·③시각화 트리가 '하나의 코드'를 구조로 그리게) ══════════════
+# 사용자 2026-07-20: obj0=select(…)·?var 도 코드다. preamble 로 첨가하지 말고, render_solution_lines 가
+# 낸 표시줄(코드) 전체를 여기서 파싱해 구조(AST)로 렌더한다. HTML 렌더는 program_report(html import 有)에서.
+
+def _tok(s):
+    """표현식 문자열 → 토큰. op문자열 | ('num',int) | ('id',str) | 'and'|'not'."""
+    out, i, n = [], 0, len(s)
+    while i < n:
+        c = s[i]
+        if c.isspace():
+            i += 1
+        elif s[i:i + 2] in ("==", "!="):
+            out.append(s[i:i + 2]); i += 2
+        elif c in "()[],.+-*":
+            out.append(c); i += 1
+        elif c.isdigit():
+            j = i
+            while j < n and s[j].isdigit():
+                j += 1
+            out.append(("num", int(s[i:j]))); i = j
+        elif c.isalpha() or c in "?_":
+            j = i
+            while j < n and (s[j].isalnum() or s[j] in "?_"):
+                j += 1
+            w = s[i:j]; i = j
+            out.append(w if w in ("and", "not") else ("id", w))
+        else:
+            i += 1
+    return out
+
+
+class _Parser:
+    """재귀하강. 우선순위(낮→높): and < ==/!= < +/- < unary(not) < postfix(.,call) < primary."""
+    def __init__(self, toks):
+        self.t, self.i = toks, 0
+
+    def _peek(self):
+        return self.t[self.i] if self.i < len(self.t) else None
+
+    def _pop(self):
+        tk = self.t[self.i]; self.i += 1; return tk
+
+    def _eat(self, x):
+        if self._peek() == x:
+            self.i += 1; return True
+        return False
+
+    def expr(self):
+        left = self._cmp()
+        if self._peek() == "and":
+            items = [left]
+            while self._eat("and"):
+                items.append(self._cmp())
+            return {"k": "and", "items": items}
+        return left
+
+    def _cmp(self):
+        left = self._add()
+        if self._peek() in ("==", "!="):
+            return {"k": "cmp", "op": self._pop(), "lhs": left, "rhs": self._add()}
+        return left
+
+    def _add(self):
+        left = self._unary()
+        while self._peek() in ("+", "-"):
+            op = self._pop()
+            left = {"k": "binop", "op": op, "lhs": left, "rhs": self._unary()}
+        return left
+
+    def _unary(self):
+        if self._peek() == "not":
+            self._pop(); return {"k": "not", "e": self._unary()}
+        return self._post()
+
+    def _post(self):
+        base = self._prim()
+        while self._peek() == ".":
+            self._pop(); fld = self._pop()
+            base = {"k": "member", "base": base, "field": fld[1] if isinstance(fld, tuple) else str(fld)}
+        return base
+
+    def _prim(self):
+        tk = self._peek()
+        if tk == "(":
+            self._pop()
+            items = [self.expr()]
+            while self._eat(","):
+                items.append(self.expr())
+            self._eat(")")
+            return items[0] if len(items) == 1 else {"k": "tuple", "items": items}
+        if tk == "[":
+            return {"k": "lit", "v": self._list()}
+        if tk == "-":
+            self._pop(); num = self._pop()
+            return {"k": "lit", "v": -num[1] if isinstance(num, tuple) else 0}
+        if isinstance(tk, tuple) and tk[0] == "num":
+            self._pop(); return {"k": "lit", "v": tk[1]}
+        if isinstance(tk, tuple) and tk[0] == "id":
+            self._pop()
+            if self._peek() == "(":
+                self._pop(); args = []
+                if self._peek() != ")":
+                    args.append(self.expr())
+                    while self._eat(","):
+                        args.append(self.expr())
+                self._eat(")")
+                return {"k": "call", "fn": tk[1], "args": args}
+            return {"k": "id", "name": tk[1]}
+        if tk is not None:
+            self._pop()
+        return {"k": "id", "name": str(tk)}
+
+    def _list(self):
+        self._eat("[")
+        items = []
+        while self._peek() not in ("]", None):
+            if self._peek() == "[":
+                items.append(self._list())
+            elif self._peek() == "-":
+                self._pop(); items.append(-self._pop()[1])
+            else:
+                tk = self._pop(); items.append(tk[1] if isinstance(tk, tuple) else tk)
+            self._eat(",")
+        self._eat("]")
+        return items
+
+
+def parse_expr(s):
+    return _Parser(_tok(s)).expr()
+
+
+def parse_program(lines):
+    """표시줄(코드) → 문장 AST. 'lhs = rhs'(첫 = 가 == 아님)→assign, 그 외→stmt(call)."""
+    stmts = []
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            continue
+        m = re.match(r"^([\w?]+)\s*=(?!=)\s*(.+)$", ln)
+        if m:
+            stmts.append({"k": "assign", "lhs": m.group(1), "rhs": parse_expr(m.group(2))})
+        else:
+            stmts.append({"k": "stmt", "e": parse_expr(ln)})
+    return stmts
+
+
+def _lit_str(v):
+    return "[" + ", ".join(_lit_str(x) for x in v) + "]" if isinstance(v, list) else str(v)
+
+
+def node_label_children(node):
+    """expr AST 노드 → (label, [자식노드]) — HTML 트리 렌더가 소비(program_report)."""
+    k = node["k"]
+    if k == "call":
+        return node["fn"], node["args"]
+    if k in ("binop", "cmp"):
+        return node["op"], [node["lhs"], node["rhs"]]
+    if k == "and":
+        return "and", node["items"]
+    if k == "not":
+        return "not", [node["e"]]
+    if k == "tuple":
+        return "( , )", node["items"]
+    if k == "member":
+        return f".{node['field']}", [node["base"]]
+    if k == "id":
+        return node["name"], []
+    if k == "lit":
+        return _lit_str(node["v"]), []
+    return "?", []
+
+
+def expr_str(node):
+    """expr AST → 문자열(라운드트립 검증용)."""
+    k = node["k"]
+    if k == "call":
+        return f"{node['fn']}({', '.join(expr_str(a) for a in node['args'])})"
+    if k in ("binop", "cmp"):
+        return f"{expr_str(node['lhs'])} {node['op']} {expr_str(node['rhs'])}"
+    if k == "and":
+        return " and ".join(expr_str(x) for x in node["items"])
+    if k == "not":
+        return f"not {expr_str(node['e'])}"
+    if k == "tuple":
+        return "(" + ", ".join(expr_str(x) for x in node["items"]) + ")"
+    if k == "member":
+        return f"{expr_str(node['base'])}.{node['field']}"
+    if k == "id":
+        return node["name"]
+    if k == "lit":
+        return _lit_str(node["v"])
+    return "?"
