@@ -5,10 +5,14 @@ import json, os, sys
 from collections import Counter
 from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
-from arbor.perception.perception import _fg_correspondence, _obj_cc, objects_of
 from arbor.reasoning.program import _grid_decide
 from arbor.reasoning.program_ast import grid_program_from_decide, is_full_grid_program
-from procedural_memory.operators.coloring import _recolor_pending
+
+
+def _hop(ag, i, a):
+    """WM 1-hop: (i,a,v) 의 v (없으면 None). relation nested cascade(§compare_engine._store_receipt
+    의 '{host}.{attr}' 결정적 id) 를 걸어 내려갈 때 씀 — coloring.py 의 동명 helper 와 동일 패턴."""
+    return next((v for (ii, aa, v) in ag.wm if ii == i and aa == a), None)
 
 
 def pair_cursor(ag):
@@ -20,12 +24,12 @@ def pair_cursor(ag):
 
 
 def _op_hypothesize(ag):
-    """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). object mapping 대응을 얻어,
-    각 대응쌍을 **변환 후보(xform)** 로 WM 에 노출한다 — 속성별 COMM/DIFF 를 그대로 실어(규칙이
-    'color DIFF ∧ coordinate COMM → coloring' 을 판단). 시뮬 grid 를 G0(input)로 초기화.
-    조립은 이후 coloring operator(규칙 propose/apply)가, 검증은 verify operator 가 한다.
-    (여기 body 는 '지각'만 — 대응/COMM-DIFF 노출 + 시뮬 초기화. 조립 로직은 Python 아님·규칙.)"""
-    idx, sid = ag.kg["idx"], ag.stack[-1].id
+    """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). compare 가 이미 남긴 object/pixel
+    compare relation(color DIFF ∧ coordinate COMM)을 그대로 WM 에 노출한다(규칙이 'color DIFF ∧
+    coordinate COMM → coloring' 을 판단). 시뮬 grid 를 G0(input)로 초기화. 조립은 이후 coloring
+    operator(규칙 propose/apply)가, 검증은 verify operator 가 한다.
+    (여기 body 는 '지각'만 — relation 노출 + 시뮬 초기화. 조립 로직은 Python 아님·규칙.)"""
+    sid = ag.stack[-1].id
     root = ag.kg["arckg_root"]
     k = pair_cursor(ag)                                        # 현재 pair (커서)
     p0 = root.example_pairs[k]
@@ -99,33 +103,30 @@ def _op_hypothesize(ag):
             # propose*coloring-pixel-rel 은 **존재 신호 하나**(recolor-rel-pending)로만 발화한다 —
             # `(<s> ^recolor-rel <e>)` 로 직접 매칭하면 relation 마다 별도 <e> 바인딩 → 매 relation 당
             # 별개의 operator(<o>)가 제안돼 TIE(동일 이름 operator 복수, 미처리)로 run 이 죽음을 실측
-            # (move000a 가 score 0/60). "한 operator 가 전부 처리" 모델 유지엔 has-recolor 와 같은
-            # 단일 scalar 게이트가 필요 — 단 이름은 분리(has-recolor 는 object 전용으로 남겨 둠).
+            # (move000a 가 score 0/60). "한 operator 가 전부 처리" 모델 유지엔 단일 scalar 게이트가
+            # 필요 — object 도 이 신호를 공유한다(Part B: 아래 OBJECT 분기).
             ag.wm.add(sid, "recolor-rel-pending", "yes")
             # H-space 가시화(nice-to-have, §brief-41)는 **생략**: create_hspace 가 ag.stack 에 새
             # goal(H..)을 push 해 이후 decide 가 그 위에서 진행되고, 다음 cycle 에 그 H-space 에서
             # TIE(미처리)로 전체 run 이 조기종료됨도 실측 — 필수 아님(브리프 명시)이라 안전을 위해 뺀다.
         else:
             ag.wm.add(sid, "colored-all", "yes")                # 변화 relation 없음 → 곧장 verify
-        return                                                   # 아래 공통(has-recolor) 블록은 OBJECT 전용
+        return
     else:
         ag.wm.add(sid, "sim", _tup(g0grid))                     # OBJECT: 시뮬 grid = G0
-        # OBJECT 가설: object mapping 대응 → xform (objects_of[i] 참조). in_idx/out_idx 는 program 참조용.
-        in_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(g0grid))}   # program 의 in_objs[i]
-        order = 0
-        for a, b, cat in _fg_correspondence(ag, gid0, gid1, g0grid, g1grid):   # 대응쌍 → 변환 후보 노출
-            xid = f"{sid}.xform.{order}"
-            ag.wm.add(sid, "xform", xid); ag.wm.add(xid, "order", str(order))
-            for prop, v in cat.items():                            # 속성별 COMM/DIFF (규칙이 매칭)
-                t = v.get("type") if isinstance(v, dict) else v
-                if t in ("COMM", "DIFF"):
-                    ag.wm.add(xid, t.lower(), prop)                # (xid ^diff color)(xid ^comm coordinate)…
-            (g0cells, _), (_, g1color) = _obj_cc(idx["nodes"][a]), _obj_cc(idx["nodes"][b])
-            ag.wm.add(xid, "g0cells", _tup([list(c) for c in g0cells]))   # 입력 객체 좌표(색칠 대상)
-            ag.wm.add(xid, "g1color", str(g1color))                       # 출력 객체 색(칠할 색)
-            ag.wm.add(xid, "g0idx", str(in_idx.get(frozenset(g0cells), 0)))    # objects_of(input)[i] 참조
-            order += 1
-    if _recolor_pending(ag, sid):              # 재채색(color DIFF ∧ coord COMM) 후보 있으면
-        ag.wm.add(sid, "has-recolor", "yes")   # coloring 규칙 한 번만 발화(TIE 방지) — body 가 하나씩
-    else:
-        ag.wm.add(sid, "colored-all", "yes")   # 없으면 곧장 verify (시뮬=G0, 대개 실패 → PIXEL)
+        # OBJECT 가설 = **object compare relation 발화**(Part B: xform 대체). compare(match)가 이 pair
+        # 마다 이미 남긴 object relation(`{pair}.E_G0Oi-G1Oj`)을 손으로 재구성하지 않고 그대로 노출한다 —
+        # color 가 바뀐(DIFF) ∧ 좌표는 그대로(COMM, 같은 위치 대응)인 관계만 "재채색 대상"(coloring body
+        # 가 스캔). pixel 과 같은 신호(recolor-rel/-pending) 재사용 — coloring.json propose 도 공유.
+        pid = p0.node_id
+        rels = sorted(v for (i, a, v) in ag.wm if i == pid and a == "relation"
+                      and ".E_G0O" in v
+                      and _hop(ag, f"{v}.category.color", "type") == "DIFF"
+                      and _hop(ag, f"{v}.category.coordinate", "type") == "COMM")
+        if rels:
+            for E in rels:
+                ag.wm.add(sid, "recolor-rel", E)                # coloring body 가 이걸 스캔해 전부 칠함
+            ag.wm.add(sid, "recolor-rel-pending", "yes")
+        else:
+            ag.wm.add(sid, "colored-all", "yes")                # color DIFF 없음(예: move) → 곧장 verify
+        return

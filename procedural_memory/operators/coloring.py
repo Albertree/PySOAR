@@ -6,7 +6,6 @@ from collections import Counter
 from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.reasoning import program_ast as PA
-from arbor.reasoning.program_ast import as_source
 
 
 def _hop(ag, i, a):
@@ -71,58 +70,65 @@ def _op_coloring_pixel_rel(ag, sid):
     return True
 
 
-def _op_coloring(ag):
-    """**coloring DSL operator (apply body = 원자연산만)** — 첫 미적용 recolor xform 의 g0cells 를
-    g1color 로 시뮬 grid 에 칠한다(procedural_memory.coloring, frozen). '무엇을/언제'는 **규칙**
-    (propose*coloring: color DIFF ∧ coord COMM 인 xform 이 있을 때)이 정한다. 하나 칠하고 applied
-    표시 → 남은 게 없으면 colored-all(→ verify)."""
+def _g0_obj_idx(E):
+    """object relation id(`...E_G0O{i}-G1O{j}`) 꼬리에서 i(int) 추출 — 처리 순서 결정용(오름차순,
+    옛 xform order 와 동일한 결정적 순서 = byte-safe)."""
+    tail = E.rsplit(".E_G0O", 1)[-1]            # "{i}-G1O{j}..."
+    digits = tail.split("-", 1)[0]
+    return int(digits) if digits.isdigit() else 0
+
+
+def _op_coloring_object_rel(ag, sid):
+    """OBJECT 재채색 — xform 대신 이미 WM 에 있는 object compare relation(`sid ^recolor-rel E`,
+    E=`{pair}.E_G0Oi-G1Oj`)에서 대상 셀·색을 읽어 칠한다(Part B: xform 대체, Task2 의
+    `_op_coloring_pixel_rel` 과 동형). object relation 의 `category.coordinate ^comp1` 은 좌표
+    리스트 통짜(pixel 과 달리 row_index/col_index 중첩 없음 — 그래서 `_pixel_rel_cell` 이 None 반환,
+    이걸로 pixel/object 를 구별한다 §brief 실측). objects_of(input) 성분 좌표집합과 맞춰 g0idx
+    (program 의 in_objs[i] 참조)를 얻고, color 의 one-hot category 에서 comp2=True 인 첫 색을
+    출력색으로 삼는다. E 의 G0 O-번호 오름차순으로 **한 번에** 처리(pixel 경로와 동일 모델).
+    처리한 relation 이 하나도 없으면(전부 pixel 소관/이미 처리됨) None 반환."""
     from procedural_memory.dsl.transformation import coloring   # vendored
+    from arbor.perception.perception import objects_of
+    rels = [E for (i, a, E) in ag.wm if i == sid and a == "recolor-rel"
+            and _pixel_rel_cell(ag, E) is None                  # pixel 아님(coordinate 가 좌표리스트)
+            and not ag.wm.contains(E, "colored", "yes")]
+    if not rels:
+        return None
+    rels.sort(key=_g0_obj_idx)
+    sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
+    grid = [list(r) for r in sim]
+    in_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(grid))}   # program 의 in_objs[i]
+    body = []
+    for E in rels:
+        cells = [tuple(c) for c in (_hop(ag, f"{E}.category.coordinate", "comp1") or ())]
+        g0idx = in_idx.get(frozenset(cells))
+        if g0idx is None:                          # 배경 등 objects_of 미매칭 → step 안 냄
+            ag.wm.add(E, "colored", "yes"); continue
+        colcat = f"{E}.category.color.category"
+        out = next((k for k in range(10)
+                    if _hop(ag, f"{colcat}.{k}", "comp2") in ("True", True)), None)
+        if out is None:                            # comp2=True 인 색이 없음(방어적) → step 안 냄
+            ag.wm.add(E, "colored", "yes"); continue
+        for (r, c) in cells:                        # frozen coloring atom 으로 입력셀 → target색
+            if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
+                grid = coloring(grid, (r, c), out)
+        body.append(PA.step("coloring", target=PA.ref("object", PA.const(g0idx)), color=PA.const(out)))
+        ag.wm.add(E, "colored", "yes")
+    ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
+    ag.wm.add(sid, "program-code", json.dumps(PA.program(body)))
+    ag.wm.add(sid, "colored-all", "yes")           # recolor 다 적용 → verify
+    return True
+
+
+def _op_coloring(ag):
+    """**coloring DSL operator (apply body = 원자연산만)** — xform 없이 compare relation 에서 직접
+    읽어 칠한다(Part B). pixel recolor-rel 이 있으면 pixel 경로(`_op_coloring_pixel_rel`), 없고
+    object recolor-rel 이 있으면 object 경로(`_op_coloring_object_rel`) — 둘 다 미적용분을 **한 번에**
+    처리. 어느 쪽도 없으면 colored-all(→ verify). '무엇을/언제'는 **규칙**(propose*coloring-pixel-rel:
+    recolor-rel-pending 존재)이 정한다."""
     sid = ag.stack[-1].id
     if _op_coloring_pixel_rel(ag, sid):        # PIXEL: recolor-rel 이 있으면 relation 경로로 처리·종료
         return
-    pend = _recolor_pending(ag, sid)
-    if not pend:
-        ag.wm.add(sid, "colored-all", "yes"); return
-    sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
-    grid = [list(r) for r in sim]
-
-    def _wx(xid, attr):
-        return next((v for (i, a, v) in ag.wm if i == xid and a == attr), None)
-    # level-1 형식: 선택은 **objects_of(input)[i].coord**(OBJECT) / **pixels_of(input)[i].coord**(PIXEL) —
-    # 실제 ARCKG 성분/픽셀 참조(provenance), 색은 target literal. PIXEL 이면 셀 단위(pixels_of[i]=r*W+c 번째 셀).
-    order = sorted(pend, key=lambda x: int(_wx(x, "order") or "0"))
-    px = bool(order) and ag.wm.contains(order[0], "px", "yes")
-    base_v = next((v for (i, a, v) in ag.wm if i == sid and a == "base-program"), None) if px else None
-    base_ast = None
-    if base_v:
-        bv = as_source(base_v)                      # 항상 flat; base 가 이미 AST 면 to_source
-        # base 를 AST 로 되읽기: base_v 가 AST-json 이면 그대로, 아니면 legacy → 파싱 불가 시 steps 재구성
-        try:
-            base_ast = json.loads(base_v) if base_v.lstrip().startswith("{") and "body" in json.loads(base_v) else None
-        except (ValueError, TypeError):
-            base_ast = None
-    level = "pixel" if px else "object"
-    body = list(base_ast["body"]) if base_ast else []
-    for xid in order:
-        g0c = [tuple(c) for c in (_wx(xid, "g0cells") or ())]; g1col = int(_wx(xid, "g1color") or 0)
-        g0i = int(_wx(xid, "g0idx") or 0)
-        for (r, c) in g0c:                                     # frozen coloring atom 으로 입력셀 → target색
-            if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
-                grid = coloring(grid, (r, c), g1col)
-        ag.wm.add(xid, "applied", "yes")
-        if level == "pixel":
-            (rr, cc) = g0c[0]
-            body.append(PA.step("coloring", target=PA.ref("coord", PA.const([rr, cc])), color=PA.const(g1col)))
-        else:
-            body.append(PA.step("coloring", target=PA.ref(level, PA.const(g0i)), color=PA.const(g1col)))
-    ast = PA.program(body)
-    ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
-    ag.wm.add(sid, "program-code", json.dumps(ast))
-    ag.wm.add(sid, "colored-all", "yes")                       # recolor 다 적용 → verify
-
-
-def _recolor_pending(ag, sid):
-    """미적용 recolor xform(color DIFF ∧ coordinate COMM)이 남아 있나 — coloring 규칙의 조건."""
-    return [x for (i, a, x) in ag.wm if i == sid and a == "xform"
-            and ag.wm.contains(x, "diff", "color") and ag.wm.contains(x, "comm", "coordinate")
-            and not ag.wm.contains(x, "applied", "yes")]
+    if _op_coloring_object_rel(ag, sid):       # OBJECT: recolor-rel 이 있으면 relation 경로로 처리·종료
+        return
+    ag.wm.add(sid, "colored-all", "yes")

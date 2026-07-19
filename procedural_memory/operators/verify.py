@@ -116,13 +116,9 @@ def _reset_synth(ag, sid):
             elab.o_support_wmes.discard((i, a, v))
 
     for attr in ("hypothesized", "hyp-open", "colored-all", "sim", "sim-pair",
-                 "program-code", "base-program", "has-recolor", "recolor-rel-pending"):
+                 "program-code", "base-program", "recolor-rel-pending"):
         for (i, a, v) in list(ag.wm.matching(identifier=sid, attr=attr)):
             drop(i, a, v)
-    for (i, a, x) in list(ag.wm.matching(identifier=sid, attr="xform")):     # xform 마커 + 하위
-        drop(i, a, x)
-        for (xi, xa, xv) in list(ag.wm.matching(identifier=x)):
-            drop(xi, xa, xv)
     for (i, a, e) in list(ag.wm.matching(identifier=sid, attr="recolor-rel")):
         drop(i, a, e)             # sid→E edge 만 지움(E 자신은 compare 가 만든 relation — 안 건드림,
         #                           E ^colored yes 는 "이미 칠함" 사실이라 다음 pair 로도 유효해 유지)

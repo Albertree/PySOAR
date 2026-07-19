@@ -1,48 +1,7 @@
 {
   "operator": "coloring",
-  "doc": "기본 DSL(contents 슬롯). object 는 has-recolor(color DIFF ∧ coord COMM xform), pixel 은 recolor-rel-pending(pixel compare relation 존재 신호) 에서 발화 — 둘 다 frozen coloring 으로 시뮬 grid 를 칠함. program 의 grid_contents 를 채운다",
+  "doc": "기본 DSL(contents 슬롯). object/pixel 모두 recolor-rel-pending(compare relation 존재 신호) 에서 발화 — object 는 object relation(E_G0Oi-G1Oj), pixel 은 pixel relation(E_G0Xi-G1Xi) 에서 좌표·색을 읽어 frozen coloring 으로 시뮬 grid 를 칠함. program 의 grid_contents 를 채운다",
   "propose": [
-    {
-      "name": "propose*coloring",
-      "order": 9,
-      "conditions": [
-        {
-          "id": "<s>",
-          "attr": "has-recolor",
-          "value": "yes",
-          "negated": false
-        },
-        {
-          "id": "<s>",
-          "attr": "colored-all",
-          "value": "<ca>",
-          "negated": true
-        }
-      ],
-      "actions": [
-        {
-          "id": "<s>",
-          "attr": "operator",
-          "value": "<o>",
-          "pref": "+",
-          "referent": null
-        },
-        {
-          "id": "<o>",
-          "attr": "name",
-          "value": "coloring",
-          "pref": "+",
-          "referent": null
-        },
-        {
-          "id": "<o>",
-          "attr": "node",
-          "value": "<f>",
-          "pref": "+",
-          "referent": null
-        }
-      ]
-    },
     {
       "name": "propose*coloring-pixel-rel",
       "order": 11,
