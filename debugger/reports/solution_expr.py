@@ -116,6 +116,26 @@ def object_binding_lines(resolved, shapes):
     return lines
 
 
+def object_select_expr(resolved):
+    """obj 을 인라인한 select 표현식 문자열 'select(object, <조건>)'. ②③ 그래프트 서브트리가
+    obj0 심볼에 의존하지 않고 '어떤 객체인지'(선정 조건)까지 자립적으로 보이게(사용자 2026-07-20)."""
+    sel = next((_sel_of(v) for v in resolved.values() if _sel_of(v)), None)
+    cond, _ref = selector_to_condition(sel)
+    return f"select(object, {cond})"
+
+
+def graft_expr(resolved_val, resolved_all):
+    """한 DIFF 슬롯의 resolved 값 → 그 자리에 이식할 함수-조합 표현식 문자열(select 인라인).
+    move[..] → 벡터식(coordinate(select(...))±…), color@.. → color(select(...))."""
+    obj = object_select_expr(resolved_all)
+    if resolved_val.startswith("move["):
+        rt, ct, _sel = _split_move(resolved_val)
+        return move_to_vector(rt, ct, obj) if rt else f"coordinate({obj})"
+    if resolved_val.startswith("color@"):
+        return f"color({obj})"
+    return resolved_val
+
+
 def render_solution_lines(solution_ast, resolved, comm, shapes):
     """설계 §5 형태의 표시줄 리스트. 시각화-먼저(솔버 데이터 재표기). 결정적."""
     body = solution_ast.get("body") or []

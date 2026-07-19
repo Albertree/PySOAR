@@ -235,9 +235,8 @@ def _coloring_steps(body, slot_exprs=None, cell_w=None):
         elif ref == "cellset":                        # blob: resolved 이동식이 있으면 ①과 같은 표현식, 없으면 raw
             cl = tgt["cells"]
             var = cl.get("var") if isinstance(cl, dict) else None
-            if slot_exprs and var in slot_exprs:      # ③ 을 ① text(render_solution_lines)와 같은 함수식으로
-                rt, ct, _sel = SE._split_move(slot_exprs[var])
-                label = SE.move_to_vector(rt, ct, "obj0") if rt else "coordinate(obj0)"
+            if slot_exprs and var in slot_exprs:      # ③ dest 박스에 이식할 함수-조합(select 인라인)
+                label = SE.graft_expr(slot_exprs[var], slot_exprs)
                 resolved = True
             else:                                     # 구체 blob(compress 객체 program 등): flat idx → (row,col)
                 cells = cl.get("const") if (isinstance(cl, dict) and "const" in cl) else cl
@@ -436,31 +435,22 @@ def _is_matrix(v):
         isinstance(row, list) and all(isinstance(x, int) for x in row) for row in v)
 
 
-def _slot_expr_leaf(rv):
-    """resolved 슬롯값 → ①③과 같은 함수식 (move[..]→벡터식, color@..→color(obj0))."""
-    if rv.startswith("move["):
-        rt, ct, _sel = SE._split_move(rv)
-        return SE.move_to_vector(rt, ct, "obj0") if rt else "coordinate(obj0)"
-    if rv.startswith("color@"):
-        return "color(obj0)"
-    return rv
-
-
 def ast_tree(node, slot_exprs=None):
-    """② AST 트리. slot_exprs(선택) 있으면 TASK.solution 의 cellset/color 슬롯 var 노드를 ①③과 같은
-    함수식 leaf 로 치환한다(사용자 2026-07-20: ②도 ①에 맞춰 표현식으로)."""
+    """② AST 트리(pair.program 과 같은 스타일). slot_exprs(선택) 있으면 TASK.solution 의 DIFF 슬롯
+    (cellset/color var·slots 키) 자리에 함수-조합 표현식 서브트리를 **이식(그래프트)** 한다 — 한 DIFF
+    노드가 다른 함수·단위 symbol 의 작은 트리로 transplant 된 모습(사용자 2026-07-20)."""
     if slot_exprs and isinstance(node, dict):
         if "var" in node and node["var"] in slot_exprs:               # ?c.colorN 등 직접 var
-            return f'<span class="leaf">{html.escape(_slot_expr_leaf(slot_exprs[node["var"]]))}</span>'
+            return _graft_tree(slot_exprs[node["var"]], slot_exprs)
         if node.get("ref") == "cellset":                              # cellset target 통째
             cv = (node.get("cells") or {}).get("var")
             if cv in slot_exprs:
-                return f'<span class="leaf">{html.escape(_slot_expr_leaf(slot_exprs[cv]))}</span>'
+                return _graft_tree(slot_exprs[cv], slot_exprs)
     if isinstance(node, dict):
         lis = []
         for k, v in node.items():
-            if slot_exprs and str(k) in slot_exprs:                   # slots 딕셔너리 키(?c.cellsN) → 표현식
-                lis.append(f'<li><span class="leaf">{html.escape(_slot_expr_leaf(slot_exprs[str(k)]))}</span></li>')
+            if slot_exprs and str(k) in slot_exprs:                   # slots 딕셔너리 키(?c.cellsN) → 서브트리 이식
+                lis.append(f'<li><span class="k">{html.escape(str(k))}</span>{_graft_tree(slot_exprs[str(k)], slot_exprs)}</li>')
             else:
                 lis.append(f'<li><span class="k">{html.escape(str(k))}</span>{ast_tree(v, slot_exprs)}</li>')
         return f'<ul class="astree">{"".join(lis)}</ul>'
@@ -475,27 +465,20 @@ def ast_tree(node, slot_exprs=None):
     return f'<span class="leaf">{html.escape(json.dumps(node))}</span>'
 
 
-# ── TASK.solution 표현식 코드 → 트리(②)/박스(③) — 하나의 코드를 구조로 렌더(사용자 2026-07-20) ──
-def _expr_tree_html(node):
-    """expr AST 노드 → 중첩 트리 <li>(SE.node_label_children 소비)."""
+# ── DIFF 슬롯 그래프트: 한 DIFF 노드를 함수-조합 표현식 서브트리로 이식(사용자 2026-07-20) ──
+# ②③ 은 pair.program 과 같은 스타일(ast_tree/_viz box-flow)을 유지하고, DIFF 자리에만 이 서브트리를 심는다.
+def _expr_astree_html(node):
+    """expr AST 노드 → ast_tree 와 같은 스타일(.k/.leaf/.astree)의 서브트리 HTML — 그래프트 이식용."""
     label, children = SE.node_label_children(node)
-    lab = f'<span class="etn">{html.escape(str(label))}</span>'
     if not children:
-        return f'<li>{lab}</li>'
-    inner = "".join(_expr_tree_html(c) for c in children)
-    return f'<li>{lab}<ul class="et">{inner}</ul></li>'
+        return f'<span class="leaf">{html.escape(str(label))}</span>'
+    inner = "".join(f'<li>{_expr_astree_html(c)}</li>' for c in children)
+    return f'<span class="k">{html.escape(str(label))}</span><ul class="astree">{inner}</ul>'
 
 
-def _program_tree_html(lines, box=False):
-    """표시줄(코드) 전체 → 문장별 중첩 트리. ②=AST 트리, ③=박스형(progbox) — 같은 파싱, CSS 로만 구분."""
-    lis = []
-    for st in SE.parse_program(lines):
-        if st["k"] == "assign":
-            lis.append(f'<li><span class="asn">{html.escape(st["lhs"])} =</span>'
-                       f'<ul class="et">{_expr_tree_html(st["rhs"])}</ul></li>')
-        else:
-            lis.append(_expr_tree_html(st["e"]))
-    return f'<ul class="astree prog{" progbox" if box else ""}">{"".join(lis)}</ul>'
+def _graft_tree(resolved_val, slot_exprs):
+    """resolved 슬롯값 → 이식할 표현식(select 인라인)을 파싱해 ast_tree-스타일 서브트리로."""
+    return _expr_astree_html(SE.parse_expr(SE.graft_expr(resolved_val, slot_exprs)))
 
 
 # ── Step 2b: ③ 시각화 — grid=3-property box-flow / pixel·object=coloring flow(easy_antiunify_viz 재사용) ──
@@ -585,12 +568,19 @@ def _coloring_flow_rows(body, outline=None, slot_exprs=None, cell_w=None):
         col = col_leaf.get("const")
         sw = _swatches([col]) if isinstance(col, int) else ""
         o = outline[i] if (outline and i < len(outline)) else {}
-        cvar = col_leaf.get("var")                    # ?c.colorN(slot) → color(obj0) (①과 일치)
-        col_txt = "color(obj0)" if (slot_exprs and cvar in slot_exprs) else _disp_leaf(col_leaf)
+        cvar = col_leaf.get("var")
+        if st.get("resolved"):                        # DIFF 좌표: dest 박스에 함수-조합 서브트리 이식(그래프트)
+            tgt = f'<span class="graft {o.get("idx", "")}">{_expr_astree_html(SE.parse_expr(st["label"]))}</span>'
+        else:
+            tgt = dest_box(st["label"], o.get("idx", ""))
+        if slot_exprs and cvar in slot_exprs:         # DIFF 색: color(select(...)) 서브트리 이식
+            colnode = (f'<span class="graft {o.get("col", "")}">'
+                       f'{_expr_astree_html(SE.parse_expr("color(" + SE.object_select_expr(slot_exprs) + ")"))}</span>')
+        else:
+            colnode = _colorval(colr(_disp_leaf(col_leaf), o.get("col", "")), sw)
         rows.append(
-            f'<div class="row">{opb("coloring")}<span class="h"></span>'
-            f'{dest_box(st["label"], o.get("idx", ""))}<span class="h"></span>'
-            f'{_colorval(colr(col_txt, o.get("col", "")), sw)}</div><div class="v"></div>')
+            f'<div class="row">{opb("coloring")}<span class="h"></span>{tgt}'
+            f'<span class="h"></span>{colnode}</div><div class="v"></div>')
     return rows
 
 
@@ -839,22 +829,15 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
     ②=그 코드의 AST 트리, ③=그 코드의 박스형 시각화(하나의 코드를 세 표현으로 — 사용자 2026-07-20).
     없으면(PAIR program) 기존대로 ①=display_source(러너-안전)·②=raw AST·③=grid box-flow."""
     g0 = ex["input"]
-    if sol_lines is not None:
-        src_text = "\n".join(sol_lines)
-        tree2 = _program_tree_html(sol_lines)
-        viz3 = _program_tree_html(sol_lines, box=True)
-    else:
-        src_text = display_source(ast, slot_exprs)
-        tree2 = ast_tree(ast, slot_exprs)
-        viz3 = _viz(ast, ex, slot_exprs=slot_exprs)
+    src_text = "\n".join(sol_lines) if sol_lines is not None else display_source(ast, slot_exprs)
     return (f'<div class="pair">'
             f'<div class="lab">{html.escape(str(label))}</div>'
             f'<div class="views">'
             f'<div class="view"><div class="vt">① text (통일 body · 실행형)</div>'
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
             f'<pre class="src">{html.escape(src_text)}</pre></div>'
-            f'<div class="view"><div class="vt">② AST 트리</div>{tree2}</div>'
-            f'<div class="view viz"><div class="vt">③ 시각화</div>{viz3}</div>'
+            f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast, slot_exprs)}</div>'
+            f'<div class="view viz"><div class="vt">③ 시각화</div>{_viz(ast, ex, slot_exprs=slot_exprs)}</div>'
             f'</div></div>')
 
 
@@ -1021,19 +1004,14 @@ CSS = """
 .astree li{border-left:1px dashed #2a3038;padding-left:10px;margin:2px 0}
 .k{color:#7fb2e0;margin-right:6px}
 .leaf{color:#e6c99a}
-/* TASK.solution 코드 트리(② prog)·박스형(③ progbox) — 하나의 코드를 구조로 */
-.prog{list-style:none;margin:0;padding-left:0}
-.prog .et{list-style:none;margin:0;padding-left:13px}
-.prog>li{border-left:none;padding:3px 0;margin:3px 0}
-.prog .asn{color:#e0a552;font-weight:600;margin-right:6px}
-.prog .etn{color:#bcd8f5}
-.prog .et>li>.etn{color:#7fd0c0}          /* 함수/연산자 노드 */
-.progbox{padding-left:0}
-.progbox .etn{display:inline-block;border:1px solid #33506e;border-radius:5px;padding:0 6px;
- background:#16202c;color:#cfe3f5;margin:1px 0}
-.progbox .et{padding-left:16px;border-left:2px solid #24384c}
-.progbox .asn{display:inline-block;border:1px solid #6a5220;border-radius:5px;padding:0 6px;
- background:#2a2313;color:#e0a552}
+/* DIFF 그래프트: ③ box-flow 의 dest/color 자리에 이식된 함수-조합 서브트리(pair.program 과 같은
+   .astree/.k/.leaf 스타일을 그대로 쓰되, 박스로 감싸 '한 노드가 작은 트리로 transplant' 됨을 표시) */
+.graft{display:inline-block;border:1px solid #35506e;border-radius:6px;padding:3px 8px;background:#141e2a;
+ vertical-align:top}
+.graft .astree{padding-left:11px}
+.graft .astree li{border-left:1px dashed #2a3038;padding-left:8px;margin:1px 0}
+.graft.comm{border-color:#2f6d43;background:#121f16}
+.graft.diff{border-color:#7a3a3a;background:#211414}
 .astmat{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 8px;margin:2px 0 2px 14px;
  font:11px/1.4 ui-monospace,monospace;color:#e6c99a}
 .cmat{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:6px 9px;margin:0;
