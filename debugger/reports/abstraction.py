@@ -13,7 +13,7 @@ Harness posture (ARBOR_HARNESS.md §0.5, §1-5, §2-2, §2-3):
                  hand-supplied). Item comparison AND relation comparison (§2-2).
 
 This module does NOT modify focus_solver. It reuses the solver's own correspondence
-(`_fg_correspondence`) so the per-pair programs are the ones the object path produces;
+(`_mono_correspondence`) so the per-pair programs are the ones the object path produces;
 it only adds the missing cross-pair generalisation (anti-unification) step.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from arbor.expr_solver import build_arckg
-from arbor.solver import index_arckg, _fg_correspondence, _obj_cc, objects_of
+from arbor.solver import index_arckg, _mono_correspondence, _obj_cc, objects_of
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +148,7 @@ def per_pair_objects(task):
         by_cells = {frozenset(o.cells): o for o in allobjs}
         gid0, gid1 = pn.input_grid.node_id, pn.output_grid.node_id
         recolored = []
-        for a, b, cat in _fg_correspondence(ag, gid0, gid1, g0, g1):
+        for a, b, cat in _mono_correspondence(ag, gid0, gid1, g0, g1):
             def _t(p, cat=cat):
                 v = cat.get(p)
                 return v.get("type") if isinstance(v, dict) else v

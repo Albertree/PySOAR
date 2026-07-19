@@ -563,8 +563,7 @@ def solution_candidates(sol, limit=3):
             s = _sel(nm)
             if s and s not in all_sels:
                 all_sels.append(s)
-    # 속성값 일치(관계 극값 아님) 를 먼저. stable → 그 안에서는 등장순서(=선택자 우선순위) 유지.
-    all_sels.sort(key=lambda s: s in ("smallest", "largest"))
+    # 등장순서(=선택자 우선순위) 유지. (smallest/largest 극값 selector 폐지됨 — 정렬 불필요.)
     for s in all_sels:                              # 각 COMM 선택자 = 슬롯 전체 일관 조합 하나
         combo = [next(((nm, fn) for nm, fn in pool if _sel(nm) == s), pool[0]) for pool in pools]
         _emit(combo)

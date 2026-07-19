@@ -61,8 +61,3 @@ def pixels_of(grid):
         out.append(Pixel(pixel_id=f"{grid.node_id}.X{i}", color=grid.raw[r][c], row=r, col=c))
     return out
 
-
-def is_foreground(obj) -> bool:
-    """배경(색 0)이 아닌 전경 객체인지 (select predicate). ARC 관례: 0=배경."""
-    c = obj.to_json()["color"]
-    return (not c.get(0)) and any(v for k, v in c.items() if k != 0)

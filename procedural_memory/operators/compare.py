@@ -2,7 +2,6 @@
 """ARBOR operator body: compare (procedural LTM leaf). focus_solver 분리."""
 from __future__ import annotations
 import json, os, sys
-from collections import Counter
 from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.perception.perception import _score_frac
@@ -86,7 +85,7 @@ def _compare_objects(ag, sid, c, g0, g1, pair, kg_compare, nodes, idx, topk=None
     scored.sort(key=lambda t: (-t[0], t[3], t[4]))                # 유사도 ↓, 결정적 tiebreak
     # **대응 결과 = relation** 으로만 WM 에 남긴다 (LCA=pair 아래 E_G0O2-G1O0, S1 의 ARCKG 처럼 깔끔).
     # 전체 N×M 순위(옛 m0..mN 후보 무더기)는 WM 에 안 쏟는다 — 그건 중간 탐색값이라 kg dict 에만 두고,
-    # 필요하면 대시보드가 참조한다. hypothesize 는 대응을 _fg_correspondence 로 재계산하므로 무영향.
+    # 필요하면 대시보드가 참조한다. (object 대응은 ARCKG 관계로만 남기고, 그 소비는 규칙이 한다.)
     best = {}                                                      # G0-object 당 최선 대응
     for (sim, n, tot, a, b, rel) in scored:
         best.setdefault(a, rel)

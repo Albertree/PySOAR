@@ -29,11 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _kg_detail(kg, op):
-    # focus_solver 의 kg 는 모양이 다르다(compares/relations/roles). _focus 마커가
-    # 있으면 thinking_ops.focus_detail 로 라우팅한다 (expr_solver 경로는 그대로).
-    if kg.get("_focus"):
-        from arbor.reasoning.thinking_ops import focus_detail
-        return focus_detail(kg, op)
+    # focus_solver 의 kg 는 모양이 다르다(compares/relations/roles).
     if op == "observe":
         objs = [{"pair": i, "color": pr["tin"]["color"], "cells": sorted(pr["tin"]["cells"])}
                 for i, pr in enumerate(kg.get("pairs", [])) if pr.get("tin")]

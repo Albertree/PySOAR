@@ -56,7 +56,7 @@ from debugger.build import (_cycle_tree, _dash_data, _rules_manifest, _safe_dash
 from arbor.perception.nav import (index_arckg, _cursor, _focus_group, _siblings, _receipt_leaves, _lca, _short, _edge_name, _load_props)
 from arbor.reasoning.program import (_size_expr_search, _size_apply, _grid_decide, _dec, _color_map_search, _global_recolor_program, _colorset, _grid_prop_value, _grid_property_hypotheses, _materialize_pair_programs, _pixel_residual_program)
 from arbor.reasoning.compare_engine import (_store_receipt, _agree, _compare2, _compare, _store_relation)
-from arbor.perception.perception import (_obj_cc, objects_of, _fg_correspondence, _score_frac)
+from arbor.perception.perception import (_obj_cc, objects_of, _mono_correspondence, _score_frac)
 
 
 # ---------------------------------------------------------------------------

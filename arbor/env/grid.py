@@ -16,18 +16,6 @@ def dims(g: Grid) -> tuple[int, int]:
     return len(g), len(g[0])
 
 
-def foreground_pixel(g: Grid) -> Optional[tuple[int, int, int]]:
-    """The single non-zero pixel as (row, col, color), or None."""
-    found = None
-    for r, row in enumerate(g):
-        for c, v in enumerate(row):
-            if v != 0:
-                if found is not None:
-                    return None  # not a single-pixel grid
-                found = (r, c, v)
-    return found
-
-
 def blank(h: int, w: int) -> Grid:
     return [[0] * w for _ in range(h)]
 

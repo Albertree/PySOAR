@@ -22,7 +22,7 @@ def objects_of(grid):
     return spelke_union(grid)
 
 
-def _fg_correspondence(ag, gid0, gid1, g0grid, g1grid):
+def _mono_correspondence(ag, gid0, gid1, g0grid, g1grid):
     """G0 ↔ G1 object 를 유사도 greedy 1-1 대응(중복 없이). **색0 도 하나의 색**으로 포함하되,
     object 정의상 **단색 성분만** 쓴다(격자 전체 같은 비단색 복합노드는 제외 — '0=배경' 가정이 아니라
     '객체=한 색'이라는 원칙). 닫힌 내부영역=구멍(단색 색0)도 정당한 재채색 대상이 된다. 각 대응쌍의
