@@ -55,7 +55,6 @@ class Grid:
                 object_id=object_id,
                 colorgrid=data["colorgrid"],
                 pos=data["pos"],
-                method=data["method"],
             )
 
             # Object-level Pixel: 행-열 순 정렬

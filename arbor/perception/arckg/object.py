@@ -13,25 +13,23 @@ class Object:
     """
     INTENT: spelke 객체검출(4-conn ∪ 같은색 8-conn)로 검출된 하나의 object.
             colorgrid(bbox 크기, 투명=13)와 격자 내 절대 좌표 pos로 초기화.
-            8개 property(area/color/coordinate/method/position/shape/size/symmetry)를
+            8개 property(area/color/contents/coordinate/position/shape/size/symmetry)를
             to_json()으로 직렬화한다.
     MUST NOT: GRID 전체를 저장하지 마. bbox 범위만 가진다.
     REF: ARC-solver/ARCKG/object.py OBJECT.update_property (line 170)
          (2026-07-19) hodel find_all_objects 폐지 → arbor.perception.spelke.spelke_arckg_objects
     """
 
-    def __init__(self, object_id: str, colorgrid: list, pos: tuple, method: dict):
+    def __init__(self, object_id: str, colorgrid: list, pos: tuple):
         """
         Args:
             object_id:  전체 node_id 문자열 (e.g. "T0a.P0.G0.O3")
             colorgrid:  list[list[int]], bbox 크기. 투명 셀 = 13.
             pos:        (row_min, col_min) — bbox left_top 절대 좌표
-            method:     {"connectivity": "4-conn"|"8-conn"} (spelke; hodel 3-bool 폐지)
         """
         self.node_id = object_id
         self.colorgrid = colorgrid
         self.pos = pos
-        self.method = method
         self.pixels: list = []  # Pixel 객체 목록 (object-level)
 
         # --- transformation DSL selection 인터페이스 ---
@@ -168,7 +166,6 @@ class Object:
             "color":      color_dict,
             "contents":   [row[:] for row in self.colorgrid],   # bbox 색배열 (투명=13)
             "coordinate": coordinate,
-            "method":     self.method,
             "position":   position,
             "shape":      shape,
             "size":       {"height": h, "width": w},

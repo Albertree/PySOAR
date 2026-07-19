@@ -106,14 +106,12 @@ def spelke_arckg_objects(raw):
     """ARCKG `grid.objects` 용 객체 검출 — **spelke 4-conn ∪ 같은색 8-conn 합집합**.
     hodel `find_all_objects` 를 대체(동일 반환 format). 셀집합으로 dedup(4-conn 과 8-conn 이 같으면
     하나만; 8-conn 이 대각선으로 여럿을 묶으면 그 묶음이 fine 조각들 위에 추가).
-    반환: list of dict {obj: frozenset((color,(r,c))), pos, color(presence dict),
-    method(=connectivity 태그; hodel 3-bool 아님), colorgrid(bbox·투명13)}.
+    반환: list of dict {obj: frozenset((color,(r,c))), pos, color(presence dict), colorgrid(bbox·투명13)}.
     count/max·배경특권화 없음(§no-arbitrary-filters)."""
     fine = _cohesion_components(raw)                       # (cells, color) 4-conn 동색
     group = _same_color_8conn(raw)                         # (cells, color) 8-conn 동색
     seen, out = set(), []
-    tagged = [(c, col, "4-conn") for c, col in fine] + [(c, col, "8-conn") for c, col in group]
-    for cells, col, conn in tagged:
+    for cells, col in fine + group:
         key = frozenset(cells)
         if key in seen:                                   # 4-conn==8-conn 이면 한 번만(fine 우선)
             continue
@@ -128,7 +126,7 @@ def spelke_arckg_objects(raw):
             if 0 <= c_ <= 9:
                 color_dict[c_] = True
         out.append({"obj": frozenset(pixels), "pos": (rmin, cmin), "color": color_dict,
-                    "method": {"connectivity": conn}, "colorgrid": cg})
+                    "colorgrid": cg})
     return out
 
 

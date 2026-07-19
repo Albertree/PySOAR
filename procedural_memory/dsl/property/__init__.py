@@ -6,7 +6,7 @@ property DSL — ARCKG 노드 to_json() 키를 함수형으로 노출 (재계산
   TASK-level   : roles {example,test} (배선; pair_count 는 edge 파생)        (Task)
   PAIR-level   : roles {input,output} (배선; grid_count 는 roles 파생)        (Pair)
   GRID-level   : size, color, contents                                  (ARCKG Grid 3)
-  OBJECT-level : area_of, color_of, coordinate_of, method_of,           (ARCKG Object 8)
+  OBJECT-level : area_of, color_of, coordinate_of, position_of,         (ARCKG Object 8)
                  position_of, shape_of, size_of, symmetry_of
   PIXEL-level  : pixel_color, pixel_coordinate                          (ARCKG Pixel 2)
 
@@ -88,12 +88,6 @@ def color_of(obj):
 def coordinate_of(obj):
     """객체가 차지한 셀 절대좌표 목록 [[r,c],...]."""
     return obj.to_json()["coordinate"]
-
-
-@dsl("property", ["object"], "method")
-def method_of(obj):
-    """객체 추출 방법 {univalued, diagonal, without_bg}."""
-    return obj.to_json()["method"]
 
 
 @dsl("property", ["object"], "position")
