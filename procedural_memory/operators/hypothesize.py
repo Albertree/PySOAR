@@ -86,22 +86,28 @@ def _op_hypothesize(ag):
         ag.wm.add(sid, "sim", _tup(sim0))                       # pixel sim = object 재채색 결과에서 이어감
         if base_prog:
             ag.wm.add(sid, "base-program", base_prog)           # 덧붙일 object 가설(program)
-        # 잔여: object 재채색 후에도 G1 과 다른 셀만. object xform 과 같은 WME 형태(diff=color·comm=coordinate·
-        # g0cells·g1color, +px)라 아래 coloring/verify 규칙을 그대로 탄다. g0idx=r*W+c=pixels_of(input)[i].
-        # 같은 크기일 때만 셀 단위 재채색 가능(크기변화 → xform 없이 verify 실패 = 정직).
-        H0, W0, H1, W1 = len(sim0), len(sim0[0]), len(g1grid), len(g1grid[0])
-        W = W0; order = 0
-        for r in range(H0 if (H0, W0) == (H1, W1) else 0):
-            for c in range(W):
-                if sim0[r][c] != g1grid[r][c]:                  # 잔여 변화 셀 = color DIFF ∧ coord COMM
-                    xid = f"{sid}.xform.{order}"
-                    ag.wm.add(sid, "xform", xid); ag.wm.add(xid, "px", "yes")
-                    ag.wm.add(xid, "order", str(order))
-                    ag.wm.add(xid, "diff", "color"); ag.wm.add(xid, "comm", "coordinate")
-                    ag.wm.add(xid, "g0cells", _tup([[r, c]]))    # 단일 셀 (pixel)
-                    ag.wm.add(xid, "g1color", str(g1grid[r][c]))  # 그 셀의 출력 색
-                    ag.wm.add(xid, "g0idx", str(r * W + c))       # pixels_of(input)[i]
-                    order += 1
+        # 잔여 변화 = xform 을 손으로 재구성하지 않는다 — compare(pxmatch) 가 이 pair 마다 이미 남긴
+        # pixel relation(`{pair}.E_G0Xi-G1Xi`, color DIFF)을 그대로 노출한다(Part B: xform 대체).
+        # relation 은 pair 노드(pid) 아래 (pid ^relation E) 로 걸려 있고, 그 E 가 color DIFF 인 것만
+        # "칠할 셀"이다(coordinate 는 COMM — pxmatch 가 같은 좌표끼리만 비교하니 자명, §pxmatch).
+        pid = p0.node_id
+        rels = sorted(v for (i, a, v) in ag.wm if i == pid and a == "relation"
+                      and ".E_G0X" in v and ag.wm.contains(v, "type", "DIFF"))
+        if rels:
+            for E in rels:
+                ag.wm.add(sid, "recolor-rel", E)                # coloring body 가 이걸 스캔해 전부 칠함
+            # propose*coloring-pixel-rel 은 **존재 신호 하나**(recolor-rel-pending)로만 발화한다 —
+            # `(<s> ^recolor-rel <e>)` 로 직접 매칭하면 relation 마다 별도 <e> 바인딩 → 매 relation 당
+            # 별개의 operator(<o>)가 제안돼 TIE(동일 이름 operator 복수, 미처리)로 run 이 죽음을 실측
+            # (move000a 가 score 0/60). "한 operator 가 전부 처리" 모델 유지엔 has-recolor 와 같은
+            # 단일 scalar 게이트가 필요 — 단 이름은 분리(has-recolor 는 object 전용으로 남겨 둠).
+            ag.wm.add(sid, "recolor-rel-pending", "yes")
+            # H-space 가시화(nice-to-have, §brief-41)는 **생략**: create_hspace 가 ag.stack 에 새
+            # goal(H..)을 push 해 이후 decide 가 그 위에서 진행되고, 다음 cycle 에 그 H-space 에서
+            # TIE(미처리)로 전체 run 이 조기종료됨도 실측 — 필수 아님(브리프 명시)이라 안전을 위해 뺀다.
+        else:
+            ag.wm.add(sid, "colored-all", "yes")                # 변화 relation 없음 → 곧장 verify
+        return                                                   # 아래 공통(has-recolor) 블록은 OBJECT 전용
     else:
         ag.wm.add(sid, "sim", _tup(g0grid))                     # OBJECT: 시뮬 grid = G0
         # OBJECT 가설: object mapping 대응 → xform (objects_of[i] 참조). in_idx/out_idx 는 program 참조용.
