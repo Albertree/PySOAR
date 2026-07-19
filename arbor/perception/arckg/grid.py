@@ -7,7 +7,7 @@ import json
 import os
 
 from .memory_paths import id_to_json_path, node_id_to_folder_path
-from .hodel import find_all_objects
+from arbor.perception.spelke import spelke_arckg_objects
 from .object import Object
 from .pixel import Pixel
 
@@ -36,11 +36,9 @@ class Grid:
 
     def extract_objects(self):
         """
-        INTENT: hodel objects() 8-파라미터 조합으로 고유 Object를 추출해
-                self.objects / self.pixels에 저장한다.
-                각 object는 검출에 사용된 method dict를 보유한다.
-        REF: ARC-solver/DSL/object_finder.py find_all_objects (line 62)
-             ARCKG/hodel.py find_all_objects
+        INTENT: spelke 객체검출(4-conn 동색 ∪ 같은색 8-conn 합집합)로 고유 Object 를
+                self.objects / self.pixels 에 저장한다. 각 object 는 connectivity(4/8-conn) 를 보유.
+                (2026-07-19) hodel 8-method(count/max·bg 특권화)를 폐지하고 spelke 로 통일.
         """
         if self.height == 0 or self.width == 0:
             self.objects = []
@@ -51,7 +49,7 @@ class Grid:
         self.pixels = []
         grid_pixel_seen: set = set()   # 동일 (r,c) grid-level Pixel 중복 방지
 
-        for obj_idx, data in enumerate(find_all_objects(self.raw)):
+        for obj_idx, data in enumerate(spelke_arckg_objects(self.raw)):
             object_id = f"{self.node_id}.O{obj_idx}"
             obj = Object(
                 object_id=object_id,

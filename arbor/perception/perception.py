@@ -15,24 +15,11 @@ def _obj_cc(node):
 
 
 def objects_of(grid):
-    """grid 의 4-연결 동색 성분 **전부**(색0 도 하나의 색으로 취급 — background 로 단정해 버리지 않음).
-    (셀목록, 색) 을 첫셀·색으로 정렬해 반환. program_report 의 objects_of(실행 DSL)와 **동일 알고리즘**이라
-    _fg_index 가 매긴 인덱스가 그대로 합성 program 의 in_objs[i] 에 맞는다."""
-    H, W = len(grid), len(grid[0])
-    seen, objs = set(), []
-    for r in range(H):
-        for c in range(W):
-            if (r, c) in seen:
-                continue
-            col, stack, cells = grid[r][c], [(r, c)], []
-            while stack:
-                y, x = stack.pop()
-                if (y, x) in seen or not (0 <= y < H and 0 <= x < W) or grid[y][x] != col:
-                    continue
-                seen.add((y, x)); cells.append((y, x))
-                stack += [(y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)]
-            objs.append((sorted(cells), col))
-    return sorted(objs, key=lambda cc: (cc[0][0], cc[1]))
+    """grid 의 객체 = **spelke 합집합**(4-conn 동색 ∪ 같은색 8-conn) — (셀목록, 색) 리스트.
+    (2026-07-19 사용자) hodel·구 4-conn objects_of 를 폐지하고 spelke 원리로 통일. 배경 특권화·
+    count/max 없음. 구현은 arbor.perception.spelke.spelke_union 로 위임."""
+    from arbor.perception.spelke import spelke_union
+    return spelke_union(grid)
 
 
 def _fg_correspondence(ag, gid0, gid1, g0grid, g1grid):

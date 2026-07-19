@@ -11,13 +11,13 @@ from .memory_paths import id_to_json_path, node_id_to_folder_path
 
 class Object:
     """
-    INTENT: hodel objects() 함수로 검출된 하나의 object.
+    INTENT: spelke 객체검출(4-conn ∪ 같은색 8-conn)로 검출된 하나의 object.
             colorgrid(bbox 크기, 투명=13)와 격자 내 절대 좌표 pos로 초기화.
             8개 property(area/color/coordinate/method/position/shape/size/symmetry)를
             to_json()으로 직렬화한다.
     MUST NOT: GRID 전체를 저장하지 마. bbox 범위만 가진다.
     REF: ARC-solver/ARCKG/object.py OBJECT.update_property (line 170)
-         ARC-solver/DSL/object_finder.py find_all_objects (line 62)
+         (2026-07-19) hodel find_all_objects 폐지 → arbor.perception.spelke.spelke_arckg_objects
     """
 
     def __init__(self, object_id: str, colorgrid: list, pos: tuple, method: dict):
@@ -26,7 +26,7 @@ class Object:
             object_id:  전체 node_id 문자열 (e.g. "T0a.P0.G0.O3")
             colorgrid:  list[list[int]], bbox 크기. 투명 셀 = 13.
             pos:        (row_min, col_min) — bbox left_top 절대 좌표
-            method:     {"univalued": bool, "diagonal": bool, "without_bg": bool}
+            method:     {"connectivity": "4-conn"|"8-conn"} (spelke; hodel 3-bool 폐지)
         """
         self.node_id = object_id
         self.colorgrid = colorgrid
@@ -67,7 +67,7 @@ class Object:
         self.bounding_box = (row_min, col_min, row_min + h - 1, col_min + w - 1)
         self.mask = [[cell != 13 for cell in row] for row in colorgrid]
         colors = [cell for row in colorgrid for cell in row if cell != 13]
-        self.color = max(set(colors), key=colors.count) if colors else 0
+        self.color = colors[0] if colors else 0   # spelke 객체는 단색 → max/count 불필요
 
     # ------------------------------------------------------------------ #
     #  대칭성 헬퍼 (원본: ARC-solver/ARCKG/object.py)                       #

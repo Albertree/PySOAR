@@ -42,8 +42,7 @@ def filter_(items, pred):
 @dsl("util", ["grid"], "list[object]")
 def objects_of(grid):
     """grid 의 객체들 (lazy: 비어있으면 extract_objects() 1회).
-    hodel 다중 추출이 [전경 / 배경 / 전체] 등 여러 view 를 줄 수 있다 —
-    전경만 쓰려면 is_foreground 로 select."""
+    (2026-07-19) grid.objects = spelke 합집합(4-conn ∪ 같은색 8-conn). hodel 8-method 폐지."""
     if not grid.objects:
         grid.extract_objects()
     return grid.objects
