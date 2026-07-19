@@ -106,22 +106,12 @@ def _align_blobs(ref, ops):
 # 창발한다(손열거 코너·fg_index·color_of_fg 제거). 배경색은 오직 ARCKG 생성에서만 count 로 라벨링.
 
 def _components(grid):
-    """grid 의 4-연결 동색 성분 전부 = [(cells, color)] (색0 도 하나의 색; objects_of 와 동일)."""
-    H, W = len(grid), len(grid[0])
-    seen, objs = set(), []
-    for r in range(H):
-        for c in range(W):
-            if (r, c) in seen:
-                continue
-            col, stack, cells = grid[r][c], [(r, c)], []
-            while stack:
-                y, x = stack.pop()
-                if (y, x) in seen or not (0 <= y < H and 0 <= x < W) or grid[y][x] != col:
-                    continue
-                seen.add((y, x)); cells.append((y, x))
-                stack += [(y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)]
-            objs.append((sorted(cells), col))
-    return objs
+    """grid 의 객체 성분 = [(cells, color)] partition. (2026-07-19 통일) 별도 4-conn 구현을 두지 않고
+    **단일 객체검출 함수** `spelke._cohesion_components`(ARCKG 가 쓰는 그 검출의 4-conn 계층)에 위임한다
+    — grid 객체를 구하는 함수는 시스템 전체에 하나. compress/resolve 는 partition(겹침 없음)이 필요하므로
+    ARCKG grid.objects(4-conn ∪ 8-conn 합집합, 겹침)를 그대로 쓰지 않고 그 4-conn 계층을 쓴다."""
+    from arbor.perception.spelke import _cohesion_components
+    return _cohesion_components(grid)
 
 
 def _obj_atoms(cells, grid):
