@@ -70,65 +70,17 @@ def _op_coloring_pixel_rel(ag, sid):
     return True
 
 
-def _g0_obj_idx(E):
-    """object relation id(`...E_G0O{i}-G1O{j}`) 꼬리에서 i(int) 추출 — 처리 순서 결정용(오름차순,
-    옛 xform order 와 동일한 결정적 순서 = byte-safe)."""
-    tail = E.rsplit(".E_G0O", 1)[-1]            # "{i}-G1O{j}..."
-    digits = tail.split("-", 1)[0]
-    return int(digits) if digits.isdigit() else 0
-
-
-def _op_coloring_object_rel(ag, sid):
-    """OBJECT 재채색 — xform 대신 이미 WM 에 있는 object compare relation(`sid ^recolor-rel E`,
-    E=`{pair}.E_G0Oi-G1Oj`)에서 대상 셀·색을 읽어 칠한다(Part B: xform 대체, Task2 의
-    `_op_coloring_pixel_rel` 과 동형). object relation 의 `category.coordinate ^comp1` 은 좌표
-    리스트 통짜(pixel 과 달리 row_index/col_index 중첩 없음 — 그래서 `_pixel_rel_cell` 이 None 반환,
-    이걸로 pixel/object 를 구별한다 §brief 실측). objects_of(input) 성분 좌표집합과 맞춰 g0idx
-    (program 의 in_objs[i] 참조)를 얻고, color 의 one-hot category 에서 comp2=True 인 첫 색을
-    출력색으로 삼는다. E 의 G0 O-번호 오름차순으로 **한 번에** 처리(pixel 경로와 동일 모델).
-    처리한 relation 이 하나도 없으면(전부 pixel 소관/이미 처리됨) None 반환."""
-    from procedural_memory.dsl.transformation import coloring   # vendored
-    from arbor.perception.perception import objects_of
-    rels = [E for (i, a, E) in ag.wm if i == sid and a == "recolor-rel"
-            and _pixel_rel_cell(ag, E) is None                  # pixel 아님(coordinate 가 좌표리스트)
-            and not ag.wm.contains(E, "colored", "yes")]
-    if not rels:
-        return None
-    rels.sort(key=_g0_obj_idx)
-    sim = next((v for (i, a, v) in ag.wm if i == sid and a == "sim"), None)
-    grid = [list(r) for r in sim]
-    in_idx = {frozenset(c): k for k, (c, col) in enumerate(objects_of(grid))}   # program 의 in_objs[i]
-    body = []
-    for E in rels:
-        cells = [tuple(c) for c in (_hop(ag, f"{E}.category.coordinate", "comp1") or ())]
-        g0idx = in_idx.get(frozenset(cells))
-        if g0idx is None:                          # 배경 등 objects_of 미매칭 → step 안 냄
-            ag.wm.add(E, "colored", "yes"); continue
-        colcat = f"{E}.category.color.category"
-        out = next((k for k in range(10)
-                    if _hop(ag, f"{colcat}.{k}", "comp2") in ("True", True)), None)
-        if out is None:                            # comp2=True 인 색이 없음(방어적) → step 안 냄
-            ag.wm.add(E, "colored", "yes"); continue
-        for (r, c) in cells:                        # frozen coloring atom 으로 입력셀 → target색
-            if 0 <= r < len(grid) and 0 <= c < len(grid[0]):
-                grid = coloring(grid, (r, c), out)
-        body.append(PA.step("coloring", target=PA.ref("object", PA.const(g0idx)), color=PA.const(out)))
-        ag.wm.add(E, "colored", "yes")
-    ag.wm.remove(sid, "sim", sim); ag.wm.add(sid, "sim", _tup(grid))
-    ag.wm.add(sid, "program-code", json.dumps(PA.program(body)))
-    ag.wm.add(sid, "colored-all", "yes")           # recolor 다 적용 → verify
-    return True
-
-
 def _op_coloring(ag):
-    """**coloring DSL operator (apply body = 원자연산만)** — xform 없이 compare relation 에서 직접
-    읽어 칠한다(Part B). pixel recolor-rel 이 있으면 pixel 경로(`_op_coloring_pixel_rel`), 없고
-    object recolor-rel 이 있으면 object 경로(`_op_coloring_object_rel`) — 둘 다 미적용분을 **한 번에**
-    처리. 어느 쪽도 없으면 colored-all(→ verify). '무엇을/언제'는 **규칙**(propose*coloring:
-    recolor-rel-pending 존재)이 정한다."""
+    """**coloring DSL operator (apply body = 원자연산만)** — xform 없이 pixel compare relation 에서
+    직접 읽어 칠한다(Part B). pixel recolor-rel 이 있으면 pixel 경로(`_op_coloring_pixel_rel`)로 처리,
+    없으면 colored-all(→ verify). '무엇을/언제'는 **규칙**(propose*coloring: recolor-rel-pending 존재)이 정한다.
+
+    (2026-07-19 원천차단) **object 재채색은 제거됨.** coloring 은 단일 position 을 받는데 object 는 셀 집합
+    이라, object 좌표를 coloring 의 position arg 로 넣는 **규칙이 없다**. 예전엔 body 가 relation 의
+    coordinate 리스트를 읽어 셀마다 frozen coloring 을 도는 **해킹**으로만 성립했으므로, 그 body 경로를
+    아예 지워 object coloring 이 일어나지 못하게 한다. object compare relation 은 WM 에 descriptive 로만
+    남는다(추후 좌표집합을 arg 로 공급하는 규칙 기반 메커니즘이 생기면 그때 소비)."""
     sid = ag.stack[-1].id
     if _op_coloring_pixel_rel(ag, sid):        # PIXEL: recolor-rel 이 있으면 relation 경로로 처리·종료
-        return
-    if _op_coloring_object_rel(ag, sid):       # OBJECT: recolor-rel 이 있으면 relation 경로로 처리·종료
         return
     ag.wm.add(sid, "colored-all", "yes")

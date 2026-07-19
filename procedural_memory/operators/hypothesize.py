@@ -9,12 +9,6 @@ from arbor.reasoning.program import _grid_decide
 from arbor.reasoning.program_ast import grid_program_from_decide, is_full_grid_program
 
 
-def _hop(ag, i, a):
-    """WM 1-hop: (i,a,v) 의 v (없으면 None). relation nested cascade(§compare_engine._store_receipt
-    의 '{host}.{attr}' 결정적 id) 를 걸어 내려갈 때 씀 — coloring.py 의 동명 helper 와 동일 패턴."""
-    return next((v for (ii, aa, v) in ag.wm if ii == i and aa == a), None)
-
-
 def pair_cursor(ag):
     """현재 처리 중인 example pair 인덱스 (S1 ^pair-idx k; 기본 0). per-pair 순회의 커서 —
     verify 가 한 pair 의 program 을 완성하면 다음 pair 로 +1 하고, 그 값을 hypothesize/synthesize
@@ -24,11 +18,11 @@ def pair_cursor(ag):
 
 
 def _op_hypothesize(ag):
-    """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). compare 가 이미 남긴 object/pixel
-    compare relation(color DIFF ∧ coordinate COMM)을 그대로 WM 에 노출한다(규칙이 'color DIFF ∧
-    coordinate COMM → coloring' 을 판단). 시뮬 grid 를 G0(input)로 초기화. 조립은 이후 coloring
-    operator(규칙 propose/apply)가, 검증은 verify operator 가 한다.
-    (여기 body 는 '지각'만 — relation 노출 + 시뮬 초기화. 조립 로직은 Python 아님·규칙.)"""
+    """**hypothesize = 시뮬레이션 open** (조립·검증은 규칙이!). compare 가 이미 남긴 **pixel** compare
+    relation(`{pair}.E_G0Xi-G1Xi`, color DIFF)을 그대로 WM 에 recolor-rel 로 노출한다(coloring 규칙이
+    소비). 시뮬 grid 를 G0(input)로 초기화. 조립은 이후 coloring operator 가, 검증은 verify 가 한다.
+    (2026-07-19) OBJECT level 은 재채색을 노출하지 않는다 — object 좌표(셀 집합)를 coloring 의 단일
+    position arg 로 공급하는 규칙이 없어 재채색은 pixel level 에서만 일어난다(§_op_coloring 주석)."""
     sid = ag.stack[-1].id
     root = ag.kg["arckg_root"]
     k = pair_cursor(ag)                                        # 현재 pair (커서)
@@ -114,19 +108,10 @@ def _op_hypothesize(ag):
         return
     else:
         ag.wm.add(sid, "sim", _tup(g0grid))                     # OBJECT: 시뮬 grid = G0
-        # OBJECT 가설 = **object compare relation 발화**(Part B: xform 대체). compare(match)가 이 pair
-        # 마다 이미 남긴 object relation(`{pair}.E_G0Oi-G1Oj`)을 손으로 재구성하지 않고 그대로 노출한다 —
-        # color 가 바뀐(DIFF) ∧ 좌표는 그대로(COMM, 같은 위치 대응)인 관계만 "재채색 대상"(coloring body
-        # 가 스캔). pixel 과 같은 신호(recolor-rel/-pending) 재사용 — coloring.json propose 도 공유.
-        pid = p0.node_id
-        rels = sorted(v for (i, a, v) in ag.wm if i == pid and a == "relation"
-                      and ".E_G0O" in v
-                      and _hop(ag, f"{v}.category.color", "type") == "DIFF"
-                      and _hop(ag, f"{v}.category.coordinate", "type") == "COMM")
-        if rels:
-            for E in rels:
-                ag.wm.add(sid, "recolor-rel", E)                # coloring body 가 이걸 스캔해 전부 칠함
-            ag.wm.add(sid, "recolor-rel-pending", "yes")
-        else:
-            ag.wm.add(sid, "colored-all", "yes")                # color DIFF 없음(예: move) → 곧장 verify
+        # (2026-07-19 원천차단) OBJECT 재채색 노출 **제거**. object compare relation(`{pair}.E_G0Oi-G1Oj`)은
+        # WM 에 descriptive 로 그대로 있으나, 여기서 recolor-rel 로 노출하지 않는다 — object 좌표(셀 집합)를
+        # coloring 의 단일 position arg 로 넣는 **규칙이 없어** 예전엔 body 해킹으로만 재채색이 성립했기 때문.
+        # 그 발화원(recolor-rel 노출)을 끊어 object coloring 을 원천 차단한다. OBJECT level 은 재채색을
+        # 시도하지 않고 곧장 verify → (변화 있으면) 실패 → PIXEL 하강(move: object 는 원래 no-op → 동일).
+        ag.wm.add(sid, "colored-all", "yes")
         return
