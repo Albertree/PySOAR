@@ -39,7 +39,7 @@ def _op_coloring_pixel_rel(ag, sid):
     좌표·색을 읽어 칠한다(Part B: hypothesize 가 더는 xform 을 안 만듦). 미적용(`E ^colored yes` 아님)
     전부를 **한 번에** r*W+cx 오름차순(옛 xform g0idx=r*W+c 순과 동일 = byte-safe)으로 칠하고 program
     step 을 방출 — object 가설(`sid ^base-program`)에 이어붙임(object 가 먼저 칠한 뒤 잔여를 pixel 이 마감).
-    처리한 relation 이 하나도 없으면(전부 object 소관) None 반환 → 호출부가 기존 xform 경로로 fallback."""
+    처리한 pixel relation 이 하나도 없으면(전부 object 소관) None 반환 → 호출부가 object relation 경로로 넘어감."""
     from procedural_memory.dsl.transformation import coloring   # vendored
     rels = [E for (i, a, E) in ag.wm if i == sid and a == "recolor-rel"
             and not ag.wm.contains(E, "colored", "yes")]
