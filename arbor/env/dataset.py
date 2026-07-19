@@ -23,6 +23,8 @@ DATASETS = {
     "move":   os.path.join(_ROOT, "ARC_human", "move"),        # 사용자 제작 move 문제
     "flip":   os.path.join(_ROOT, "ARC_human", "flip"),
     "rotate": os.path.join(_ROOT, "ARC_human", "rotate"),
+    "object_coloring": os.path.join(_ROOT, "ARC_human", "object_coloring"),  # 사용자 제작 object 재채색 18문제
+    "objc":   os.path.join(_ROOT, "ARC_human", "object_coloring"),           # 짧은 alias
     "agi":    os.path.join(_ROOT, "ARC_AGI", "training"),      # full ARC-AGI-1 train
     "agi2":   os.path.join(_ROOT, "ARC_AGI_v2", "training"),   # full ARC-AGI-2 train
 }
