@@ -103,17 +103,25 @@ def _sel_of(resolved_val):
     return _strip_vspace(sel) if sel else sel
 
 
-def render_solution_lines(solution_ast, resolved, comm, shapes):
-    """설계 §5 형태의 표시줄 리스트. 시각화-먼저(솔버 데이터 재표기). 결정적."""
-    body = solution_ast.get("body") or []
-    parts = {s["call"]: s["args"] for s in body}
-    # 1) 공통 선택자 → 객체 바인딩 obj0 (선택자-일관: 모든 슬롯 동일 @sel)
+def object_binding_lines(resolved, shapes):
+    """객체 선정 preamble 라인들 — `shape0 = [[..]]`(shape 선택자 시) + `obj0 = select(object, <조건>)`.
+    ①②③ 공통(사용자 2026-07-20: ②③ 시각화만 봐도 obj0 가 무엇이고 어떻게 선정됐는지 알게).
+    선택자-일관: 모든 슬롯이 같은 @sel 이라 obj0 하나로 묶인다."""
     sel = next((_sel_of(v) for v in resolved.values() if _sel_of(v)), None)
     cond, shape_ref = selector_to_condition(sel)
     lines = []
     if shape_ref is not None:
         lines.append(f"{shape_ref} = {shapes.get(shape_ref, '[]')}")
     lines.append(f"obj0 = select(object, {cond})")
+    return lines
+
+
+def render_solution_lines(solution_ast, resolved, comm, shapes):
+    """설계 §5 형태의 표시줄 리스트. 시각화-먼저(솔버 데이터 재표기). 결정적."""
+    body = solution_ast.get("body") or []
+    parts = {s["call"]: s["args"] for s in body}
+    # 1) 공통 선택자 → 객체 바인딩 obj0 (선택자-일관: 모든 슬롯 동일 @sel)
+    lines = list(object_binding_lines(resolved, shapes))
     objvar = "obj0"
     var_i = [0]
 
