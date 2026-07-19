@@ -46,6 +46,7 @@ from arbor.agent.focus import setup_focus_agent
 from arbor.engine.trace import _Tracer
 from arbor.env.dataset import list_tasks, load_task
 from arbor.reasoning import program_ast as PA
+from debugger.reports import solution_expr as SE
 
 # easy_a 8 태스크(a-h). (easy000i=격자 크기 변화 미해결은 데이터셋에서 제거됨.)
 TIDS = [f"easy000{c}" for c in "abcdefgh"]
@@ -635,6 +636,53 @@ def _compare_asts(a0, a1):
         out["contents"] = {"kind": "const",
                             "cls": "comm" if ("program" not in ct1 and _eq_json(ct0, ct1)) else "diff"}
     return out
+
+
+def _solution_comm(pair_asts):
+    """pair0/pair1 program 의 set_grid_size/color COMM(값 동일) 여부. pair<2 면 전부 COMM 취급."""
+    if len(pair_asts) < 2:
+        return {"size": True, "color": True}
+    p0 = {s["call"]: s["args"] for s in pair_asts[0].get("body", [])}
+    p1 = {s["call"]: s["args"] for s in pair_asts[1].get("body", [])}
+
+    def _same(call, key):
+        a = p0.get(call, {}).get(key); b = p1.get(call, {}).get(key)
+        return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+    return {"size": _same("set_grid_size", "size"), "color": _same("set_grid_color", "color")}
+
+
+def _shapes_for(resolved, slots, train_inputs):
+    """shape# 선택자 참조 → mover(pair0) 객체 shape 2d array(1=채움,-1=빈칸). 없으면 {}.
+    §검증(2026-07-20): `_obj_atoms`(arbor/reasoning/antiunify.py) 는 bbox 좌표 원자(r0,c0,r1,c1,h,w,…)
+    만 반환하고 'shape' 키가 없다 — ARCKG object 클래스를 거치지 않는 여기서는 mover cells 로부터
+    직접 bbox 2D array 를 만든다(ARCKG object.py::to_json()['shape'] 와 동일 컨벤션: bbox, 채움=1,
+    빈칸=-1 — arbor/perception/arckg/object.py 라인 137-141 확인)."""
+    from arbor.reasoning.antiunify import _components
+    refs = {}
+    for val in resolved.values():
+        sel = SE._sel_of(val)
+        if not (sel and sel.startswith("shape#")):
+            continue
+        ref = f"shape{sel[len('shape#'):]}"
+        if ref in refs:
+            continue
+        # mover(pair0): resolved cellset DIFF pair0 셀 인덱스가 속한 객체
+        cell_slot = next((n for n, v in resolved.items() if v == val and n.startswith("?c.cells")), None)
+        p0cells = (slots.get(cell_slot) or [[]])[0] if cell_slot else []
+        if not (p0cells and train_inputs):
+            continue
+        g0 = train_inputs[0]; W = len(g0[0])
+        want = {(i // W, i % W) for i in p0cells}
+        for cells, _col in _components(g0):
+            if want & set(cells):
+                rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+                r0, c0, r1, c1 = min(rs), min(cs), max(rs), max(cs)
+                cset = set(cells)
+                shape = [[1 if (r, c) in cset else -1 for c in range(c0, c1 + 1)]
+                         for r in range(r0, r1 + 1)]
+                refs[ref] = shape
+                break
+    return refs
 
 
 # program_ast.render_header 는 pixel/object body(step.args.target.ref)만 가정 — grid(3-property)
