@@ -40,6 +40,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 
 from arbor.agent.focus import setup_focus_agent
 from arbor.engine.trace import _Tracer
@@ -184,48 +185,88 @@ def _disp_grid_leaf(leaf, prop):
     return json.dumps(leaf)
 
 
-def _coloring_steps(body):
+def _pretty_move(expr):
+    """resolved cellset 슬롯식(`move[ROW,COL]@SEL`)을 사람이 읽는 명확한 이동 표현으로.
+    각 축 토큰을 라벨링: keep(제자리)·=v(절대)·0(끝)·H-h/W-w(코너)·BR→v(우하코너)·src±Δ(상대Δ).
+    선택자(@color=2 등)는 ⟨…⟩ 로. 파싱 실패 시 원문 그대로(정직)."""
+    m = re.match(r"^move\[(.+?),(.+?)\](?:@(.+))?$", expr)
+    if not m:
+        return expr
+    row, col, sel = m.group(1), m.group(2), (m.group(3) or "")
+
+    def _ax(tok):
+        md = re.match(r"^[rc]0([+-]\d+)$", tok)
+        if md:
+            return "keep(제자리)" if md.group(1) in ("+0", "-0") else f"src{md.group(1)}(상대Δ)"
+        if tok.startswith("BR="):
+            return f"BR→{tok[3:]}(우하코너)"
+        if tok.startswith("="):
+            return f"={tok[1:]}(절대)"
+        if tok == "0":
+            return "0(끝)"
+        if tok in ("H-h", "W-w"):
+            return f"{tok}(코너)"
+        return tok
+    sel_txt = f"⟨{sel}⟩" if sel else ""
+    return f"move{sel_txt} → row:{_ax(row)}, col:{_ax(col)}"
+
+
+def _coloring_steps(body, slot_exprs=None):
     """set_grid_contents 의 contents leaf 가 `program`(하강 coloring 합성, c–h)일 때의 순차 스텝
     재료 — ①(_coloring_seq_lines, 텍스트) 과 ③(_coloring_flow_rows, 시각화)가 이 SAME 리스트를
-    소비한다(모듈 docstring §①②③ 공통소스 원칙). 각 스텝 = {g_from, g_to, ref, label, color}.
-    label 은 두 표현 모두에서 문자 그대로 재사용되는 target 텍스트(accessor 식 또는 cellset)."""
+    소비한다(모듈 docstring §①②③ 공통소스 원칙). 각 스텝 = {g_from, g_to, ref, label, color, resolved}.
+    label 은 두 표현 모두에서 문자 그대로 재사용되는 target 텍스트(accessor 식 또는 cellset).
+    slot_exprs(선택) = {`?c.cellsN` → resolved 이동식} — TASK.solution 렌더 시, cellset 변수를
+    raw(`cellset=?c.cellsN`) 대신 명확한 move 표현식으로 치환한다(§사용자 2026-07-20)."""
     steps = []
     prev = "g0"
     for j, s in enumerate(body, start=1):
         tgt = s["args"]["target"]
         ref = tgt.get("ref")
         cur = f"g{j}"
+        resolved = False
         if ref in _ACCESSOR:
             idx = _disp_leaf(tgt["index"])
             label = f"{_ACCESSOR[ref]}(input_grid)[{idx}].coord"
         elif ref == "coord":                          # 리터럴 좌표 직접
             r, c = tgt["index"]["const"]
             label = f"({r}, {c})"
-        elif ref == "cellset":                        # a-h 밖(정직 표기 — 러너 미지원, coloring 은 단일좌표만)
-            label = f"cellset={_disp_leaf(tgt['cells'])}"
+        elif ref == "cellset":                        # blob: resolved 이동식이 있으면 명확화, 없으면 정직 raw
+            cl = tgt["cells"]
+            var = cl.get("var") if isinstance(cl, dict) else None
+            if slot_exprs and var in slot_exprs:
+                label = _pretty_move(slot_exprs[var]); resolved = True
+            else:
+                label = f"cellset={_disp_leaf(cl)}"
         else:
             label = f"? /* 해석 불가 target: {json.dumps(tgt)} */"
         steps.append({"g_from": prev, "g_to": cur, "ref": ref, "label": label,
-                      "color": s["args"]["color"]})
+                      "color": s["args"]["color"], "resolved": resolved})
         prev = cur
     return steps
 
 
-def _coloring_seq_lines(body):
+def _coloring_seq_lines(body, slot_exprs=None):
     """_coloring_steps(공통 재료) → 순차 대입 텍스트 라인들. g0 = g.contents(하강 전 원본 contents)
     로 시작해, 각 coloring 스텝을 gN = coloring(gN-1, label, color) 로 threading(∘ 합성 폐기 —
-    사고 단위를 한 줄씩 순차 statement 로). 빈 body(0 스텝)도 러너-안전한 identity(g0→result)로 남긴다."""
+    사고 단위를 한 줄씩 순차 statement 로). 빈 body(0 스텝)도 러너-안전한 identity(g0→result)로 남긴다.
+    slot_exprs(선택) = TASK.solution cellset 변수 → resolved 이동식(명확 표현)."""
     lines = ["g0 = g.contents"]
-    steps = _coloring_steps(body)
+    steps = _coloring_steps(body, slot_exprs)
     for st in steps:
         col = _disp_leaf(st["color"])
-        suffix = ("  # 해석 불가(다중좌표 — 러너 미지원)" if st["ref"] == "cellset" else "")
+        if st["ref"] != "cellset":
+            suffix = ""
+        elif st.get("resolved"):
+            suffix = "  # move 표현식(resolved slot)"
+        else:
+            suffix = "  # 해석 불가(다중좌표 — 러너 미지원)"
         lines.append(f"{st['g_to']} = coloring({st['g_from']}, {st['label']}, {col}){suffix}")
     lines.append(f"result = {steps[-1]['g_to'] if steps else 'g0'}")
     return lines
 
 
-def _display_grid(body):
+def _display_grid(body, slot_exprs=None):
     """grid body → Grid 객체 3속성 개별 대입 형태(정직: size/color 는 완성 contents 와
     일관해야 valid). contents leaf 가 `program`(하강 coloring 합성, c–h)이면 g.color 뒤에 빈 줄을
     두고 순차 coloring statement 블록(g0..gN, result)을 삽입한 뒤 맨 아래에서
@@ -240,7 +281,7 @@ def _display_grid(body):
              f"g.color = set_grid_color({co})"]
     if "program" in ct:
         lines.append("")
-        lines.extend(_coloring_seq_lines(ct["program"]["body"]))
+        lines.extend(_coloring_seq_lines(ct["program"]["body"], slot_exprs))
         lines.append("g.contents = set_grid_contents(result)")
     else:
         lines.append(f"g.contents = set_grid_contents({_disp_grid_leaf(ct, 'contents')})")
@@ -251,7 +292,7 @@ def _display_grid(body):
 _ACCESSOR = {"pixel": "pixels_of", "object": "objects_of"}
 
 
-def _display_pixel(body):
+def _display_pixel(body, slot_exprs=None):
     lines = ["g = input_grid"]
     for s in body:
         tgt = s["args"]["target"]
@@ -263,25 +304,31 @@ def _display_pixel(body):
         elif ref == "coord":                          # 리터럴 좌표 직접
             r, c = tgt["index"]["const"]
             lines.append(f"g = coloring(g, ({r}, {c}), {col})")
-        elif ref == "cellset":                        # blob: 셀 집합 (a–h 밖 — 정직한 다중형)
+        elif ref == "cellset":                        # blob: 셀 집합. resolved 이동식 있으면 명확화
             cl = tgt["cells"]
-            cells = _disp_leaf(cl)
-            lines.append(f"for ix in {cells}:\n    g = coloring(g, divmod(ix, width(input_grid)), {col})")
+            var = cl.get("var") if isinstance(cl, dict) else None
+            if slot_exprs and var in slot_exprs:
+                lines.append(f"g = move_recolor(g, {_pretty_move(slot_exprs[var])}, {col})")
+            else:
+                cells = _disp_leaf(cl)
+                lines.append(f"for ix in {cells}:\n    g = coloring(g, divmod(ix, width(input_grid)), {col})")
         else:
             lines.append(f"# 해석 불가 target: {json.dumps(tgt)}")
     lines.append("output_grid = g")
     return "\n".join(lines)
 
 
-def display_source(ast):
+def display_source(ast, slot_exprs=None):
     """AST → 통일 body 소스(뷰어 로컬). grid/pixel 계열 모두 실행형 'g = fn(g, …)'.
-    to_source(파싱 계약) 와 독립 — 같은 AST 를 일관 프레이밍만(표현 계열은 그대로 드러남)."""
+    to_source(파싱 계약) 와 독립 — 같은 AST 를 일관 프레이밍만(표현 계열은 그대로 드러남).
+    slot_exprs(선택) = TASK.solution cellset 변수 → resolved 이동식(명확 표현). PAIR program 은
+    slot_exprs=None(러너-안전 유지) — solution 렌더에서만 명확화한다."""
     body = (ast or {}).get("body") or []
     if not body:
         return "g = input_grid\noutput_grid = g"
     if PA._is_grid_body(body):
-        return _display_grid(body)
-    return _display_pixel(body)
+        return _display_grid(body, slot_exprs)
+    return _display_pixel(body, slot_exprs)
 
 
 def _runner_payload(tid, asts, pairs, task):
@@ -303,16 +350,18 @@ def _runner_payload(tid, asts, pairs, task):
 
 # ── Step 1: 수집 — 솔버 1 회 실행해 example PAIR.program(AST) 전부 + TASK.solution 을 WM 실측값으로 ──
 def _collect(tid, task):
-    """(pair_asts, pair_indices, solution_ast, attempts) 반환.
+    """(pair_asts, pair_indices, solution_ast, attempts, slot_exprs) 반환.
     program/solution 없으면 각각 [] / None(정직하게 미해결).
     pair_indices[k] = asts[k] 가 실제로 속한 train index — 중간 pair 에 program 이 없으면
     asts 의 리스트 위치가 train index 와 어긋나므로, 그 실제 index 를 나란히 carry 한다
-    (T5 index-carry 가드 — false-green 방지: 다른 pair 의 input 과 program 이 잘못 짝지어지는 것 방지)."""
+    (T5 index-carry 가드 — false-green 방지: 다른 pair 의 input 과 program 이 잘못 짝지어지는 것 방지).
+    slot_exprs = {`?c.cellsN` → resolved 이동식} — WM 의 `T.property ^resolved` 에서 수집,
+    solution 의 cellset 변수를 명확한 move 표현식으로 렌더하는 데 쓴다(§사용자 2026-07-20)."""
     try:
         from debugger.solve_cache import run_solve
         r = run_solve(tid, task, max_cycles=500)      # 1회 solve(+캐시) — dashboard 와 공유(재실행 X)
     except Exception:                                 # noqa: BLE001 — 리포트 생성용, 한 태스크 예외가 전체를 죽이지 않게
-        return [], [], None, []
+        return [], [], None, [], {}
     wm, attempts = r["wm"], r["attempts"]
     T = f"T{tid}"
     asts = []
@@ -337,7 +386,12 @@ def _collect(tid, task):
             sol = None
         if sol and sol.get("body"):
             solution = sol
-    return asts, pairs, solution, attempts
+    slot_exprs = {}                                   # `?c.cellsN` → resolved 이동식 (명확 표현용)
+    for (i, a, v) in wm:
+        if a == "resolved" and isinstance(v, str) and v.startswith("?c.") and "=" in v:
+            var, _, rhs = v.partition("=")            # 첫 '=' 기준 (rhs 의 BR=2·color=2 는 보존)
+            slot_exprs[var.strip()] = rhs.strip()
+    return asts, pairs, solution, attempts, slot_exprs
 
 
 # ── Step 2a: ② AST 트리 — 원본 dict/list(JSON) 를 그대로 nested 렌더 ──────────────────────────
@@ -434,15 +488,16 @@ def _endpoint_rows(ex):
     return g0, g1
 
 
-def _coloring_flow_rows(body, outline=None):
+def _coloring_flow_rows(body, outline=None, slot_exprs=None):
     """③ 중첩 coloring 시각화 — ①(_coloring_seq_lines)과 정확히 같은 _coloring_steps(공통 재료)를
     소비해, 각 coloring 스텝을 op box + target label + color value(+swatch) 노드로 그린다
     (§①②③ 공통소스 원칙 — 모듈 docstring 참고). g0/result 캡션과 g_from/g_to 변수 라벨은 ①(텍스트)
     전용 배관(순차 대입 threading)이라 ③(시각화)에는 굳이 필요 없어 표시하지 않는다 — ①③ 이 같은
     _coloring_steps 재료를 소비하는 사실 자체는 그대로 유지, 포맷팅만 이 계층에서 덜어낸다.
     outline(선택) = Step B anti-unification overlay 용 포지션별 {'idx','col'} outline class
-    (§Step B COMM/DIFF — _compare_asts 가 만든 결과를 그대로 소비, 여기서 새로 판정하지 않는다)."""
-    steps = _coloring_steps(body)
+    (§Step B COMM/DIFF — _compare_asts 가 만든 결과를 그대로 소비, 여기서 새로 판정하지 않는다).
+    slot_exprs(선택) = TASK.solution cellset 변수 → resolved 이동식(①과 같은 명확 표현)."""
+    steps = _coloring_steps(body, slot_exprs)
     rows = []
     for i, st in enumerate(steps):
         col_leaf = st["color"]
@@ -456,7 +511,7 @@ def _coloring_flow_rows(body, outline=None):
     return rows
 
 
-def _grid_step_rows(ast, outline=None):
+def _grid_step_rows(ast, outline=None, slot_exprs=None):
     """set_grid_size→set_grid_color→set_grid_contents 3-property box-flow. 중첩 coloring(있으면)은
     .nestedflow 로 더 오른쪽에 들여쓰되(§5), 메인 세로선(.gflow::before)은 끊기지 않고 한 줄로
     이어진다 — 서로 다른 CSS 요소가 아니라 같은 .gflow 컨테이너 높이 전체를 덮는 절대배치 선.
@@ -476,7 +531,7 @@ def _grid_step_rows(ast, outline=None):
     if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(①과 같은 재료)
         top.append(f'<div class="row">{opb("set_grid_contents")}</div>')
         step_outline = outline["contents"]["steps"] if outline else None
-        inner_rows = _coloring_flow_rows(ct["program"]["body"], step_outline)
+        inner_rows = _coloring_flow_rows(ct["program"]["body"], step_outline, slot_exprs)
         body_html = "".join(top) + f'<div class="nestedflow">{"".join(inner_rows)}</div>'
     else:
         contents_cls = outline["contents"]["cls"] if outline else ""
@@ -486,7 +541,7 @@ def _grid_step_rows(ast, outline=None):
     return [f'<div class="gflow">{body_html}</div><div class="v"></div>']
 
 
-def _pixel_step_rows(ast, outline=None):
+def _pixel_step_rows(ast, outline=None, slot_exprs=None):
     """outline(선택) = {'steps':[{'idx','col'},...]} — top-level pixel/object body 가 실제로 쓰일
     경우를 위한 Step B COMM/DIFF 대응(현 a-h 데이터는 전부 grid body — §확인됨 — 이지만 스키마상
     가능한 형태이므로 _grid_step_rows 와 대칭으로 지원)."""
@@ -505,7 +560,10 @@ def _pixel_step_rows(ast, outline=None):
             r, c = tgt["index"]["const"]
             label = f"({r}, {c})"
         elif ref == "cellset":
-            label = f"cells {_disp_leaf(tgt['cells'])}"
+            cl = tgt["cells"]
+            var = cl.get("var") if isinstance(cl, dict) else None
+            label = (_pretty_move(slot_exprs[var]) if slot_exprs and var in slot_exprs
+                     else f"cells {_disp_leaf(cl)}")
         else:
             label = "?"
         o = steps_outline[i] if (steps_outline and i < len(steps_outline)) else {}
@@ -516,15 +574,16 @@ def _pixel_step_rows(ast, outline=None):
     return rows
 
 
-def _viz(ast, ex, ghost=False, outline=None):
+def _viz(ast, ex, ghost=False, outline=None, slot_exprs=None):
     """두 계열 공통 box-flow: input_grid 썸네일 → 스텝들 → output_grid 썸네일.
     ghost=True 면 overlay(§8 TASK.solution 가로 레이아웃 중간 열)용 반투명 사본
     (easy_antiunify_viz.flow(ghost=True) 와 같은 클래스 이름 재사용 — .ovl/.ghost CSS 는 _EV_CSS 것).
     outline(선택) = _compare_asts() 가 낸 Step B COMM/DIFF class dict — 끝점(input_grid/output_grid)
-    행에는 적용하지 않는다(§Step B — 끝점은 비교/표기 대상 밖)."""
+    행에는 적용하지 않는다(§Step B — 끝점은 비교/표기 대상 밖).
+    slot_exprs(선택) = TASK.solution cellset 변수 → resolved 이동식(①과 같은 명확 표현)."""
     g0, g1 = _endpoint_rows(ex)
-    steps = (_grid_step_rows(ast, outline) if PA._is_grid_body(ast.get("body") or [])
-             else _pixel_step_rows(ast, outline))
+    steps = (_grid_step_rows(ast, outline, slot_exprs) if PA._is_grid_body(ast.get("body") or [])
+             else _pixel_step_rows(ast, outline, slot_exprs))
     cls = "flow ghost" if ghost else "flow"
     return f'<div class="{cls}">{g0}{"".join(steps)}{g1}</div>'
 
@@ -623,16 +682,16 @@ def _render_header_safe(ast, g0):
 
 
 # ── 3-뷰 한 pair(또는 TASK.solution) 블록 (①②③ 은 같은 AST 의 세 표현 — 모듈 docstring 참고) ──
-def _pair_block(label, ast, ex):
+def _pair_block(label, ast, ex, slot_exprs=None):
     g0 = ex["input"]
     return (f'<div class="pair">'
             f'<div class="lab">{html.escape(str(label))}</div>'
             f'<div class="views">'
             f'<div class="view"><div class="vt">① text (통일 body · 실행형)</div>'
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
-            f'<pre class="src">{html.escape(display_source(ast))}</pre></div>'
+            f'<pre class="src">{html.escape(display_source(ast, slot_exprs))}</pre></div>'
             f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast)}</div>'
-            f'<div class="view viz"><div class="vt">③ 시각화</div>{_viz(ast, ex)}</div>'
+            f'<div class="view viz"><div class="vt">③ 시각화</div>{_viz(ast, ex, slot_exprs=slot_exprs)}</div>'
             f'</div></div>')
 
 
@@ -642,7 +701,7 @@ def _pair_block(label, ast, ex):
 #    그대로). 셋을 색으로 구분된 카드에 담아 한 컨테이너(가로 스크롤)에 나란히 놓는다. overlay 는
 #    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — _EV_CSS 에
 #    이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
-def _solution_row(ast_ex_pairs, solution):
+def _solution_row(ast_ex_pairs, solution, slot_exprs=None):
     pair_boxes = "".join(
         f'<div class="innerbox">{_pair_block(f"PAIR {p + 1}", a, ex)}</div>'
         for a, ex, p in ast_ex_pairs)
@@ -665,7 +724,7 @@ def _solution_row(ast_ex_pairs, solution):
 
     if solution is not None:
         sol_ex = ast_ex_pairs[0][1]
-        sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex)}</div>'
+        sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex, slot_exprs)}</div>'
         steps.append(f'<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
                       f'<div class="stepCcontent">{sol_box}</div></div>')
     else:
@@ -727,7 +786,7 @@ def _top_thumbs(task):
 def task_section(tid, task, precomputed=None):
     thumbs = _top_thumbs(task)
 
-    asts, pairs, solution, attempts = precomputed if precomputed else _collect(tid, task)
+    asts, pairs, solution, attempts, slot_exprs = precomputed if precomputed else _collect(tid, task)
     if not asts:
         same = all(len(e["input"]) == len(e["output"]) and len(e["input"][0]) == len(e["output"][0])
                    for e in task["train"])
@@ -744,7 +803,7 @@ def task_section(tid, task, precomputed=None):
                 f'<div class="thumbs">{thumbs}</div><p class="note">{html.escape(why + done)}</p>{extra}</section>')
 
     ast_ex_pairs = [(a, task["train"][p], p) for a, p in zip(asts, pairs)]
-    solrow = _solution_row(ast_ex_pairs, solution)
+    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs)
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
             f'<div class="thumbs">{thumbs}</div>{solrow}</section>')
@@ -1082,10 +1141,10 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
     secs_list = []
     solved = {}
     for t in tids:
-        asts, pairs, solution, attempts = _collect(t, tasks[t])
+        asts, pairs, solution, attempts, slot_exprs = _collect(t, tasks[t])
         solved[t] = bool(attempts) and any(a["correct"] for a in attempts)   # 정답 attempt 존재 = 풀림(task_section:606 과 동일)
         runner_data.extend(_runner_payload(t, asts, pairs, tasks[t]))
-        secs_list.append(task_section(t, tasks[t], precomputed=(asts, pairs, solution, attempts)))
+        secs_list.append(task_section(t, tasks[t], precomputed=(asts, pairs, solution, attempts, slot_exprs)))
     secs = "".join(secs_list)
     # 최상단 문제 리스트: solved 판정으로 초록/빨강 테두리 클래스 부여(§2-5). collect 뒤라 solved 확정됨.
     tabs = "".join(

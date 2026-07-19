@@ -64,8 +64,8 @@ def move_to_vector(row_tok, col_tok, objvar):
         if kind == "corner":
             return f"bottom_right(input_grid).{axis}"
         return str(tgt)                            # rel Δ / abs v / br v / edge 0
-    ar, ac = _anchor(r[2], "r"), _anchor(c[2], "c")
-    tr, tc = _target(r[0], r[1], "r"), _target(c[0], c[1], "c")
+    ar, ac = _anchor(r[2], "row"), _anchor(c[2], "col")
+    tr, tc = _target(r[0], r[1], "row"), _target(c[0], c[1], "col")
     # 두 축 anchor 종류 같으면 whole-point 형태(top_left(obj)/bottom_right(obj))
     if r[2] == c[2] and r[2] in ("tl", "br"):
         whole = "top_left" if r[2] == "tl" else "bottom_right"

@@ -50,7 +50,7 @@ class TestMoveToVector(unittest.TestCase):
     def test_mixed_abs_row_br_col(self):
         # 축별 다른 모델: row 절대=1, col BR=2 → 성분별 anchor/target
         self.assertEqual(move_to_vector("=1", "BR=2", "obj0"),
-                         "coordinate(obj0) - (top_left(obj0).r, bottom_right(obj0).c) + (1, 2)")
+                         "coordinate(obj0) - (top_left(obj0).row, bottom_right(obj0).col) + (1, 2)")
 
 
 if __name__ == "__main__":
