@@ -907,7 +907,7 @@ def task_section(tid, task, precomputed=None):
 
     ast_ex_pairs = [(a, task["train"][p], p) for a, p in zip(asts, pairs)]
     sol_lines = None
-    if solution is not None:
+    if solution is not None and PA._is_grid_body(solution.get("body") or []):
         comm = _solution_comm(asts)
         shapes = _shapes_for(slot_exprs, slot_vals, [task["train"][p]["input"] for p in pairs])
         sol_lines = SE.render_solution_lines(solution, slot_exprs, comm, shapes)
