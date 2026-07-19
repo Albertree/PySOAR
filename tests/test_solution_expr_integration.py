@@ -19,3 +19,9 @@ class TestSolutionExprIntegration(unittest.TestCase):
         html = pr.task_section("move000o", _load("move000o"))
         self.assertIn("color(o) != 0", html)
         self.assertIn("bottom_right(obj0)", html)       # BR 앵커
+
+    def test_compress_stages_present_for_move(self):
+        from debugger.reports import program_report as pr
+        html = pr.task_section("move000ah", _load("move000ah"))
+        self.assertIn("compress", html.lower())          # compress 단계 라벨 등장
+        self.assertIn("픽셀", html)                       # 픽셀 단계 라벨

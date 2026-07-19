@@ -351,7 +351,7 @@ def _runner_payload(tid, asts, pairs, task):
 
 # ── Step 1: 수집 — 솔버 1 회 실행해 example PAIR.program(AST) 전부 + TASK.solution 을 WM 실측값으로 ──
 def _collect(tid, task):
-    """(pair_asts, pair_indices, solution_ast, attempts, slot_exprs, slots) 반환.
+    """(pair_asts, pair_indices, solution_ast, attempts, slot_exprs, slots, groupings) 반환.
     program/solution 없으면 각각 [] / None(정직하게 미해결).
     pair_indices[k] = asts[k] 가 실제로 속한 train index — 중간 pair 에 program 이 없으면
     asts 의 리스트 위치가 train index 와 어긋나므로, 그 실제 index 를 나란히 carry 한다
@@ -359,16 +359,22 @@ def _collect(tid, task):
     slot_exprs = {`?c.cellsN` → resolved 이동식} — WM 의 `T.property ^resolved` 에서 수집,
     solution 의 cellset 변수를 명확한 move 표현식으로 렌더하는 데 쓴다(§사용자 2026-07-20).
     slots = {`?c.X` → [pair0_cells, pair1_cells, ...]} — WM 의 `T.property ^slot` 에서 수집,
-    shape# 선택자의 실제 mover shape 를 재구성(_shapes_for)하는 데 쓴다(Task 5)."""
+    shape# 선택자의 실제 mover shape 를 재구성(_shapes_for)하는 데 쓴다(Task 5).
+    groupings[k] = asts[k]/pairs[k] 와 같은 위치의 객체(blob) program AST(WM `P{k}.property ^grouping`,
+    compress operator 가 남김 — procedural_memory/operators/compress.py:247) — 없으면 None(정직).
+    pixel program(asts[k])과 groupings[k]는 같은 grid-body AST 형태(§_viz 가 이미 다루는 형태)이고,
+    차이는 nested coloring target(pixel index 다건 vs cellset 소수건)뿐이라 새 파서 없이 그대로
+    _viz 로 렌더할 수 있다(Task 6 — Step B compress 단계 시각화)."""
     try:
         from debugger.solve_cache import run_solve
         r = run_solve(tid, task, max_cycles=500)      # 1회 solve(+캐시) — dashboard 와 공유(재실행 X)
     except Exception:                                 # noqa: BLE001 — 리포트 생성용, 한 태스크 예외가 전체를 죽이지 않게
-        return [], [], None, [], {}, {}
+        return [], [], None, [], {}, {}, []
     wm, attempts = r["wm"], r["attempts"]
     T = f"T{tid}"
     asts = []
     pairs = []
+    groupings = []
     for k in range(len(task["train"])):
         v = next((v for (i, a, v) in wm if i == f"{T}.P{k}.property" and a == "program"), None)
         if v in (None, "{}"):
@@ -380,6 +386,16 @@ def _collect(tid, task):
         if ast and ast.get("body"):
             asts.append(ast)
             pairs.append(k)
+            gv = next((v for (i, a, v) in wm if i == f"{T}.P{k}.property" and a == "grouping"), None)
+            g_ast = None
+            if gv not in (None, "{}"):
+                try:
+                    g = json.loads(gv)
+                except (ValueError, TypeError):
+                    g = None
+                if g and g.get("body"):
+                    g_ast = g
+            groupings.append(g_ast)
     sol_v = next((v for (i, a, v) in wm if i == f"{T}.property" and a == "solution"), None)
     solution = None
     if sol_v not in (None, "{}"):
@@ -404,7 +420,7 @@ def _collect(tid, task):
                     slot_vals[nm] = json.loads(mm.group(1))
                 except (ValueError, TypeError):
                     pass
-    return asts, pairs, solution, attempts, slot_exprs, slot_vals
+    return asts, pairs, solution, attempts, slot_exprs, slot_vals, groupings
 
 
 # ── Step 2a: ② AST 트리 — 원본 dict/list(JSON) 를 그대로 nested 렌더 ──────────────────────────
@@ -601,6 +617,24 @@ def _viz(ast, ex, ghost=False, outline=None, slot_exprs=None):
     return f'<div class="{cls}">{g0}{"".join(steps)}{g1}</div>'
 
 
+# ── Step B compress 단계: pair0 픽셀 program → 4-인접 동색 그룹핑(compress) → 객체 program ────────
+def _compress_stages(pixel_ast, group_ast, ex):
+    """pair0 의 픽셀 program(WM `P{k}.property ^program`)과 그 compress 결과 객체 program
+    (WM `P{k}.property ^grouping`)을 가로로 이어 그린다. 새 렌더러를 만들지 않고 둘 다 같은
+    grid-body AST 형태라 기존 _viz(①②③ 공통소스 원칙과 같은 취지 — box-flow 렌더는 한 곳)를
+    그대로 재사용, 사이에 라벨 붙은 화살표 연결 노드(.cconn)만 추가한다."""
+    pixel_viz = _viz(pixel_ast, ex)
+    group_viz = _viz(group_ast, ex)
+    conn = ('<div class="cconn"><span class="cconnarrow">→</span>'
+            '<span class="cconnlab">4-인접 동색 그룹핑<br>(compress)</span></div>')
+    return (f'<div class="compressbox"><div class="lab">COMPRESS · 픽셀 → 객체</div>'
+            f'<div class="compressscroll"><div class="compressrow">'
+            f'<div class="cstage"><div class="cstagelab">픽셀 program</div>{pixel_viz}</div>'
+            f'{conn}'
+            f'<div class="cstage"><div class="cstagelab">객체 program</div>{group_viz}</div>'
+            f'</div></div></div>')
+
+
 # ── Step B COMM/DIFF: pair0 vs pair1 program 을 step-by-step 비교(끝점 grid 는 비교 대상 밖) ──────
 def _eq_json(x, y):
     return json.dumps(x, sort_keys=True) == json.dumps(y, sort_keys=True)
@@ -765,7 +799,7 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
 #    그대로). 셋을 색으로 구분된 카드에 담아 한 컨테이너(가로 스크롤)에 나란히 놓는다. overlay 는
 #    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — _EV_CSS 에
 #    이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
-def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None):
+def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, groupings=None):
     pair_boxes = "".join(
         f'<div class="innerbox">{_pair_block(f"PAIR {p + 1}", a, ex)}</div>'
         for a, ex, p in ast_ex_pairs)
@@ -783,8 +817,12 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None):
                    f'<div class="legend"><span class="lg comm">COMM(일치) = 녹색</span>'
                    f'<span class="lg diff">DIFF(어긋남) = 빨강</span></div>')
         box = f'<div class="innerbox"><div class="lab">PROGRAM COMPARISON</div>{overlay}</div>'
+        # compress 단계(Task 6): pair0 픽셀 program → 4-인접 그룹핑 → 객체 program. groupings[0] 이
+        # 있는 태스크(compress 가 실제로 돈 태스크 — arc_human/move 전체)에서만 표시(정직 — 없는
+        # 태스크에 임의로 지어내지 않는다). PROGRAM COMPARISON 박스 오른쪽에 나란히(.stepBrow).
+        compress_html = _compress_stages(a0, groupings[0], ex0) if (groupings and groupings[0]) else ""
         steps.append(f'<div class="stepcard stepB"><div class="stepttl">Step B · Anti-unification</div>'
-                     f'<div class="stepBcontent">{box}</div></div>')
+                     f'<div class="stepBcontent"><div class="stepBrow">{box}{compress_html}</div></div></div>')
 
     if solution is not None:
         sol_ex = ast_ex_pairs[0][1]
@@ -850,7 +888,8 @@ def _top_thumbs(task):
 def task_section(tid, task, precomputed=None):
     thumbs = _top_thumbs(task)
 
-    asts, pairs, solution, attempts, slot_exprs, slot_vals = precomputed if precomputed else _collect(tid, task)
+    asts, pairs, solution, attempts, slot_exprs, slot_vals, groupings = (
+        precomputed if precomputed else _collect(tid, task))
     if not asts:
         same = all(len(e["input"]) == len(e["output"]) and len(e["input"][0]) == len(e["output"][0])
                    for e in task["train"])
@@ -872,7 +911,7 @@ def task_section(tid, task, precomputed=None):
         comm = _solution_comm(asts)
         shapes = _shapes_for(slot_exprs, slot_vals, [task["train"][p]["input"] for p in pairs])
         sol_lines = SE.render_solution_lines(solution, slot_exprs, comm, shapes)
-    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines)
+    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings)
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
             f'<div class="thumbs">{thumbs}</div>{solrow}</section>')
@@ -1026,6 +1065,22 @@ CSS = """
 .stepB .ovl{position:relative;padding:6px 30px 30px 6px;width:max-content}
 .stepB .ovl .ghost{position:absolute;top:0;left:0;right:auto;bottom:auto;width:auto;height:auto;
  transform:translate(22px,22px);opacity:.4;pointer-events:none;filter:saturate(.7)}
+/* Step B compress 단계(Task 6, 2026-07-20): PROGRAM COMPARISON 박스 오른쪽에 픽셀→객체 compress
+   진행을 가로로 이어 보여준다(.stepBrow). 이 서브블록만 자체 max-width+overflow-x:auto 로 감싸
+   (.compressscroll) — 픽셀 program 은 coloring 스텝이 많아 폭이 쉽게 넓어지므로, 이 새 블록이
+   .stepB/.task/문서 전체의 가로폭을 계속 밀어 넓히는 대신 이 서브블록 안에서만 스크롤되게 한다
+   (§Task 6 제약: 문서 body 는 가로 스크롤하지 않는다 — 넓은 내용은 자기 컨테이너 안에서). */
+.stepBrow{display:flex;align-items:flex-start;gap:14px}
+.compressbox{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;
+ max-width:640px;flex:0 1 auto;min-width:0}
+.compressscroll{overflow-x:auto;max-width:100%}
+.compressrow{display:flex;align-items:flex-start;gap:12px;width:max-content}
+.cstage{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.cstagelab{font-size:10px;color:#7a8698;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.cconn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+ min-width:96px;color:#c8a8f0;padding-top:34px;flex:0 0 auto}
+.cconnarrow{font-size:20px;line-height:1}
+.cconnlab{font-size:10px;text-align:center;line-height:1.35}
 """
 
 CSS += """
@@ -1210,10 +1265,11 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
     secs_list = []
     solved = {}
     for t in tids:
-        asts, pairs, solution, attempts, slot_exprs, slot_vals = _collect(t, tasks[t])
+        asts, pairs, solution, attempts, slot_exprs, slot_vals, groupings = _collect(t, tasks[t])
         solved[t] = bool(attempts) and any(a["correct"] for a in attempts)   # 정답 attempt 존재 = 풀림(task_section:606 과 동일)
         runner_data.extend(_runner_payload(t, asts, pairs, tasks[t]))
-        secs_list.append(task_section(t, tasks[t], precomputed=(asts, pairs, solution, attempts, slot_exprs, slot_vals)))
+        secs_list.append(task_section(t, tasks[t], precomputed=(
+            asts, pairs, solution, attempts, slot_exprs, slot_vals, groupings)))
     secs = "".join(secs_list)
     # 최상단 문제 리스트: solved 판정으로 초록/빨강 테두리 클래스 부여(§2-5). collect 뒤라 solved 확정됨.
     tabs = "".join(
