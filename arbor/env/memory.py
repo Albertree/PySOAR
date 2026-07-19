@@ -5,12 +5,17 @@ WM is in-RAM (the kernel); these are the persistent stores.
 
   procedural_memory/  : the agent's rules -- base production rules + learned
                         chunks (procedural knowledge; see wiki/soar.md).
-  episodic_memory/     : one execution trace per solved/attempted task
-                        (the self-evolution infrastructure).
-  semantic_memory/     : ARCKG node properties (declarative facts about tasks).
+  episodic_memory/     : one execution trace per solved/attempted task -- the
+                        temporally-ordered solve trace (descent order, compares,
+                        program trajectory). Raw material for anti-unification.
+  semantic_memory/     : the learned DSL/skill abstraction library -- decontextualized,
+                        cross-task skill cards (grown by anti-unification), NOT the
+                        per-task ARCKG. (ARCKG is contextual/perception-derived = a
+                        persisted projection of Working Memory; it flushes to episodic.
+                        See wiki/arbor-soar-memory-mapping + arbor-memory-contents.)
 
-This module writes episodic traces and the procedural rule manifest; semantic
-memory is populated by ARCKG when tasks are observed.
+This module writes episodic traces and the procedural rule manifest; the semantic
+skill library is populated by anti-unification depositing distilled skill cards.
 """
 
 from __future__ import annotations
