@@ -7,24 +7,8 @@ from arbor.env.dataset import list_tasks, load_task
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def _load_made_and_real():
-    """대시보드에 띄울 태스크: 워크스루의 made000a/b + 실제 08ed6ac7 + easy000a."""
-    here = _REPO
-    tasks = []
-    for tid in ("made000a", "made000b"):
-        p = os.path.join(here, "data", "made", f"{tid}.json")
-        if os.path.exists(p):
-            tasks.append((tid, load_task(p)))
-    real = glob.glob(os.path.join(here, "data", "**", "08ed6ac7.json"), recursive=True)
-    if real:
-        tasks.append(("08ed6ac7", load_task(real[0])))
-    etid, epath = list_tasks("easy")[0]
-    tasks.append((etid, load_task(epath)))
-    return tasks
-
-
-def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, include_made=True):
-    """다양성 관찰용 묶음: easy 9 + made 2 + ARC-AGI 문제.
+def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True):
+    """다양성 관찰용 묶음: easy 8 + ARC-AGI 문제. (made000a/b 인프라는 2026-07-19 은퇴.)
     - agi_ids 지정 시: **그 id 들 정확히** 사용(area 필터 무시) — 서브셋 재생성용.
     - 미지정 시: training 에서 **max(train grid area) ≤ area_cap** (≈≤14x14) 인 것 앞에서 n_agi 개.
       WM 정렬 병목이 격자크기 비례라 시간/크기 예산 보호. 정렬 결정적 — 재현 가능.
@@ -33,11 +17,6 @@ def _load_survey(n_agi=20, area_cap=200, agi_ids=None, include_easy=True, includ
     tasks = []
     if include_easy:
         tasks += [(tid, load_task(p)) for tid, p in list_tasks("easy")]      # easy a-h 8
-    if include_made:
-        for tid in ("made000a", "made000b"):                                 # made 2
-            p = os.path.join(here, "data", "made", f"{tid}.json")
-            if os.path.exists(p):
-                tasks.append((tid, load_task(p)))
     agi_root = os.path.join(here, "data", "ARC_AGI")   # vendored (was ~/Desktop/ARC-solver)
     if agi_ids:                                                              # 명시 id 셋
         for tid in agi_ids:

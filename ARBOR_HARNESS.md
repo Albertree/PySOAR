@@ -221,9 +221,9 @@
 - **재건 계획(현행, 2026-07-07 갱신).** driver = **property 공백 기반 하강**: `solve` 가 `TASK.solution` 제출
   시도 → 공백 → impasse → PAIR 하강 → `PAIR.program` 공백 → impasse → GRID/OBJECT 하강 → relation(compare)
   획득 → 그걸 *이용해* program(search+verify) → program 들 anti-unify → solution. 4칸(서술/절차 × pair/task,
-  §0.5)이 이 순서로 채워진다. 테스트 사다리 easy000a → made000b → 08ed6ac7 → made000a. 성공 판정 = 4문제
-  하강 깊이·step 수가 서로 달라지고, 각 아티팩트(relation/program/solution)가 디스크에 남으며 근거
-  (COMM/DIFF)가 WM 에 남는다.
+  §0.5)이 이 순서로 채워진다. 테스트 사다리 easy000a → 08ed6ac7 + 주 게이트 `arc_human/move` 60/60
+  (made000a/b 사다리는 2026-07-19 은퇴 — move 데이터셋으로 대체). 성공 판정 = 문제별 하강 깊이·step 수가
+  서로 달라지고, 각 아티팩트(relation/program/solution)가 디스크에 남으며 근거(COMM/DIFF)가 WM 에 남는다.
 - **위키 허브** — `~/Desktop/wiki/wiki/pysoar.md`, `arbor-operators.md`, `arckg-node-edge.md`,
   `coarse-to-fine-abductive-reasoning.md`, `structure-mapping-theory.md`, `anti-unification.md`.
 

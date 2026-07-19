@@ -17,8 +17,8 @@ OUT = os.path.join(HERE, "hypothesis_space.html")
 PALETTE = ["#000000", "#0074D9", "#FF4136", "#2ECC40", "#FFDC00",
            "#AAAAAA", "#F012BE", "#FF851B", "#7FDBFF", "#870C25"]
 TASKS = ["easy000a", "easy000b", "easy000c", "easy000d", "easy000e", "easy000f", "easy000g",
-         "easy000h", "made000a", "made000b",
-         "08ed6ac7", "0ca9ddb6", "009d5c81", "11852cab", "845d6e51", "868de0fa"]   # dashboard 17
+         "easy000h",
+         "08ed6ac7", "0ca9ddb6", "009d5c81", "11852cab", "845d6e51", "868de0fa"]   # dashboard
 COK, CNO, CAMB, CG = "#3fb950", "#f85149", "#d29922", "#4b5563"
 
 
@@ -378,10 +378,8 @@ def build():
     arc = os.path.expanduser("~/Desktop/ARC-solver")
     if arc not in sys.path:
         sys.path.insert(0, arc)
-    from arbor.env.make_made_tasks import write_all
-    write_all()
     from arbor.solver import _load_survey, SURVEY_AGI
-    tasks = {**dict(_load_survey(agi_ids=SURVEY_AGI)), **dict(_load_survey(include_easy=True, include_made=True))}
+    tasks = {**dict(_load_survey(agi_ids=SURVEY_AGI)), **dict(_load_survey(include_easy=True))}
     secs = "".join(_section(tid, tasks[tid]) for tid in TASKS)
     opts = "".join(f"<option value='{t}'>{t}</option>" for t in TASKS)
     doc = f"""<!doctype html><meta charset='utf-8'><title>hypothesis space — PaG1 예측</title>

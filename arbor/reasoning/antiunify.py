@@ -370,7 +370,7 @@ def _resolve_cellset(vals, train, comps, sels, test_comps=None):
         model = "abs" if (abs_sig and not rel_sig) else ("rel" if (rel_sig and not abs_sig) else "amb")
 
         # 절대(=const)·격자상대(모서리 0/코너 H-h)는 원래 tier 유지(-1/-2 — 코너가 절대상수를 이김: 크기불변
-        # 일반화, made000b 코너 prior). 모델은 **source-상대(keep/offset)** 를 약화할지만 정한다: arrive 인데
+        # 일반화, 코너 prior). 모델은 **source-상대(keep/offset)** 를 약화할지만 정한다: arrive 인데
         # 절대모델이면 keep/offset 이 우연(정보축이 '점으로 감'이라 밝힘) → 약화(+2). 상대모델/vacate 면 그대로.
         def _rel_tier(base):                                  # source-상대(keep/offset) tier
             return 2 if (moved and model == "abs") else base

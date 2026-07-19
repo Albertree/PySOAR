@@ -8,7 +8,7 @@ from __future__ import annotations
 import json, os, sys
 from procedural_memory.loader import PRODUCTIONS, OP_DOCS
 from arbor.agent.focus import setup_focus_agent
-from arbor.env.survey import _load_made_and_real, _load_survey, SURVEY_AGI
+from arbor.env.survey import _load_survey, SURVEY_AGI
 
 
 def _cycle_tree(events):
@@ -185,9 +185,9 @@ if __name__ == "__main__":
         oc = program_report.build_objc()
         print(f"wrote {oc}\nopen it:  open {out}")
     else:
-        # 사용자 요청(2026-07-17): 시간 단축 — made 및 지정 ARC-AGI 5문제 제외. dashboard = easy a-h(8)
-        # + 08ed6ac7(1) = 9. (easy000i 는 데이터셋에서 제거됨. made·나머지 AGI 는 풀이 시도조차 안 함.)
-        tasks = _load_survey(agi_ids=SURVEY_AGI, include_made=False)     # 8 + 1 = 9
+        # 사용자 요청(2026-07-17): 시간 단축 — 지정 ARC-AGI 5문제 제외. dashboard = easy a-h(8)
+        # + 08ed6ac7(1) = 9. (easy000i·made000a/b 인프라는 데이터셋/코드에서 은퇴됨.)
+        tasks = _load_survey(agi_ids=SURVEY_AGI)                         # 8 + 1 = 9
         print(f"survey: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=500")
         out = make_dashboard(tasks, dataset="survey = easy a-h(8) + 08ed6ac7")
         sz = os.path.getsize(out) / 1e6

@@ -25,4 +25,5 @@
 - 현행 작업 = hypothesize monolith 해체 → within-pair compare → 2차/n차 relation → search → G0-resolve →
   compose 재건. 상세 규약: `~/Desktop/wiki/wiki/{pysoar,arbor-operators,arckg-node-edge}.md`, 7원리(P1–P7)는
   `arbor-execution-trace.md`.
-- 성공 판정: 4문제(easy000a·made000b·08ed6ac7·made000a)의 step 수가 서로 달라지고, 근거(COMM/DIFF)가 WM 에 남는다.
+- 성공 판정: 주 게이트 = `arc_human/move` 60/60. 부차 = easy000a·08ed6ac7 등 문제별 step 수가 서로
+  달라지고, 근거(COMM/DIFF)가 WM 에 남는다. (made000a/b 사다리는 2026-07-19 은퇴 — move 데이터셋으로 대체.)

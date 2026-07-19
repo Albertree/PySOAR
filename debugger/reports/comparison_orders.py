@@ -32,7 +32,7 @@ EVAL50 = ["0934a4d8", "135a2760", "136b0064", "13e47133", "142ca369", "16b78196"
           "4c3d4a41", "4c416de3", "4c7dc4dd", "4e34c42c", "53fb4810", "5545f144", "581f7754",
           "58490d8a", "58f5dbd5", "5961cc34", "5dbc8537", "62593bfd", "64efde09", "65b59efc",
           "67e490f4"]
-TASKS = ["08ed6ac7", "8efcae92", "made000a", "easy000g", "easy000i", "easy000a"] + AGI20 + EVAL50
+TASKS = ["08ed6ac7", "8efcae92", "easy000g", "easy000a"] + AGI20 + EVAL50
 
 
 def _flat(result):
@@ -155,10 +155,8 @@ def build():
     if arc not in sys.path:
         sys.path.insert(0, arc)
     from arbor.solver import _load_survey, SURVEY_AGI
-    from arbor.env.make_made_tasks import write_all
-    write_all()
     agi = sorted(set(SURVEY_AGI + ["8efcae92"] + AGI20 + EVAL50))    # training + evaluation 모두(재귀 glob)
-    tasks = dict(_load_survey(agi_ids=agi))                          # easy 9 + made 2 + agi 전부
+    tasks = dict(_load_survey(agi_ids=agi))                          # easy 8 + agi 전부
     sections = []
     for tid in TASKS:
         try:

@@ -132,7 +132,7 @@ class TestResolveCellsetRigidDelta(unittest.TestCase):
 
 class TestCornerPrior(unittest.TestCase):
     """canonical 코너 prior: 두 pair 의 dest 앵커가 우연히 같아 상수가 fit 해도(few-shot),
-    구조식 H-h/W-w 를 우선 채택해 test 격자로 일반화한다 (move000q/r·made000b 회귀 근거)."""
+    구조식 H-h/W-w 를 우선 채택해 test 격자로 일반화한다 (move000q/r 회귀 근거)."""
     def _grid(self, obj_r, obj_c):
         g = [[0] * 6 for _ in range(6)]
         for dr in range(2):

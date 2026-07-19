@@ -7,7 +7,7 @@ COMM=상수 고정, DIFF=변수 slot(per-pair 값=근거). resolve(G0 유래 식
 Task 8 보강: op 수 불일치로 antiunify_ast 가 (None,None) 을 내면, 정직히 실패하기 전에
 `compressible`(레거시 antiunify.py 재사용 — 그 함수는 flat 텍스트 program 을 받으므로 `as_source`
 로 렌더한 표현을 넘긴다)로 compress 신호 여부를 판정한다. 이 신호(needs-compress)가 없으면
-compress operator 가 발화하지 않아 blob(object-level) program 이 만들어지지 않고, made000b 같은
+compress operator 가 발화하지 않아 blob(object-level) program 이 만들어지지 않고,
 op-수-불일치 태스크의 generalize 가 영구 실패한다(§2-5 행동보존).
 
 브랜치리뷰(Task4 이후) 보강: pixel coloring 이 ref("coord",[r,c]) 리터럴로도 emit 되면서, `compressible`
