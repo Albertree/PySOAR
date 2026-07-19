@@ -194,6 +194,12 @@ def _selectors(comps_list):
     def by_size(z):
         return lambda comps: [cells for cells, _ in comps if len(cells) == z]
 
+    def by_row(rv):                                       # 위치 값: top-row 앵커 == rv (극값 아님)
+        return lambda comps: [cells for cells, _ in comps if min(r for r, _ in cells) == rv]
+
+    def by_col(cv):                                       # 위치 값: left-col 앵커 == cv
+        return lambda comps: [cells for cells, _ in comps if min(c for _, c in cells) == cv]
+
     def by_extreme(largest):
         # 크기 극값 = 모두와 비교해 더 큼/작음(§4-2). 동률이면 그 동률 전부(모호 → 열거).
         def pick(comps):
@@ -215,6 +221,14 @@ def _selectors(comps_list):
         common_sz = set.intersection(*[{len(cells) for cells, _ in cs} for cs in comps_list])
         for z in sorted(common_sz):
             prop.append((f"size={z}", by_size(z)))
+        # 위치 **값** selector (극값 아님 — 좌표값 비교): 전 grid 공통인 top-row·left-col 앵커.
+        # color=/size= 와 동형으로, '그 행/열에 있는 객체'를 지목(objc_000i=row 값, 000j=col 값).
+        common_r = set.intersection(*[{min(r for r, _ in cells) for cells, _ in cs} for cs in comps_list])
+        for rv in sorted(common_r):
+            prop.append((f"row={rv}", by_row(rv)))
+        common_c = set.intersection(*[{min(c for _, c in cells) for cells, _ in cs} for cs in comps_list])
+        for cv in sorted(common_c):
+            prop.append((f"col={cv}", by_col(cv)))
     return prop + rel                                     # 속성값 COMM 우선, 크기비교 극값은 fallback
 
 
