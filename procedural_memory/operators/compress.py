@@ -145,24 +145,78 @@ def _object_moves(g0, g1):
     return moves
 
 
-def _object_move_program(g0, g1, W):
-    """이동 객체 대응 → **전체 객체** erase+paint grid>blob program. 이동 없으면 None.
-    size/color KEEP(이동은 격자 보존). 각 이동객체 = [color(C_O→비운색), color(C_O'→객체색)]."""
-    moves = _object_moves(g0, g1)
-    if not moves:
+def _object_changes(g0, g1):
+    """G0→G1 **대응 객체의 변화** 목록 [(cells0, cells1, col0, col1, kind)] — 이동/재채색 통합.
+    원리: '변화가 있는 두 객체를 매핑'(구조 대응) → 차이를 프로그램으로 메운다. move/recolor 를
+    특수조건으로 분기하지 않고, 대응 후 **무엇이 달라졌나**(위치·색)로 kind 를 도출한다.
+    static(같은 위치·색) 먼저 예약(변화 아님) → 남은 것에서:
+      · 같은 위치, 색 다름              = recolor
+      · 같은 모양·색, 위치 다름          = move
+      · 같은 모양, 위치·색 다름          = move (erase+paint 로 색까지 반영)
+    대응 못 한 성분이 남으면 [] (compress 부적합 → 호출측 fallback)."""
+    o0, o1 = _components(g0), _components(g1)
+    used, static0, changes = set(), set(), []
+    for i, (c0, col0) in enumerate(o0):                       # 1st: static(같은 위치·색) 예약 → 변화 오탐 방지
+        s0 = sorted(c0)
+        for j, (c1, col1) in enumerate(o1):
+            if j in used or col1 != col0:
+                continue
+            if sorted(c1) == s0:
+                used.add(j); static0.add(i); break
+    for i, (c0, col0) in enumerate(o0):                       # 2nd: recolor(같은 위치, 색 다름)
+        if i in static0:
+            continue
+        s0 = sorted(c0)
+        for j, (c1, col1) in enumerate(o1):
+            if j in used or sorted(c1) != s0:
+                continue
+            used.add(j); static0.add(i)
+            changes.append((sorted(c0), sorted(c1), col0, col1, "recolor")); break
+    for i, (c0, col0) in enumerate(o0):                       # 3rd: move(같은 모양, 위치 다름; 색은 erase+paint 로)
+        if i in static0:
+            continue
+        s0 = _norm_shape(c0)
+        for j, (c1, col1) in enumerate(o1):
+            if j in used or _norm_shape(c1) != s0 or sorted(c1) == sorted(c0):
+                continue
+            used.add(j)
+            changes.append((sorted(c0), sorted(c1), col0, col1, "move")); break
+    return changes
+
+
+def _object_moves(g0, g1):
+    """하위호환 alias — 이동(move)만 (cells0, cells1, color)."""
+    return [(c0, c1, col0) for (c0, c1, col0, col1, k) in _object_changes(g0, g1) if k == "move"]
+
+
+def _object_change_program(g0, g1, W):
+    """**대응 객체의 차이**(위치·색) → grid>blob program. 변화 없으면 None. size/color KEEP.
+      · recolor: 그 객체 셀 전체를 새 색으로 (제자리 재채색)
+      · move   : erase(원 셀 → 비운색) + paint(새 위치 셀 → 새 색)"""
+    changes = _object_changes(g0, g1)
+    if not changes:
         return None
     body = []
-    for cells0, cells1, col in moves:
-        set1 = set(cells1)
-        vac = [(r, c) for (r, c) in cells0 if (r, c) not in set1]     # 겹치지 않은 비운 셀
+    for cells0, cells1, col0, col1, kind in changes:
+        if kind == "recolor":                                # 제자리 재채색 = 객체 셀 → 새 색
+            body.append(step("coloring", target=cellset(const([r * W + c for r, c in cells0])),
+                             color=const(col1)))
+            continue
+        set1 = set(cells1)                                   # move: erase 후 paint(색까지 반영)
+        vac = [(r, c) for (r, c) in cells0 if (r, c) not in set1]
         if vac:
             vr, vc = vac[0]
             body.append(step("coloring", target=cellset(const([r * W + c for r, c in cells0])),
-                             color=const(g1[vr][vc])))               # 비운 자리의 출력색(배경)
+                             color=const(g1[vr][vc])))
         body.append(step("coloring", target=cellset(const([r * W + c for r, c in cells1])),
-                         color=const(col)))
+                         color=const(col1)))
     gp = grid_program(expr("size(input_grid)"), expr("color(input_grid)"), contents_program(body))
     return json.dumps(gp)
+
+
+def _object_move_program(g0, g1, W):
+    """하위호환 alias — 일반형(_object_change_program)으로 위임(이동·재채색 통합)."""
+    return _object_change_program(g0, g1, W)
 
 
 def _op_compress(ag):

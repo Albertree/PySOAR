@@ -42,11 +42,13 @@ def _all_pixel_residual(asts):
     return True
 
 
-def _train_all_moves(ag):
-    """모든 train pair 가 객체 이동(같은 모양·색·다른 위치)을 포함하는가 (대응 존재 여부)."""
-    from procedural_memory.operators.compress import _object_moves
+def _train_all_changes(ag):
+    """모든 train pair 가 **대응 객체의 변화**(이동 또는 재채색)를 포함하는가 — compress 라우팅 조건.
+    move/recolor 를 특수조건으로 분기하지 않는다: 객체가 대응되고 차이(위치·색)가 있으면 그 차이를
+    blob program 으로 메운다(구조 대응 = ARC analogical). 대응 변화 없으면(대응 불가) False."""
+    from procedural_memory.operators.compress import _object_changes
     train = ag.task.get("train") or []
-    return bool(train) and all(_object_moves(e["input"], e["output"]) for e in train)
+    return bool(train) and all(_object_changes(e["input"], e["output"]) for e in train)
 
 
 def _op_generalize(ag):
@@ -76,14 +78,14 @@ def _op_generalize(ag):
     #    anti-unify(강체 이동을 못 잡아 과적합; move000g/i/m/p) 대신 compress(전체객체 복원)로 라우팅.
     #    한 번만(compressed 가드). 이동 아니면(대응 없음) 기존 per-pixel 경로 유지.
     if (not ag.wm.contains(sid, "compressed", "yes")
-            and _all_pixel_residual(asts) and _train_all_moves(ag)):
+            and _all_pixel_residual(asts) and _train_all_changes(ag)):
         ag.wm.add(sid, "needs-compress", "yes")
         return
     # 이동(move) 프로그램이면 cellset 을 const 로 굽지 않고 항상 slot 화(train 우연일치 방지): dest 가
     # 절대(공통 좌상단)여도 mover 모양은 test 마다 달라 move@anchor 로 일반화해야 함(am).
     # (color 강제 slot화는 보류: 배경색까지 slot 이 되면 version space 가 부풀어 3-try 안에 정답 조합을
     #  놓쳐 g/o/p/ah/ak 회귀. au 색-baking 은 '도착색만' 강제하는 수술적 수정 필요 — 후속.)
-    sk, slots = antiunify_ast(asts, force_slots=_train_all_moves(ag))
+    sk, slots = antiunify_ast(asts, force_slots=_train_all_changes(ag))
     if sk is None:                                        # 구조 불일치/부족
         # op 수 불일치(객체 크기 차이 등)면 정직히 포기하기 전에 compress(덩어리화) 를 신호한다.
         # compress 가 blob 으로 재작성 → generalize 재발화 → blob anti-unify. 한 번만(compressed 가드).
