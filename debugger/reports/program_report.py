@@ -33,7 +33,7 @@ RUNNER_DATA 는 build 시점에 미리 계산한 값을 JSON 으로 굽는다). 
 수 없다. 새 표현 계열을 추가하거나 표시 방식을 고칠 때도 이 원칙(추출은 한 곳, 포맷팅만 갈래)을
 유지할 것 — ①②를 보고 ③을 손으로 새로 그리거나, 그 반대로 하지 말 것.
 
-    python -m debugger.reports.program_viewer   # -> debugger/traces/program_report_all.html
+    python -m debugger.reports.program_report   # -> debugger/reports/program_report.html
 """
 from __future__ import annotations
 
@@ -45,10 +45,112 @@ from arbor.agent.focus import setup_focus_agent
 from arbor.engine.trace import _Tracer
 from arbor.env.dataset import list_tasks, load_task
 from arbor.reasoning import program_ast as PA
-from debugger.reports import easy_antiunify_viz as EV
 
 # easy_a 8 태스크(a-h). (easy000i=격자 크기 변화 미해결은 데이터셋에서 제거됨.)
 TIDS = [f"easy000{c}" for c in "abcdefgh"]
+
+
+# ── (옛 easy_antiunify_viz 에서 인라인 — 그 모듈은 삭제됨) 원자 box 렌더 헬퍼 + CSS ─────────────
+PAL = ["#101010", "#1E93FF", "#F93C31", "#4FCC30", "#FFDC00",
+       "#999999", "#E53AA3", "#FF851B", "#87D8F1", "#921231"]
+
+
+def grid(gr):
+    W = len(gr[0])
+    cells = "".join(f'<i style="background:{PAL[v % 10]}"></i>' for row in gr for v in row)
+    return f'<div class="thumb" style="grid-template-columns:repeat({W},6px)">{cells}</div>'
+
+
+def opb(name, cls=""):
+    return f'<span class="bx op {cls}">{html.escape(name)}</span>'
+
+
+def colr(v, cls=""):
+    return f'<span class="bx cv {cls}">{html.escape(str(v))}</span>'
+
+
+def dest_box(v, cls=""):
+    return f'<span class="bx tv {cls}">{html.escape(v)}</span>'
+
+
+def _attempts_block(attempts, tp):
+    if not attempts:
+        return '<div class="note">제출 없음 — cycle 한도 내 submit 미도달.</div>'
+    correct_i = next((i for i, at in enumerate(attempts) if at["correct"]), None)
+    rows = "".join(
+        f'<div class="att {"aok" if at["correct"] else "ano"}">attempt {i}: {html.escape(at["hyp"])} '
+        f'→ {"✅" if at["correct"] else "✗"}</div>'
+        for i, at in enumerate(attempts, 1))
+    chosen = attempts[correct_i] if correct_i is not None else attempts[-1]
+    pred, ok_test = chosen["answer"], bool(chosen["correct"])
+    submit = ""
+    if pred:
+        submit = (f'<div class="submit"><span class="slab">제출 (test, real)</span>{grid(tp["input"])}'
+                  f'<span class="ag">→</span><span class="pwrap">{grid(pred)}<span class="pcap">예측</span></span>'
+                  f'<span class="sv {"sok" if ok_test else "sno"}">{"✅ 정답" if ok_test else "✗ 오답"}</span>'
+                  + (f'<span class="pwrap">{grid(tp["output"])}<span class="pcap">정답</span></span>'
+                     if tp.get("output") else "") + '</div>')
+    return (f'<div class="attempts"><div class="ahead">실행 attempts (real, n={len(attempts)})'
+            f'</div>{rows}</div>{submit}')
+
+
+_EV_CSS = """
+body{background:#14161b;color:#dfe3ea;font:13px/1.5 -apple-system,Segoe UI,sans-serif;margin:0;padding:20px}
+a.back{color:#5fb0ff;text-decoration:none;font-size:13px}
+h1{font-size:18px;margin:10px 0 4px}.hs{color:#8b93a3;margin:0 0 14px;font-size:12px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}
+.tabs a{color:#cdd6e4;text-decoration:none;background:#1b1f27;border:1px solid #2a3038;border-radius:6px;padding:4px 10px;font-size:12px}
+.tabs a.on{background:#243b52;color:#bcd8f5;border-color:#3a5a7a}
+.task{background:#1a1d24;border:1px solid #262b34;border-radius:10px;padding:16px 18px;margin:0 0 18px}
+.task h2{font-size:16px;margin:0 0 14px}.tag2{font-size:11px;background:#243b52;color:#bcd8f5;padding:2px 9px;border-radius:6px;margin-left:8px}
+.na{font-size:11px;background:#463619;color:#ffcf9a;padding:2px 9px;border-radius:6px;margin-left:8px}
+.cols{display:flex;gap:6px;align-items:stretch}
+.col{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px}
+.c1,.c2{flex:0 0 auto}.c3{flex:1 1 auto}
+.ct{font-size:11px;color:#8b93a3;text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px}
+.lab{font-size:10px;color:#7a8698;margin:6px 0 4px;font-weight:700}
+.sep{display:flex;align-items:center;justify-content:center;min-width:46px;color:#8b93a3;font-size:10px;font-weight:700;text-align:center}
+.sep span{background:#161b24;border:1px solid #2a3340;border-radius:6px;padding:6px 8px}
+.flow{display:flex;flex-direction:column;align-items:flex-start}
+.row{display:flex;align-items:center}
+.v{width:2px;height:12px;background:#3b4657;margin-left:48px}
+.c3 .v{height:42px}
+.h{width:11px;height:2px;background:#3b4657}
+.args{display:flex;gap:5px;align-items:center}
+.bx{position:relative;border-radius:6px;padding:4px 9px;font-size:11.5px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+.grid{background:#fff;color:#222;border-color:#cdd3db;min-width:78px;text-align:center;font-family:ui-monospace,monospace;font-weight:500}
+.op{background:#f6cccd;color:#7a2b2c;border-color:#e0a3a4;min-width:78px;text-align:center}
+.tv{background:#fbe6c9;color:#7a5320;border-color:#e6c99a;font-family:ui-monospace,monospace;font-weight:500}
+.cv{background:#fbe6c9;color:#7a5320;border-color:#e6c99a;font-family:ui-monospace,monospace;font-weight:500;min-width:20px;text-align:center}
+.dvar{background:#211830;color:#c79bf0;border-color:#a06be0}
+.comm{outline:2px solid #3fae6a;outline-offset:1px}
+.diff{outline:2px solid #e23b3b;outline-offset:1px}
+/* overlay */
+.ovl{position:relative}
+.ovl .ghost{position:absolute;inset:0;transform:translate(9px,9px);opacity:.4;pointer-events:none;filter:saturate(.7)}
+.legend{display:flex;gap:12px;margin-top:14px;font-size:10px}
+.lg{display:inline-flex;align-items:center;gap:5px;color:#9aa3b2}
+.lg::before{content:"";width:14px;height:0;border-top:2px solid}
+.lg.comm::before{border-color:#3fae6a}.lg.diff::before{border-color:#e23b3b}
+/* header(render_header) 자동 표시 + slots(antiunify_ast 실제 결과) */
+.hdr{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:7px 10px;font:10.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8fb0a0;white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 8px}
+.slots{margin-top:10px;font-size:11px}
+.slotrow{padding:4px 0;display:flex;align-items:center;gap:8px;color:#9aa3b2;flex-wrap:wrap}
+.slotmeta{color:#7a8698}
+.thumbs{display:flex;gap:5px;margin-top:8px}
+.thumb{display:inline-grid;gap:1px;background:#2a2e38;border:1px solid #2a2e38;width:max-content}.thumb i{width:6px;height:6px;display:block}
+.note{margin-top:10px;font-size:11px;color:#9aa3b2;display:flex;align-items:center;gap:4px}
+.attempts{margin-top:10px;font-size:11px}
+.ahead{color:#9aa3b2;margin-bottom:5px;font-weight:700}
+.att{padding:3px 8px;border-radius:5px;margin:3px 0;font-family:ui-monospace,monospace}
+.aok{background:#12281c;color:#a9e6c1;border:1px solid #2f5a41}
+.ano{background:#241417;color:#e0a3a4;border:1px solid #5a2f34}
+.submit{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#0f141b;border:1px solid #2a3242;border-radius:8px;padding:8px 10px}
+.slab{font-size:10px;color:#8b93a3;font-weight:700;text-transform:uppercase}
+.pwrap{display:inline-flex;flex-direction:column;align-items:center;gap:2px}.pcap{font-size:9px;color:#8b93a3}
+.sv{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px}
+.sok{background:#12281c;color:#a9e6c1;border:1px solid #2f5a41}.sno{background:#241417;color:#e0a3a4;border:1px solid #5a2f34}
+"""
 
 
 # ── display_source: 뷰어 로컬 통일 body (to_source[파싱계약]과 독립; 실 DSL·ARCKG accessor·실값) ──
@@ -290,11 +392,11 @@ def _contents_cell(leaf, cls=""):
         mat = "\n".join(" ".join(str(x) for x in row) for row in leaf["const"])
         cls_attr = f" {cls}" if cls else ""
         return f'<pre class="cmat{cls_attr}">{html.escape(mat)}</pre>'
-    return EV.colr(_grid_leaf_repr(leaf, "contents"), cls)
+    return colr(_grid_leaf_repr(leaf, "contents"), cls)
 
 
 def _swatches(colors):
-    return "".join(f'<i class="swatch" style="background:{EV.PAL[c % 10]}"></i>' for c in colors)
+    return "".join(f'<i class="swatch" style="background:{PAL[c % 10]}"></i>' for c in colors)
 
 
 def _colorval(colr_html, swatch_html):
@@ -303,8 +405,8 @@ def _colorval(colr_html, swatch_html):
     return f'<span class="cvwrap">{colr_html}{swatch_html}</span>'
 
 
-# ── §11 grid 썸네일 크리스프니스: 이 파일 로컬 렌더러 (EV.grid 는 다른 리포트와 공유 — 수정 금지) ──
-# 근본원인: EV.grid 는 CSS grid(각 셀 = <i>, gap:1px+border)로 그린다 — 브라우저가 비정수
+# ── §11 grid 썸네일 크리스프니스: 이 파일 로컬 렌더러 (grid 는 다른 리포트와 공유 — 수정 금지) ──
+# 근본원인: grid 는 CSS grid(각 셀 = <i>, gap:1px+border)로 그린다 — 브라우저가 비정수
 # device-pixel-ratio/줌(예: 133%)에서 grid-template-columns:repeat(W,6px) 의 각 컬럼 트랙을
 # *독립적으로* 정수 물리픽셀에 반올림한다. 칸 수(W)가 많을수록(=큰 grid 일수록) 컬럼별 반올림
 # 오차가 누적돼 칸 폭이 들쭉날쭉해지고(어떤 칸은 넓고 어떤 칸은 좁음) "stretched/sparse" 하게
@@ -316,7 +418,7 @@ def _thumb(gr, cell=9, gap=1):
     fill = cell - gap
     w, h = W * cell, H * cell
     rects = "".join(
-        f'<rect x="{c * cell}" y="{r * cell}" width="{fill}" height="{fill}" fill="{EV.PAL[v % 10]}"/>'
+        f'<rect x="{c * cell}" y="{r * cell}" width="{fill}" height="{fill}" fill="{PAL[v % 10]}"/>'
         for r, row in enumerate(gr) for c, v in enumerate(row))
     return (f'<svg class="vthumb" width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
             f'shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">{rects}</svg>')
@@ -324,7 +426,7 @@ def _thumb(gr, cell=9, gap=1):
 
 def _endpoint_rows(ex):
     """공통 끝점: (input_grid 행, output_grid 행) — input/output 썸네일 인라인(G0/G1 개념 없음 —
-    ①③ 이 실제로 쓰는 이름 그대로 input_grid/output_grid). 썸네일은 EV.grid(다른 리포트와 공유,
+    ①③ 이 실제로 쓰는 이름 그대로 input_grid/output_grid). 썸네일은 grid(다른 리포트와 공유,
     수정 금지) 대신 이 파일 로컬 _thumb(§11 grid crispness)."""
     g0 = (f'<div class="row"><span class="bx grid">input_grid</span>{_thumb(ex["input"])}'
           f'</div><div class="v"></div>')
@@ -348,9 +450,9 @@ def _coloring_flow_rows(body, outline=None):
         sw = _swatches([col]) if isinstance(col, int) else ""
         o = outline[i] if (outline and i < len(outline)) else {}
         rows.append(
-            f'<div class="row">{EV.opb("coloring")}<span class="h"></span>'
-            f'{EV.dest_box(st["label"], o.get("idx", ""))}<span class="h"></span>'
-            f'{_colorval(EV.colr(_disp_leaf(col_leaf), o.get("col", "")), sw)}</div><div class="v"></div>')
+            f'<div class="row">{opb("coloring")}<span class="h"></span>'
+            f'{dest_box(st["label"], o.get("idx", ""))}<span class="h"></span>'
+            f'{_colorval(colr(_disp_leaf(col_leaf), o.get("col", "")), sw)}</div><div class="v"></div>')
     return rows
 
 
@@ -368,17 +470,17 @@ def _grid_step_rows(ast, outline=None):
     size_cls = outline["size"] if outline else ""
     color_cls = outline["color"] if outline else ""
     top = [
-        f'<div class="row">{EV.opb("set_grid_size")}<span class="h"></span>{EV.colr(_grid_leaf_repr(sz, "size"), size_cls)}</div>',
-        f'<div class="row">{EV.opb("set_grid_color")}<span class="h"></span>{_colorval(EV.colr(_grid_leaf_repr(co, "color"), color_cls), color_sw)}</div>',
+        f'<div class="row">{opb("set_grid_size")}<span class="h"></span>{colr(_grid_leaf_repr(sz, "size"), size_cls)}</div>',
+        f'<div class="row">{opb("set_grid_color")}<span class="h"></span>{_colorval(colr(_grid_leaf_repr(co, "color"), color_cls), color_sw)}</div>',
     ]
     if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(①과 같은 재료)
-        top.append(f'<div class="row">{EV.opb("set_grid_contents")}</div>')
+        top.append(f'<div class="row">{opb("set_grid_contents")}</div>')
         step_outline = outline["contents"]["steps"] if outline else None
         inner_rows = _coloring_flow_rows(ct["program"]["body"], step_outline)
         body_html = "".join(top) + f'<div class="nestedflow">{"".join(inner_rows)}</div>'
     else:
         contents_cls = outline["contents"]["cls"] if outline else ""
-        top.append(f'<div class="row">{EV.opb("set_grid_contents")}<span class="h"></span>'
+        top.append(f'<div class="row">{opb("set_grid_contents")}<span class="h"></span>'
                     f'{_contents_cell(ct, contents_cls)}</div>')
         body_html = "".join(top)
     return [f'<div class="gflow">{body_html}</div><div class="v"></div>']
@@ -407,9 +509,9 @@ def _pixel_step_rows(ast, outline=None):
         else:
             label = "?"
         o = steps_outline[i] if (steps_outline and i < len(steps_outline)) else {}
-        rows.append(f'<div class="row">{EV.opb("coloring")}<span class="h"></span>'
-                    f'{EV.dest_box(label, o.get("idx", ""))}<span class="h"></span>'
-                    f'{_colorval(EV.colr(_disp_leaf(col_leaf), o.get("col", "")), sw)}</div>'
+        rows.append(f'<div class="row">{opb("coloring")}<span class="h"></span>'
+                    f'{dest_box(label, o.get("idx", ""))}<span class="h"></span>'
+                    f'{_colorval(colr(_disp_leaf(col_leaf), o.get("col", "")), sw)}</div>'
                     f'<div class="v"></div>')
     return rows
 
@@ -417,7 +519,7 @@ def _pixel_step_rows(ast, outline=None):
 def _viz(ast, ex, ghost=False, outline=None):
     """두 계열 공통 box-flow: input_grid 썸네일 → 스텝들 → output_grid 썸네일.
     ghost=True 면 overlay(§8 TASK.solution 가로 레이아웃 중간 열)용 반투명 사본
-    (easy_antiunify_viz.flow(ghost=True) 와 같은 클래스 이름 재사용 — .ovl/.ghost CSS 는 EV.CSS 것).
+    (easy_antiunify_viz.flow(ghost=True) 와 같은 클래스 이름 재사용 — .ovl/.ghost CSS 는 _EV_CSS 것).
     outline(선택) = _compare_asts() 가 낸 Step B COMM/DIFF class dict — 끝점(input_grid/output_grid)
     행에는 적용하지 않는다(§Step B — 끝점은 비교/표기 대상 밖)."""
     g0, g1 = _endpoint_rows(ex)
@@ -538,7 +640,7 @@ def _pair_block(label, ast, ex):
 #    stack, top-aligned) → Step B(anti-unification — ①과 같은 ③ overlay, 카드 안에서 수직 중앙)
 #    → Step C(TASK.solution — 카드 안에서 박스 자체는 수직 중앙, 박스 내부 ①②③ 은 top-aligned
 #    그대로). 셋을 색으로 구분된 카드에 담아 한 컨테이너(가로 스크롤)에 나란히 놓는다. overlay 는
-#    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — EV.CSS 에
+#    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — _EV_CSS 에
 #    이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
 def _solution_row(ast_ex_pairs, solution):
     pair_boxes = "".join(
@@ -551,7 +653,7 @@ def _solution_row(ast_ex_pairs, solution):
         a1, ex1, _p1 = ast_ex_pairs[1]
         # pair0(solid layer) vs pair1(ghost) 을 step-by-step 비교(끝점 grid 는 비교 밖 — _viz 의
         # outline 은 gflow/nestedflow 스텝에만 적용되고 _endpoint_rows 는 outline 인자를 받지 않는다)
-        # → COMM(녹색 .comm)/DIFF(빨강 .diff) outline 을 solid layer 에 입힌다(EV.CSS 재사용, 신규
+        # → COMM(녹색 .comm)/DIFF(빨강 .diff) outline 을 solid layer 에 입힌다(_EV_CSS 재사용, 신규
         # 색 정의 없음). solid+ghost 겹침 자체는 기존 .ovl/.ghost 그대로.
         outline = _compare_asts(a0, a1)
         overlay = (f'<div class="ovl">{_viz(a0, ex0, outline=outline)}{_viz(a1, ex1, ghost=True)}</div>'
@@ -637,7 +739,7 @@ def task_section(tid, task, precomputed=None):
                 " 물질화되지 않았다." if solved else
                 "solve 가 이 태스크의 example PAIR program 을 다 채우지 못했다 — 표시할 실제 AST 없음"
                 "(정직하게 미해결로 남김).")
-        extra = EV._attempts_block(attempts, tp) if attempts else ""
+        extra = _attempts_block(attempts, tp) if attempts else ""
         return (f'<section class="task" id="{tid}"><h2>{tid}<span class="na">미합성/크기변화</span></h2>'
                 f'<div class="thumbs">{thumbs}</div><p class="note">{html.escape(why + done)}</p>{extra}</section>')
 
@@ -656,15 +758,15 @@ CSS = """
    낫다. 그래서 그 max-width:100%/min-width:0(축소 훅)들을 여기서 되돌린다 — flex-shrink:0(=고정
    폭, 줄어들지 않음)로 바꾸고, 넘친 폭은 페이지 레벨 가로 스크롤 하나로 받는다(중첩 스크롤바
    방지 — 안쪽 .flow 의 개별 overflow-x:auto 도 함께 제거). box-sizing:border-box 는 자연폭 계산에
-   영향 없어 그대로 둔다. EV.CSS 는 그대로 두고(수정 금지) — 이 CSS(program_viewer local)는 build()
-   가 만드는 style 태그 안에서 EV.CSS 뒤에 이어붙는 부분에만 적용 — easy_antiunify_report.html 은
-   이 CSS 를 포함하지 않으므로 영향 없음.
+   영향 없어 그대로 둔다. _EV_CSS(옛 easy_antiunify_viz.CSS 인라인분)는 그대로 두고(수정 금지) —
+   이 CSS(program_report local)는 build() 가 만드는 style 태그 안에서 _EV_CSS 뒤에 이어붙는 부분에만
+   적용된다.
    (주의: 이 주석/CSS 텍스트 안에 리터럴 "style 닫는 태그" 문자열을 쓰지 말 것 — HTML 파서는 <style>
    요소를 raw-text 로 취급해 그 문자열이 나오면 안의 내용이 주석이든 아니든 그 자리에서 즉시 스타일
    블록을 끝내버려, 그 뒤 CSS 전부가 화면에 그냥 텍스트로 노출되는 사고가 난다 — 실제로 한 번 냈던
    실수라 여기 남겨 재발 방지.) */
 *,*::before,*::after{box-sizing:border-box}
-/* 최상단 문제 리스트 박스: 풀림=초록·안풀림=빨강 테두리(§2-5 풀이상태 가시화). EV.CSS(.tabs a.on)
+/* 최상단 문제 리스트 박스: 풀림=초록·안풀림=빨강 테두리(§2-5 풀이상태 가시화). _EV_CSS(.tabs a.on)
    뒤에 와서 우선 → 현재 선택 탭(.on 파란 배경)에서도 풀이상태 테두리가 유지된다. */
 .tabs a.solved{border-color:#3fb950}
 .tabs a.unsolved{border-color:#f85149}
@@ -712,11 +814,11 @@ CSS = """
  border-radius:5px;padding:2px 6px;margin-right:6px}
 .gvar-out{margin-right:0;margin-left:6px;color:#e6c99a;background:#241b12;border-color:#3a2c1a}
 .gnote{font-size:10.5px;color:#8fb0a0;font-style:italic}
-/* 폭 고정 반전(2026-07-17): EV.CSS 의 .bx(공유·수정 금지) 기본값은 white-space:nowrap — 라벨을
+/* 폭 고정 반전(2026-07-17): _EV_CSS 의 .bx(공유·수정 금지) 기본값은 white-space:nowrap — 라벨을
    한 줄로 고정하는 자연폭 그대로가 이제 원하는 동작이라(pixels_of(input_grid)[35].coord 같은 긴
    accessor 라벨이 박스를 넓혀도 그게 정상 — §요구사항: 축소·줄바꿈 금지), 이전에 여기서 걸었던
    white-space:normal/overflow-wrap/word-break/min-width:0 override(라벨을 강제로 줄바꿈해 박스를
-   좁게 유지하던 훅)를 제거한다 — 즉 이 문서도 EV.CSS 기본값(.bx nowrap)을 그대로 쓴다. */
+   좁게 유지하던 훅)를 제거한다 — 즉 이 문서도 _EV_CSS 기본값(.bx nowrap)을 그대로 쓴다. */
 /* .row(coloring 한 줄 = op box+target box+색값 박스+스와치)는 pane 폭에 눌려도 다음 줄로 접히지
    않고 한 줄을 유지한다(KEEP — 색값 박스가 다음 줄로 떨어지던 버그의 고정, §사용자 리포트).
    폭 자체는 이제 pane(.view/.view.viz)이 축소되지 않으므로(위 .view flex:0 0 auto) 이 한 줄이
@@ -732,7 +834,7 @@ CSS = """
    .stepsrow 는 align-items:stretch(기본값) 라 같은 줄의 카드들은 그 줄에서 가장 높은 카드와 같은
    높이로 맞춰진다 — Step B/C 는 그 안에서 "카드 안 수직 중앙"을 flex column + justify-content:
    center 로 구현. Step A 는 stepttl 다음에 innerbox 들이 top-aligned 순서로 그냥 쌓인다. */
-/* 회색 박스(.task)는 EV.CSS 에서 block(폭=뷰포트)이라 가로스크롤 시 넘친 Step 을 안 감싼다.
+/* 회색 박스(.task)는 _EV_CSS 에서 block(폭=뷰포트)이라 가로스크롤 시 넘친 Step 을 안 감싼다.
    내용(Step A/B/C 전체) 폭에 맞게 늘려 세 Step 을 다 감싸도록 override(최소 뷰포트 폭 보장). */
 .task{width:max-content;min-width:100%}
 .stepsrow{display:flex;flex-wrap:nowrap;gap:14px;margin-top:10px}
@@ -782,7 +884,7 @@ CSS = """
 .tsep{width:10px}
 .tqbox{width:40px;height:40px;display:flex;align-items:center;justify-content:center;
  background:#161b24;border:1px dashed #3a4150;border-radius:4px;color:#5a6577;font-size:18px;font-weight:700}
-/* Step B "PROGRAM COMPARISON" overlay — 로컬 오버라이드(easy000g 겹침 버그 수정). EV.CSS 의
+/* Step B "PROGRAM COMPARISON" overlay — 로컬 오버라이드(easy000g 겹침 버그 수정). _EV_CSS 의
    .ovl/.ghost(다른 리포트와 공유, 수정 금지)를 그대로 두고, 여기서는 더 구체적인 선택자
    (.stepB .ovl 등, .ovl 단독보다 specificity 가 높아 순서와 무관하게 이긴다)로만 위에 얹는다.
    버그였던 것: ghost 를 inset:0 으로 solid 박스(.ovl) 크기에 강제로 늘리면(=absolute 요소가
@@ -968,8 +1070,8 @@ def _tab_label(tid):
     return (tid[i:] or tid).upper()
 
 
-def build(tids=None, dataset="easy", out_name="program_report_all.html",
-          title="easy a–h program 뷰어", back_href="focus_dashboard.html", back_label="focus_dashboard"):
+def build(tids=None, dataset="easy", out_name="program_report.html",
+          title="easy a–h program 뷰어", back_href="dashboard.html", back_label="dashboard"):
     """program 뷰어 HTML 생성(동일 구성 — 데이터셋만 갈아끼움). tids=None 이면 dataset 의 전 태스크."""
     paths = dict(list_tasks(dataset))
     if tids is None:
@@ -994,7 +1096,7 @@ def build(tids=None, dataset="easy", out_name="program_report_all.html",
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(s.id===h)?'':'none'});"
           "document.querySelectorAll('.tabs a').forEach(function(a){a.classList.toggle('on',a.dataset.t===h)});}"
           "addEventListener('hashchange',sh);sh();</script>") % json.dumps(tids)
-    doc = (f'<!doctype html><meta charset="utf-8"><title>program 뷰어</title><style>{EV.CSS}{CSS}</style>'
+    doc = (f'<!doctype html><meta charset="utf-8"><title>program 뷰어</title><style>{_EV_CSS}{CSS}</style>'
            f'<a class="back" href="{back_href}">← {back_label}</a>'
            f'<h1>{html.escape(title)}</h1>'
            f'<p class="hs">solve 실행 → WM 의 PAIR.program 을 통일 body(실행형)·단일 box-flow 로 렌더.'
@@ -1002,7 +1104,7 @@ def build(tids=None, dataset="easy", out_name="program_report_all.html",
            f'<div class="tabs">{tabs}</div>{secs}'
            f'<script>var RUNNER_DATA={json.dumps(runner_data)};</script>'
            f'{_RUNNER_HTML}{js}')
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "traces", out_name)
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), out_name)
     with open(out, "w") as f:
         f.write(doc)
     return out
@@ -1015,7 +1117,20 @@ def build_move():
                  back_href="move_dashboard.html", back_label="move_dashboard")
 
 
+def build_objc():
+    """object_coloring 전 태스크 → objc_program_report.html (동일 구성)."""
+    return build(dataset="object_coloring", out_name="objc_program_report.html",
+                 title="object_coloring program 뷰어",
+                 back_href="objc_dashboard.html", back_label="objc_dashboard")
+
+
 if __name__ == "__main__":
     import sys
-    p = build_move() if (len(sys.argv) > 1 and sys.argv[1] == "move") else build()
+    _arg = sys.argv[1] if len(sys.argv) > 1 else None
+    if _arg == "move":
+        p = build_move()
+    elif _arg == "objc":
+        p = build_objc()
+    else:
+        p = build()
     print("wrote", p, f"({os.path.getsize(p) / 1024:.0f} KB)")

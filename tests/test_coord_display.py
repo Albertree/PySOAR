@@ -1,4 +1,4 @@
-import debugger.reports.program_viewer as pv
+import debugger.reports.program_report as pv
 from arbor.reasoning import program_ast as PA
 
 

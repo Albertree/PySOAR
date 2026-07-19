@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import unittest
 from arbor.reasoning import program_ast as PA
-from debugger.reports.program_viewer import display_source
+from debugger.reports.program_report import display_source
 
 
 class TestDisplaySource(unittest.TestCase):

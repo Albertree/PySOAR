@@ -1,6 +1,6 @@
 import unittest
 from arbor.reasoning import program_ast as PA
-from debugger.reports.program_viewer import _runner_payload
+from debugger.reports.program_report import _runner_payload
 
 
 class TestParityPayload(unittest.TestCase):
