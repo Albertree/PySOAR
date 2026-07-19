@@ -212,7 +212,7 @@ def _pretty_move(expr):
     return f"move{sel_txt} → row:{_ax(row)}, col:{_ax(col)}"
 
 
-def _coloring_steps(body, slot_exprs=None):
+def _coloring_steps(body, slot_exprs=None, cell_w=None):
     """set_grid_contents 의 contents leaf 가 `program`(하강 coloring 합성, c–h)일 때의 순차 스텝
     재료 — ①(_coloring_seq_lines, 텍스트) 과 ③(_coloring_flow_rows, 시각화)가 이 SAME 리스트를
     소비한다(모듈 docstring §①②③ 공통소스 원칙). 각 스텝 = {g_from, g_to, ref, label, color, resolved}.
@@ -239,8 +239,12 @@ def _coloring_steps(body, slot_exprs=None):
                 rt, ct, _sel = SE._split_move(slot_exprs[var])
                 label = SE.move_to_vector(rt, ct, "obj0") if rt else "coordinate(obj0)"
                 resolved = True
-            else:
-                label = f"cellset={_disp_leaf(cl)}"
+            else:                                     # 구체 blob(compress 객체 program 등): flat idx → (row,col)
+                cells = cl.get("const") if (isinstance(cl, dict) and "const" in cl) else cl
+                if cell_w and isinstance(cells, list) and cells and all(isinstance(x, int) for x in cells):
+                    label = str([(i // cell_w, i % cell_w) for i in cells])   # "cellset" 제거, 좌표로
+                else:
+                    label = f"cellset={_disp_leaf(cl)}"
         else:
             label = f"? /* 해석 불가 target: {json.dumps(tgt)} */"
         steps.append({"g_from": prev, "g_to": cur, "ref": ref, "label": label,
@@ -542,7 +546,7 @@ def _endpoint_rows(ex):
     return g0, g1
 
 
-def _coloring_flow_rows(body, outline=None, slot_exprs=None):
+def _coloring_flow_rows(body, outline=None, slot_exprs=None, cell_w=None):
     """③ 중첩 coloring 시각화 — ①(_coloring_seq_lines)과 정확히 같은 _coloring_steps(공통 재료)를
     소비해, 각 coloring 스텝을 op box + target label + color value(+swatch) 노드로 그린다
     (§①②③ 공통소스 원칙 — 모듈 docstring 참고). g0/result 캡션과 g_from/g_to 변수 라벨은 ①(텍스트)
@@ -551,7 +555,7 @@ def _coloring_flow_rows(body, outline=None, slot_exprs=None):
     outline(선택) = Step B anti-unification overlay 용 포지션별 {'idx','col'} outline class
     (§Step B COMM/DIFF — _compare_asts 가 만든 결과를 그대로 소비, 여기서 새로 판정하지 않는다).
     slot_exprs(선택) = TASK.solution cellset 변수 → resolved 이동식(①과 같은 명확 표현)."""
-    steps = _coloring_steps(body, slot_exprs)
+    steps = _coloring_steps(body, slot_exprs, cell_w)
     rows = []
     for i, st in enumerate(steps):
         col_leaf = st["color"]
@@ -567,7 +571,7 @@ def _coloring_flow_rows(body, outline=None, slot_exprs=None):
     return rows
 
 
-def _grid_step_rows(ast, outline=None, slot_exprs=None):
+def _grid_step_rows(ast, outline=None, slot_exprs=None, cell_w=None):
     """set_grid_size→set_grid_color→set_grid_contents 3-property box-flow. 중첩 coloring(있으면)은
     .nestedflow 로 더 오른쪽에 들여쓰되(§5), 메인 세로선(.gflow::before)은 끊기지 않고 한 줄로
     이어진다 — 서로 다른 CSS 요소가 아니라 같은 .gflow 컨테이너 높이 전체를 덮는 절대배치 선.
@@ -587,7 +591,7 @@ def _grid_step_rows(ast, outline=None, slot_exprs=None):
     if "program" in ct:                        # contents = 하강 coloring 합성 → 중첩 box-flow(①과 같은 재료)
         top.append(f'<div class="row">{opb("set_grid_contents")}</div>')
         step_outline = outline["contents"]["steps"] if outline else None
-        inner_rows = _coloring_flow_rows(ct["program"]["body"], step_outline, slot_exprs)
+        inner_rows = _coloring_flow_rows(ct["program"]["body"], step_outline, slot_exprs, cell_w)
         body_html = "".join(top) + f'<div class="nestedflow">{"".join(inner_rows)}</div>'
     else:
         contents_cls = outline["contents"]["cls"] if outline else ""
@@ -597,7 +601,7 @@ def _grid_step_rows(ast, outline=None, slot_exprs=None):
     return [f'<div class="gflow">{body_html}</div><div class="v"></div>']
 
 
-def _pixel_step_rows(ast, outline=None, slot_exprs=None):
+def _pixel_step_rows(ast, outline=None, slot_exprs=None, cell_w=None):
     """outline(선택) = {'steps':[{'idx','col'},...]} — top-level pixel/object body 가 실제로 쓰일
     경우를 위한 Step B COMM/DIFF 대응(현 a-h 데이터는 전부 grid body — §확인됨 — 이지만 스키마상
     가능한 형태이므로 _grid_step_rows 와 대칭으로 지원)."""
@@ -641,8 +645,9 @@ def _viz(ast, ex, ghost=False, outline=None, slot_exprs=None, endpoints=True):
     격자(납작/세로긴) 차이로 어긋나 열이 안 맞던 문제 해결(사용자 2026-07-20: 겹치는 두 그림은 완전히
     같은 크기여야 한다 → 끝단 grid 제외, step 박스만 정렬 비교)."""
     g0, g1 = _endpoint_rows(ex) if endpoints else ("", "")
-    steps = (_grid_step_rows(ast, outline, slot_exprs) if PA._is_grid_body(ast.get("body") or [])
-             else _pixel_step_rows(ast, outline, slot_exprs))
+    cw = len(ex["input"][0]) if ex.get("input") else None      # flat cellset idx → (row,col) 변환용
+    steps = (_grid_step_rows(ast, outline, slot_exprs, cw) if PA._is_grid_body(ast.get("body") or [])
+             else _pixel_step_rows(ast, outline, slot_exprs, cw))
     cls = "flow ghost" if ghost else "flow"
     return f'<div class="{cls}">{g0}{"".join(steps)}{g1}</div>'
 
