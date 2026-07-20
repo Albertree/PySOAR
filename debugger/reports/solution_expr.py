@@ -3,6 +3,7 @@
 설계: docs/superpowers/specs/2026-07-20-solution-expression-viz-design.md. 시각화-먼저(솔버 불변).
 금지: count·output_grid symbol (P5, input_grid 만)."""
 from __future__ import annotations
+import html
 import re
 
 
@@ -384,3 +385,298 @@ def expr_str(node):
     if k == "lit":
         return _lit_str(node["v"])
     return "?"
+
+
+# ══ 완전 실행형 TASK.solution 코드 (pair.program 과 같은 골격) ═══════════════════════════════════
+# 사용자 2026-07-20: task.solution ① 코드는 pair.program 처럼 변수선언 생략 없이 g/g0..gN/result/
+# output_grid 스레딩 + set_grid_contents(result) 마무리를 갖춰야 한다. g0/g1/g2 는 시각화(solution_grid)
+# 에서만 인위 누락하고, 코드에는 유지한다. ?var 는 anti-unification DIFF 자리에만 발생한다.
+def render_solution_source(solution_ast, resolved, comm, shapes):
+    """TASK.solution → 완전 실행형 코드 라인(pair.program 골격). render_solution_lines(단순 표시줄)
+    와 같은 재료(obj0 선정·move 벡터식·COMM 리터럴/DIFF ?var)를 g/g0..gN/result/output_grid 스레딩
+    스켈레톤에 실어 낸다. 결정적."""
+    body = solution_ast.get("body") or []
+    parts = {s["call"]: s["args"] for s in body}
+    var_i = [0]
+
+    def nv():
+        var_i[0] += 1
+        return f"?var{var_i[0]}"
+
+    defs_head = []
+    sz = parts["set_grid_size"]["size"]
+    if comm.get("size", True):
+        v = sz.get("const")
+        if isinstance(v, dict):
+            szt = f"({v.get('height')}, {v.get('width')})"
+        elif v is not None:
+            szt = str(v)
+        else:
+            szt = str(sz.get("expr"))
+    else:
+        vn = nv(); defs_head.append(f"{vn} = size(input_grid)"); szt = vn
+    co = parts["set_grid_color"]["color"]
+    if comm.get("color", True):
+        cot = str(co.get("const", co.get("expr")))
+    else:
+        vn = nv(); defs_head.append(f"{vn} = color(input_grid)"); cot = vn
+    obj_lines = list(object_binding_lines(resolved, shapes))
+    prog = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
+    objvar = "obj0"
+    thread = ["g0 = g.contents"]
+    gi = 0
+    for s in prog:
+        tgt = s["args"]["target"]; colr = s["args"]["color"]
+        cell_var = tgt.get("cells", {}).get("var") if tgt.get("ref") == "cellset" else None
+        if cell_var and cell_var in resolved:
+            rt, ct, _ = _split_move(resolved[cell_var])
+            expr = move_to_vector(rt, ct, objvar) if rt else f"coordinate({objvar})"
+        else:
+            expr = f"coordinate({objvar})"
+        vc = nv(); thread.append(f"{vc} = {expr}")
+        if "const" in colr:
+            cterm = str(colr["const"])
+        else:
+            vcol = nv(); thread.append(f"{vcol} = color({objvar})"); cterm = vcol
+        gi += 1
+        thread.append(f"g{gi} = coloring(g{gi - 1}, {vc}, {cterm})")
+    thread.append(f"result = g{gi}")
+    return (["g = input_grid"] + defs_head
+            + [f"g.size = set_grid_size({szt})", f"g.color = set_grid_color({cot})", ""]
+            + obj_lines + thread
+            + ["g.contents = set_grid_contents(result)", "output_grid = g"])
+
+
+# ══ 그리드 데이터플로우 시각화 (완전 실행형 코드 → 정돈 SVG) ══════════════════════════════════════
+# 사용자 2026-07-20 규칙: 척추=왼쪽 세로(input_grid→set_grid_size→set_grid_color→coloring…→
+# set_grid_contents→output_grid). g0/g1/g2 스레딩·result·wrapper 는 척추로 흡수(시각화 누락). coloring
+# 은 set_grid_color 아래 한 칸 들여쓴 열에서 threading, 종착 result 를 set_grid_contents 가 받는다.
+# 같은 가로줄=함수+arg 체인. ?var/연산자·논리식은 placeholder 로 한 단 위로 올림(+/==/… 는 인픽스).
+# 중복 노드(obj0)는 우측 상단에 정의를 따로. ?var 발생은 DIFF 자리에만(render_solution_* 가 이미 보장).
+_GRID_BIN = {"+", "-", "*", "==", "!="}
+
+
+def _grid_classify(lines):
+    """완전 실행형 코드 라인 → (defs, setg, colorings). g.size/g.color=set_grid_*(arg)→setg,
+    gN=coloring(gM,T,C)→colorings(그리드-스레드 인자 gM 제외), 그 외 name=expr→defs(?var/obj/shape).
+    g=input_grid / gN=g.contents / result=gN / g.contents=… / output_grid=g 스켈레톤은 무시(척추 흡수)."""
+    if isinstance(lines, str):
+        lines = lines.splitlines()
+    defs, setg, colorings = {}, [], []
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            continue
+        m = re.match(r"^g\.(size|color)\s*=\s*set_grid_\w+\((.+)\)$", ln)
+        if m:
+            setg.append((f"set_grid_{m.group(1)}", parse_expr(m.group(2))))
+            continue
+        if (re.match(r"^g\.contents\s*=", ln) or re.match(r"^g\w*\s*=\s*g\.contents$", ln)
+                or re.match(r"^result\s*=", ln) or re.match(r"^g\s*=\s*input_grid$", ln)
+                or re.match(r"^output_grid\s*=", ln)):
+            continue
+        m = re.match(r"^g\d+\s*=\s*coloring\((.+)\)$", ln)
+        if m:
+            colorings.append(parse_expr("coloring(" + m.group(1) + ")")["args"][1:])
+            continue
+        m = re.match(r"^([\w?]+)\s*=(?!=)\s*(.+)$", ln)
+        if m:
+            defs[m.group(1)] = parse_expr(m.group(2))
+            continue
+    return defs, setg, colorings
+
+
+def _grid_layout(defs, setg, colorings, compare=None):
+    """(defs, setg, colorings) → (nodes, edges, outlines). 노드=[id,label,row,col,kind].
+    좌표평면 격자 배치. compare(선택, _compare_asts 결과) 있으면 set_grid_size/color·coloring
+    target/color 값노드에 COMM('comm')/DIFF('diff') 아웃라인을 outlines[id] 로 매긴다."""
+    nodes, edges, nid, pc = [], [], [0], [0]
+    outlines = {}
+
+    def N(label, row, col, kind):
+        nid[0] += 1
+        i = f"g{nid[0]}"
+        nodes.append([i, label, row, col, kind])
+        return i
+
+    ch = node_label_children
+
+    def simple_tuple(node):
+        """좌표류 튜플(항목이 전부 leaf) → 단일 박스로. `(2, 3)`·`(1, 1)` 을 `( , )`–2–3 으로 쪼개지
+        않게(사용자 2026-07-20). 복합 항목(H-1 등 연산)이 있으면 False(구조 유지)."""
+        return node.get("k") == "tuple" and all(not ch(it)[1] for it in node.get("items", []))
+
+    def named(name, defexpr, row, col, kind="var"):
+        f, fk = ch(defexpr); fs = str(f)
+        if fs in _GRID_BIN and len(fk) == 2:              # 인픽스: op1 op op2, 값은 op 아래
+            w1, r1 = operand(fk[0], row - 1, col); opc = col + w1
+            opid = N(fs, row - 1, opc, "fn"); w2, r2 = operand(fk[1], row - 1, opc + 1)
+            vid = N(name, row, opc, kind)
+            edges.extend([(r1, opid, "h"), (opid, r2, "h"), (opid, vid, "v")])
+            return opc + 1 + w2 - col, vid
+        vid = N(name, row, col, kind)
+        fid = N(fs, row - 1, col, "fn" if fk else "lit"); edges.append((fid, vid, "v"))
+        c = col + 1; prev = fid
+        for k in fk:
+            w, rid = child(k, row - 1, c); edges.append((prev, rid, "h")); prev = rid; c += w
+        return max(1, c - col), vid
+
+    def operand(node, row, col):                          # 인픽스 피연산자: call 이면 placeholder
+        if simple_tuple(node):
+            return 1, N(expr_str(node), row, col, "lit")
+        if ch(node)[1]:
+            pc[0] += 1; return named(f"?p{pc[0]}", node, row, col)
+        return leafish(node, row, col)
+
+    def child(node, row, col):                            # prefix arg: binary 면 placeholder, else inline
+        if simple_tuple(node):
+            return 1, N(expr_str(node), row, col, "lit")
+        label, kids = ch(node); s = str(label)
+        if kids and s in _GRID_BIN and len(kids) == 2:
+            pc[0] += 1; return named(f"?p{pc[0]}", node, row, col)
+        return inline(node, row, col)
+
+    def leafish(node, row, col):
+        label, kids = ch(node); s = str(label)
+        if node.get("k") == "id" and s in defs and s.startswith("?"):
+            return named(s, defs[s], row, col)
+        if node.get("k") == "id" and s == "obj0":
+            return 1, N("obj0", row, col, "var")
+        if node.get("k") == "id" and s in defs and s.startswith("shape"):
+            vid = N(s, row, col, "var")
+            edges.append((N(str(ch(defs[s])[0]), row - 1, col, "lit"), vid, "v"))
+            return 1, vid
+        return 1, N(s, row, col, "var" if s.startswith("?") else "lit")
+
+    def inline(node, row, col):                           # non-binary call → fn + args 같은 줄
+        if simple_tuple(node):
+            return 1, N(expr_str(node), row, col, "lit")
+        label, kids = ch(node); s = str(label)
+        if not (kids and s not in _GRID_BIN):
+            return leafish(node, row, col)
+        fid = N(s, row, col, "fn"); c = col + 1; prev = fid
+        for k in kids:
+            w, rid = child(k, row, c); edges.append((prev, rid, "h")); prev = rid; c += w
+        return max(1, c - col), fid
+
+    def hn(defexpr):
+        f, fk = ch(defexpr); fs = str(f)
+        if fs in _GRID_BIN and len(fk) == 2:
+            return 1 + max(ho(fk[0]), ho(fk[1]))
+        return 1 + max([hc(k) for k in fk], default=0)
+
+    def ho(node):
+        if simple_tuple(node):
+            return 0
+        label, kids = ch(node); s = str(label)
+        if node.get("k") == "id" and s in defs and s.startswith("?"):
+            return hn(defs[s])
+        if node.get("k") == "id" and s == "obj0":
+            return 0
+        if node.get("k") == "id" and s in defs and s.startswith("shape"):
+            return 1
+        return hn(node) if kids else 0
+
+    def hc(node):
+        if simple_tuple(node):
+            return 0
+        label, kids = ch(node); s = str(label)
+        if kids and s in _GRID_BIN and len(kids) == 2:
+            return hn(node)
+        return hi(node)
+
+    def hi(node):
+        if simple_tuple(node):
+            return 0
+        label, kids = ch(node); s = str(label)
+        if node.get("k") == "id" and s in defs and s.startswith("?"):
+            return hn(defs[s])
+        if node.get("k") == "id" and s == "obj0":
+            return 0
+        if node.get("k") == "id" and s in defs and s.startswith("shape"):
+            return 1
+        return max([hc(k) for k in kids], default=0) if kids else 0
+
+    steps = (compare or {}).get("contents", {}).get("steps", []) if compare else []
+    row = 0; prev = N("input_grid", 0, 0, "end")
+    for label, arg in setg:
+        h = hi(arg); row += h + 1
+        opid = N(label, row, 0, "op"); edges.append((prev, opid, "spine")); prev = opid
+        _w, rid = child(arg, row, 1); edges.append((opid, rid, "h"))
+        if compare:                                       # set_grid_size/color 값 → COMM/DIFF 아웃라인
+            key = "size" if label.endswith("size") else ("color" if label.endswith("color") else None)
+            if key and compare.get(key):
+                outlines[rid] = compare[key]
+    for i, args in enumerate(colorings):
+        h = max([hc(a) for a in args], default=0); row += h + 1
+        opid = N("coloring", row, 1, "op"); edges.append((prev, opid, "spine")); prev = opid
+        c = 2; p2 = opid
+        for j, a in enumerate(args):
+            w, rid = child(a, row, c); edges.append((p2, rid, "h")); p2 = rid; c += w
+            if compare and i < len(steps):                # coloring target(j=0)/color(j=1) → COMM/DIFF
+                cls = steps[i].get("idx" if j == 0 else "col")
+                if cls:
+                    outlines[rid] = cls
+    row += 1
+    scont = N("set_grid_contents", row, 0, "op")
+    result = N("result", row, 1, "end")
+    edges.append((prev, result, "spine")); edges.append((scont, result, "h"))
+    row += 1
+    outg = N("output_grid", row, 0, "end"); edges.append((scont, outg, "spine"))
+    if "obj0" in defs:                                    # 중복노드 obj0 의 정의를 우측 상단에 따로
+        ocol = max(n[3] for n in nodes) + 2
+        named("obj0", defs["obj0"], hn(defs["obj0"]), ocol)
+    return nodes, edges, outlines
+
+
+def _grid_render(nodes, edges, outlines=None, cw=176, rh=58, bw=146, bh=30):
+    """(nodes, edges) → self-contained SVG(밝은 카드 배경). 척추 세로선·들여쓰기는 박스에 수직
+    진입(2번 꺾임). h=가로 arg 체인, v=세로 정의-값, spine=굵은 척추.
+    outlines(선택) = {id: 'comm'|'diff'} — 그 값노드 테두리를 녹색(COMM)/빨강(DIFF)으로."""
+    outlines = outlines or {}
+    pos = {n[0]: (n[3] * cw + 92, n[2] * rh + 42) for n in nodes}
+    W = max(p[0] for p in pos.values()) + bw + 20
+    Hgt = max(p[1] for p in pos.values()) + bh + 20
+    fl = {"var": "#e7dcef", "fn": "#f2f6fb", "lit": "#fbfaf6", "op": "#ffffff", "end": "#eeeeee"}
+    sk = {"var": "#8a6ea6", "fn": "#3d6ea5", "lit": "#8a8574", "op": "#2b2b2b", "end": "#555555"}
+    ocol = {"comm": "#3fae6a", "diff": "#e23b3b"}
+    o = [f'<svg viewBox="0 0 {W} {Hgt}" width="{W}" height="{Hgt}" '
+         f'xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Menlo,monospace">',
+         f'<rect x="0" y="0" width="{W}" height="{Hgt}" rx="12" fill="#f7f6f3"/>']
+    for a, b, t in edges:
+        x1, y1 = pos[a]; x2, y2 = pos[b]
+        c = "#222" if t == "spine" else "#555"; wd = 2.2 if t == "spine" else 1.4
+        if t == "h":
+            d = f'M{x1 + bw / 2} {y1} L{x2 - bw / 2} {y2}'
+        elif t == "spine" and x1 != x2:                   # 들여/내어쓰기: 박스에 수직 진입(2번 꺾임)
+            my = (y1 + bh / 2 + y2 - bh / 2) / 2
+            d = f'M{x1} {y1 + bh / 2} L{x1} {my} L{x2} {my} L{x2} {y2 - bh / 2}'
+        else:
+            d = f'M{x1} {y1 + bh / 2} L{x2} {y2 - bh / 2}'
+        o.append(f'<path d="{d}" stroke="{c}" stroke-width="{wd}" fill="none"/>')
+    for i, label, _r, _c, kind in nodes:
+        x, y = pos[i]
+        oc = outlines.get(i)                              # COMM/DIFF 테두리(있으면 우선)
+        stroke = ocol[oc] if oc else sk[kind]
+        sw = 3 if oc else (1.9 if kind == "var" else 1.5)
+        o.append(f'<rect x="{x - bw / 2}" y="{y - bh / 2}" width="{bw}" height="{bh}" rx="7" '
+                 f'fill="{fl[kind]}" stroke="{stroke}" stroke-width="{sw}"/>')
+        o.append(f'<text x="{x}" y="{y + 1}" text-anchor="middle" dominant-baseline="central" '
+                 f'font-size="12.5" fill="#1a1a1a">{html.escape(str(label))}</text>')
+    o.append("</svg>")
+    return "".join(o)
+
+
+def solution_grid(lines, compare=None):
+    """완전 실행형 코드(라인 리스트 또는 문자열) → 정돈 데이터플로우 SVG. task.solution·pair.program
+    (display_source) 둘 다 같은 골격이라 공통 입력. 파싱 실패/빈 코드면 빈 문자열.
+    compare(선택) = _compare_asts 결과 — set_grid_size/color·coloring target/color 값노드에
+    COMM(녹색)/DIFF(빨강) 테두리(anti-unification 겹침의 solid 레이어용, 사용자 2026-07-20)."""
+    try:
+        defs, setg, colorings = _grid_classify(lines)
+        if not (setg or colorings):
+            return ""
+        nodes, edges, outlines = _grid_layout(defs, setg, colorings, compare)
+        return _grid_render(nodes, edges, outlines)
+    except Exception:                                     # noqa: BLE001 — 표시용, 렌더 실패가 리포트를 죽이지 않게
+        return ""

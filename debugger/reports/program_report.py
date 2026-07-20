@@ -673,8 +673,8 @@ def _compress_stages(pixel_ast, group_ast, ex):
     (WM `P{k}.property ^grouping`)을 가로로 이어 그린다. 새 렌더러를 만들지 않고 둘 다 같은
     grid-body AST 형태라 기존 _viz(①②③ 공통소스 원칙과 같은 취지 — box-flow 렌더는 한 곳)를
     그대로 재사용, 사이에 라벨 붙은 화살표 연결 노드(.cconn)만 추가한다."""
-    pixel_viz = _viz(pixel_ast, ex)
-    group_viz = _viz(group_ast, ex)
+    pixel_viz = SE.solution_grid(display_source(pixel_ast)) or _viz(pixel_ast, ex)
+    group_viz = SE.solution_grid(display_source(group_ast)) or _viz(group_ast, ex)
     conn = ('<div class="cconn"><span class="cconnarrow">→</span>'
             '<span class="cconnlab">4-인접 동색 그룹핑<br>(compress)</span></div>')
     return (f'<div class="compressbox"><div class="lab">COMPRESS · 픽셀 → 객체</div>'
@@ -832,6 +832,9 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
     없으면(PAIR program) 기존대로 ①=display_source(러너-안전)·②=raw AST·③=grid box-flow."""
     g0 = ex["input"]
     src_text = "\n".join(sol_lines) if sol_lines is not None else display_source(ast, slot_exprs)
+    # ③ 시각화 = solution_grid(완전 실행형 코드 → 정돈 데이터플로우 SVG). task.solution·pair.program
+    # 둘 다 같은 골격(g/g0..gN/result/output_grid)이라 같은 렌더러. 파싱 실패 시 옛 box-flow 로 폴백.
+    grid_svg = SE.solution_grid(src_text) or _viz(ast, ex, slot_exprs=slot_exprs)
     return (f'<div class="pair">'
             f'<div class="lab">{html.escape(str(label))}</div>'
             f'<div class="views">'
@@ -839,7 +842,8 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
             f'<pre class="src">{html.escape(src_text)}</pre></div>'
             f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast, slot_exprs)}</div>'
-            f'<div class="view viz"><div class="vt">③ 시각화</div>{_viz(ast, ex, slot_exprs=slot_exprs)}</div>'
+            f'<div class="view viz"><div class="vt">③ 시각화</div>'
+            f'<div class="gridviz">{grid_svg}</div></div>'
             f'</div></div>')
 
 
@@ -849,7 +853,8 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
 #    그대로). 셋을 색으로 구분된 카드에 담아 한 컨테이너(가로 스크롤)에 나란히 놓는다. overlay 는
 #    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — _EV_CSS 에
 #    이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
-def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, groupings=None):
+def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, groupings=None,
+                  test_input=None):
     pair_boxes = "".join(
         f'<div class="innerbox">{_pair_block(f"PAIR {p + 1}", a, ex)}</div>'
         for a, ex, p in ast_ex_pairs)
@@ -858,16 +863,16 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
-        # pair0(solid layer) vs pair1(ghost) 을 step-by-step 비교(끝점 grid 는 비교 밖 — _viz 의
-        # outline 은 gflow/nestedflow 스텝에만 적용되고 _endpoint_rows 는 outline 인자를 받지 않는다)
-        # → COMM(녹색 .comm)/DIFF(빨강 .diff) outline 을 solid layer 에 입힌다(_EV_CSS 재사용, 신규
-        # 색 정의 없음). solid+ghost 겹침 자체는 기존 .ovl/.ghost 그대로.
+        # anti-unification 겹침 = 두 PAIR.program 의 grid SVG 를 반투명 겹침(사용자 2026-07-20:
+        # "이 그림을 두 개 겹쳐야하는거"). solid(pair0)+ghost(pair1) 대각선 오프셋. solid 레이어의
+        # 값노드는 _compare_asts(pair0 vs pair1) 로 COMM=녹색·DIFF=빨강 테두리(사용자 2026-07-20).
         outline = _compare_asts(a0, a1)
-        overlay = (f'<div class="ovl">{_viz(a0, ex0, outline=outline, endpoints=False)}'
-                   f'{_viz(a1, ex1, ghost=True, endpoints=False)}</div>'
-                   f'<div class="legend"><span class="lg comm">COMM(일치) = 녹색</span>'
-                   f'<span class="lg diff">DIFF(어긋남) = 빨강</span></div>')
-        box = f'<div class="innerbox"><div class="lab">PROGRAM COMPARISON</div>{overlay}</div>'
+        grid0 = SE.solution_grid(display_source(a0), outline)
+        grid1 = SE.solution_grid(display_source(a1))
+        overlay = (f'<div class="ovl gridovl">{grid0}<div class="ghost">{grid1}</div></div>'
+                   f'<div class="legend"><span class="lg comm">COMM(일치) = 녹색 테두리</span>'
+                   f'<span class="lg diff">DIFF(어긋남) = 빨강 테두리</span></div>')
+        box = f'<div class="innerbox"><div class="lab">PROGRAM COMPARISON (겹침)</div>{overlay}</div>'
         # compress 단계(Task 6): pair0 픽셀 program → 4-인접 그룹핑 → 객체 program. groupings[0] 이
         # 있는 태스크(compress 가 실제로 돈 태스크 — arc_human/move 전체)에서만 표시(정직 — 없는
         # 태스크에 임의로 지어내지 않는다). PROGRAM COMPARISON 박스 오른쪽에 나란히(.stepBrow).
@@ -876,7 +881,7 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
                      f'<div class="stepBcontent"><div class="stepBrow">{box}{compress_html}</div></div></div>')
 
     if solution is not None:
-        sol_ex = ast_ex_pairs[0][1]
+        sol_ex = {"input": test_input} if test_input is not None else ast_ex_pairs[0][1]
         sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex, slot_exprs, sol_lines)}</div>'
         steps.append(f'<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
                       f'<div class="stepCcontent">{sol_box}</div></div>')
@@ -961,8 +966,11 @@ def task_section(tid, task, precomputed=None):
     if solution is not None and PA._is_grid_body(solution.get("body") or []):
         comm = _solution_comm(asts)
         shapes = _shapes_for(slot_exprs, slot_vals, [task["train"][p]["input"] for p in pairs])
-        sol_lines = SE.render_solution_lines(solution, slot_exprs, comm, shapes)
-    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings)
+        # ① = 완전 실행형 코드(pair.program 골격 — g/g0..gN/result/output_grid, ?var=DIFF 자리만).
+        sol_lines = SE.render_solution_source(solution, slot_exprs, comm, shapes)
+    # TASK.solution wrapper 의 input_grid = test pair input(사용자 2026-07-20).
+    test_input = task["test"][0]["input"] if task.get("test") else ast_ex_pairs[0][1]["input"]
+    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings, test_input)
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
             f'<div class="thumbs">{thumbs}</div>{solrow}</section>')
@@ -993,7 +1001,15 @@ CSS = """
 /* ③ 시각화 pane 만 폭을 더 넓게: 색값 박스가 한 줄에서 안 밀려나려면 ③ pane 자체가 coloring
    스텝 한 줄(op+target+color+swatch)을 담을 만큼 넓어야 한다. ①②(텍스트/AST 트리)는 원래 폭
    그대로 — 그쪽은 이미 잘 줄바꿈되므로 건드릴 필요 없다. */
-.view.viz{flex-basis:480px}
+.view.viz{flex-basis:760px}
+/* ③ grid 데이터플로우 SVG(solution_grid): 밝은 카드 SVG. 폭이 넓으므로 자체 overflow-x 스크롤
+   (문서 전체를 계속 밀어 넓히지 않게 — §compressscroll 과 같은 취지). */
+.gridviz{overflow-x:auto;max-width:100%;border-radius:12px}
+.gridviz svg{display:block}
+/* anti-unification 겹침: 두 grid SVG 를 대각선 오프셋 반투명 겹침(§overlay). */
+.gridovl{position:relative;width:max-content;padding:0 22px 22px 0}
+.gridovl .ghost{position:absolute;top:0;left:0;right:auto;bottom:auto;transform:translate(18px,18px);
+ opacity:.45;pointer-events:none;filter:saturate(.7)}
 .vt{font-size:11px;color:#8b93a3;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;font-weight:700}
 .src{background:#0d1014;border:1px solid #232a35;border-radius:6px;padding:8px 10px;
  font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#dfe3ea;white-space:pre-wrap;
@@ -1342,9 +1358,13 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(s.id===h)?'':'none'});"
           "document.querySelectorAll('.tabs a').forEach(function(a){a.classList.toggle('on',a.dataset.t===h)});}"
           "addEventListener('hashchange',sh);sh();</script>") % json.dumps(tids)
+    import datetime as _dt
+    _built = _dt.datetime.now().strftime("%m-%d %H:%M:%S")
     doc = (f'<!doctype html><meta charset="utf-8"><title>program 뷰어</title><style>{_EV_CSS}{CSS}</style>'
            f'<a class="back" href="{back_href}">← {back_label}</a>'
-           f'<h1>{html.escape(title)}</h1>'
+           f'<h1>{html.escape(title)} '
+           f'<span style="font:12px ui-monospace,monospace;color:#5aa6d8;font-weight:400">'
+           f'· build {_built} (이 시각이 바뀌어야 새로고침 반영됨)</span></h1>'
            f'<p class="hs">solve 실행 → WM 의 PAIR.program 을 통일 body(실행형)·단일 box-flow 로 렌더.'
            f' 하단 코드 실행기에서 body 를 실행/검증(빌드타임 parity ✓/✗).</p>'
            f'<div class="tabs">{tabs}</div>{secs}'
