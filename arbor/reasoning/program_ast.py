@@ -295,6 +295,48 @@ def _to_source_blob(body):
     return "\n".join(lines)
 
 
+def _norm_coord(v):
+    """property 좌표값 정규화: {"row_index":r,"col_index":c} → (r,c); list/tuple → tuple; 그 외 그대로."""
+    if isinstance(v, dict) and "row_index" in v and "col_index" in v:
+        return (v["row_index"], v["col_index"])
+    if isinstance(v, (list, tuple)):
+        return tuple(v)
+    return v
+
+
+def _compile_pred(pred):
+    """eq 술어 노드 → callable(node)->bool. accessor = property DSL 함수명."""
+    from procedural_memory.dsl import property as _prop   # vendored property DSL
+    e = pred["eq"]
+    accessor = getattr(_prop, e["accessor"])
+    want = _norm_coord(e["value"])
+
+    def ok(node):
+        return _norm_coord(accessor(node)) == want
+    return ok
+
+
+def _resolve_select_coords(target, grid_in):
+    """coordinate_of(select("input", level, pred)) → [(r,c)...] (정렬). select-target 아니면 None."""
+    if "coordinate_of" not in target:
+        return None
+    sel = target["coordinate_of"].get("select")
+    if sel is None:
+        return None
+    from arbor.perception.arckg.grid import Grid
+    from procedural_memory.dsl.util import pixels_of, objects_of
+    gnode = Grid("_exec", grid_in)
+    pred = _compile_pred(sel["pred"])
+    if sel["level"] == "pixel":
+        chosen = [p for p in pixels_of(gnode) if pred(p)]
+        coords = [tuple(p.coord) for p in chosen]
+    else:                                                    # object (P2 에서 본격 사용)
+        from procedural_memory.dsl.property import coordinate_of as _coord_of
+        chosen = [o for o in objects_of(gnode) if pred(o)]
+        coords = [tuple(rc) for o in chosen for rc in _coord_of(o)]
+    return sorted(coords)
+
+
 # ── execute ─────────────────────────────────────────────
 def _leaf_value(leaf, grid_in, choice):
     """index/color leaf → 정수. const=값, var=choice[name](grid_in), expr 는 미지원(호출측이 var 로 변환)."""
@@ -313,6 +355,13 @@ def _execute_pixel_body(body, grid_in, choice):
     for s in body:
         tgt = s["args"]["target"]
         col = _leaf_value(s["args"]["color"], grid_in, choice)
+        coords = _resolve_select_coords(tgt, grid_in)
+        if coords is not None:
+            if col is not None:
+                for (r, c) in coords:
+                    if 0 <= r < H and 0 <= c < W:
+                        grid[r][c] = col
+            continue
         if tgt.get("ref") == "cellset":                     # blob: 셀 집합 전체 채색 (execute_solution blob 분기)
             cl = tgt["cells"]
             cells = cl["const"] if "const" in cl else ((choice or {}).get(cl["var"], lambda g: None)(grid_in))
