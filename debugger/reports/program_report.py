@@ -290,10 +290,19 @@ def _disp_select_label(tgt, slot_exprs=None):
     return f'coordinate_of(select({sel["grid"]}, {sel["level"]}, {inp.get("accessor")} {op} {vals}))', False
 
 
-def _pixelize(ast):
+def _concrete_size_color(ex):
+    """그 pair 출력 grid 의 **리터럴** size/color leaf. A.5/A.6/B 는 size/color arg 를 값으로 표시
+    (사용자 2026-07-24) — C(generalize)에서 pair 간 DIFF 면 표현식으로 일반화. 출력 없으면 입력 기준."""
+    out = ex.get("output") or ex["input"]
+    return (PA.const({"height": len(out), "width": len(out[0])}),
+            PA.const(sorted({v for row in out for v in row})))
+
+
+def _pixelize(ast, ex=None):
     """grid-body grouping(묶인 select) → **픽셀객체화** AST: 각 nested coloring 의
     coord_in([c1..cN]) 를 **N 개의 단일좌표(eq) select coloring** 으로 푼다 — 각 픽셀이
-    좌표1개로 특정됨(묶음 해제, 코드는 길어짐; compress 아님). grid body 아니면 그대로."""
+    좌표1개로 특정됨(묶음 해제, 코드는 길어짐; compress 아님). ex 주면 size/color 를 그 pair 의
+    구체 값으로. grid body 아니면 그대로."""
     if not ast or not PA._is_grid_body(ast.get("body") or []):
         return ast
     parts = {s["call"]: s["args"] for s in ast["body"]}
@@ -312,17 +321,18 @@ def _pixelize(ast):
                 new_inner.append(PA.step("coloring", target=t, color=col))
         else:
             new_inner.append(s)                                 # 이미 단일/var/기타는 그대로
-    body = [PA.set_grid_size(parts["set_grid_size"]["size"]),
-            PA.set_grid_color(parts["set_grid_color"]["color"]),
+    sz, co = (_concrete_size_color(ex) if ex is not None
+              else (parts["set_grid_size"]["size"], parts["set_grid_color"]["color"]))
+    body = [PA.set_grid_size(sz), PA.set_grid_color(co),
             PA.set_grid_contents(PA.contents_program(new_inner))]
     return PA.program(body)
 
 
-def _objectize(ast):
+def _objectize(ast, ex=None):
     """grid-body grouping(객체당 좌표묶음) → **object 객체화** AST: 각 coloring 의 좌표묶음을
     그 object 의 **coordinate property** 로 지목 — select(input, object, coordinate == [[r,c],...]).
     픽셀들이 한 ARCKG object 에 공통 소속임(그 좌표들이 object.coordinate)을 WM 정보로 표현(사용자
-    2026-07-24). 픽셀(coord_in) → object(eq coordinate). grid body 아니면 그대로."""
+    2026-07-24). ex 주면 size/color 를 그 pair 의 구체 값으로. 픽셀(coord_in) → object(eq coordinate)."""
     if not ast or not PA._is_grid_body(ast.get("body") or []):
         return ast
     parts = {s["call"]: s["args"] for s in ast["body"]}
@@ -340,8 +350,9 @@ def _objectize(ast):
             new_inner.append(PA.step("coloring", target=t, color=col))
         else:
             new_inner.append(s)
-    body = [PA.set_grid_size(parts["set_grid_size"]["size"]),
-            PA.set_grid_color(parts["set_grid_color"]["color"]),
+    sz, co = (_concrete_size_color(ex) if ex is not None
+              else (parts["set_grid_size"]["size"], parts["set_grid_color"]["color"]))
+    body = [PA.set_grid_size(sz), PA.set_grid_color(co),
             PA.set_grid_contents(PA.contents_program(new_inner))]
     return PA.program(body)
 
@@ -985,7 +996,7 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         for (a, ex, p), g in zip(ast_ex_pairs, groupings):
             if not g:
                 continue
-            px = _pixelize(g)
+            px = _pixelize(g, ex)
             px_boxes += f'<div class="innerbox">{_pair_block(f"픽셀객체화 PAIR {p + 1}", px, ex, sol_lines=_display_pixelized(px))}</div>'
         if px_boxes:
             steps.append('<div class="stepcard stepA5"><div class="stepttl">'
@@ -999,7 +1010,7 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         for (a, ex, p), g in zip(ast_ex_pairs, groupings):
             if not g:
                 continue
-            ob = _objectize(g)
+            ob = _objectize(g, ex)
             obj_boxes += f'<div class="innerbox">{_pair_block(f"object객체화 PAIR {p + 1}", ob, ex, sol_lines=_display_pixelized(ob))}</div>'
         if obj_boxes:
             steps.append('<div class="stepcard stepA6"><div class="stepttl">'
@@ -1013,8 +1024,8 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         # (solid=pair0 + ghost=pair1 대각선), ③ viz 만, **처음~끝 전 노드** label 동일=녹색·다름=빨강.
         g0 = groupings[0] if groupings else None
         g1 = groupings[1] if (groupings and len(groupings) > 1) else None
-        o0 = _objectize(g0) if g0 else a0
-        o1 = _objectize(g1) if g1 else a1
+        o0 = _objectize(g0, ex0) if g0 else a0
+        o1 = _objectize(g1, ex1) if g1 else a1
         src0 = _display_pixelized(o0) if PA._is_grid_body(o0.get("body") or []) else display_source(o0)
         src1 = _display_pixelized(o1) if PA._is_grid_body(o1.get("body") or []) else display_source(o1)
         grid0 = SE.solution_grid_compare(src0, src1)      # solid: 전 노드 comm/diff 마킹
