@@ -57,6 +57,10 @@ def _is_cellset_body(body):
     return bool(body) and all(s["args"]["target"].get("ref") == "cellset" for s in body)
 
 
+def _is_select_body(body):
+    return bool(body) and all("coordinate_of" in s["args"]["target"] for s in body)
+
+
 def _is_pixel_body(body):
     return bool(body) and all(s["args"]["target"].get("ref") in ("pixel", "coord") for s in body)
 
@@ -485,7 +489,12 @@ def ops_of_ast(ast):
         tgt = s["args"]["target"]
         col_leaf = s["args"]["color"]
         col = col_leaf.get("const") if "const" in col_leaf else None
-        if tgt.get("ref") == "cellset":
+        if "coordinate_of" in tgt:                       # select-target → coord_in.values 를 cellset shape 로
+            sel = tgt["coordinate_of"].get("select") or {}
+            vals = ((sel.get("pred") or {}).get("in") or {}).get("values")
+            cells = frozenset(tuple(c) for c in vals) if isinstance(vals, list) else None
+            ops.append((cells, col))
+        elif tgt.get("ref") == "cellset":
             cl = tgt["cells"]
             cells = frozenset(cl["const"]) if "const" in cl else None
             ops.append((cells, col))
@@ -512,6 +521,8 @@ def antiunify_ast(asts, force_slots=False):
         return _antiunify_ast_grid(valid, force_slots)
     if all(_is_cellset_body(a["body"]) for a in valid):
         return _antiunify_ast_blob(valid, force_slots)
+    if all(_is_select_body(a["body"]) for a in valid):
+        return _antiunify_ast_select(valid, force_slots)
     return _antiunify_ast_pixel(valid)
 
 
@@ -531,6 +542,13 @@ def _reprefix_inner_vars(leaf, prefix):
             new_tgt["index"] = _fix_var(new_tgt["index"])
         if "cells" in new_tgt:                  # unreachable: _antiunify_ast_pixel emits only pixel targets
             new_tgt["cells"] = _fix_var(new_tgt["cells"])
+        if "coordinate_of" in new_tgt:          # select-target: var 은 coord_in.values 밑에 있음
+            co = new_tgt["coordinate_of"]
+            sel = (co or {}).get("select")
+            if sel and "in" in (sel.get("pred") or {}):
+                pin = dict(sel["pred"]["in"])
+                pin["values"] = _fix_var(pin["values"])
+                new_tgt["coordinate_of"] = dict(co, select=dict(sel, pred=dict(sel["pred"], **{"in": pin})))
         new_args = dict(s["args"], target=new_tgt, color=_fix_var(s["args"]["color"]))
         new_body.append({"call": s["call"], "args": new_args})
     return {"program": {"body": new_body}}
@@ -552,6 +570,8 @@ def _antiunify_ast_grid(asts, force_slots=False):
             inner_asts = [program(leaf["program"]["body"]) for leaf in leaves]
             if all(_is_cellset_body(ia["body"]) for ia in inner_asts):
                 sk_inner, inner_slots = _antiunify_ast_blob(inner_asts, force_slots)
+            elif all(_is_select_body(ia["body"]) for ia in inner_asts):
+                sk_inner, inner_slots = _antiunify_ast_select(inner_asts, force_slots)
             else:
                 sk_inner, inner_slots = _antiunify_ast_pixel(inner_asts)
             if sk_inner is None:                                # structural mismatch (op-count 불일치 등)
@@ -603,10 +623,24 @@ def _antiunify_ast_pixel(asts):
     return program(body, slots=slots), slots
 
 
-def _antiunify_ast_blob(asts, force_slots=False):
-    """blob AST 들 → (skeleton, slots). _align_blobs(색 COMM 정렬) 재사용. cellset DIFF → cellset slot.
-    (antiunify.py::_antiunify_blobs 를 AST 로 mirror; 셀집합 비교는 tuple(sorted) 정규화.)
-    force_slots=True(이동 프로그램) → cellset 은 일치해도 const 로 굽지 않고 항상 slot 화(color 는 제외)."""
+def _cellset_target(sorted_cells, var_name):
+    """blob 스켈레톤 target: COMM(sorted_cells=list) → cellset(const), DIFF(None) → cellset(var)."""
+    return cellset(const(sorted_cells) if sorted_cells is not None else var(var_name))
+
+
+def _select_target(sorted_cells, var_name):
+    """select 스켈레톤 target: COMM → coord_in const 좌표목록, DIFF → coord_in var. cellset 과 동치(좌표)."""
+    cells_leaf = const([list(c) for c in sorted_cells]) if sorted_cells is not None else var(var_name)
+    return coordinate_of(select("input", "pixel", coord_in("pixel_coordinate", cells_leaf)))
+
+
+def _antiunify_ast_group(asts, force_slots, make_target):
+    """cellset/select 공통 코어: ops_of_ast 가 같은 (cells, color) shape 를 내므로 정렬·COMM/DIFF·slot 로직을
+    공유하고, 위치별 스켈레톤 target 만 `make_target(sorted_cells|None, var_name)` 로 분기 emit(DRY).
+    반환 = (body, slots) 원자 — program 래핑(슬롯 임베드 여부)은 호출측(blob/select)이 결정.
+    _align_blobs(색 COMM 최대화 순열)로 정렬. 셀집합 비교는 tuple(sorted) 정규화.
+    force_slots=True(이동) → 셀집합 일치해도 const 로 굽지 않고 항상 slot 화(color 는 제외).
+    구조 불일치(concrete cells 부족·op수 상이) → (None, None)."""
     from arbor.reasoning.antiunify import _align_blobs
     progs = [ops_of_ast(a) for a in asts]
     progs = [p for p in progs if p and all(o[0] is not None for o in p)]   # concrete cells 만
@@ -624,11 +658,32 @@ def _antiunify_ast_blob(asts, force_slots=False):
         same_cells = len({tuple(sorted(c)) for c in cellsets}) == 1
         sk_cells = cellsets[0] if (same_cells and not force_slots) else None
         sk_col = cols[0] if len(set(cols)) == 1 else None   # (색 강제 slot화 실험 보류 — au 만 이득, 부작용 검증중)
-        cells_leaf = const(sorted(sk_cells)) if sk_cells is not None else var(f"?cells{i}")
         col_leaf = const(sk_col) if sk_col is not None else var(f"?color{i}")
+        target = make_target(sorted(sk_cells) if sk_cells is not None else None, f"?cells{i}")
         if sk_cells is None:
             slots[f"?cells{i}"] = {"kind": "cellset", "pos": i, "values": [sorted(c) for c in cellsets]}
         if sk_col is None:
             slots[f"?color{i}"] = {"kind": "color", "pos": i, "values": cols}
-        body.append(step("coloring", target=cellset(cells_leaf), color=col_leaf))
+        body.append(step("coloring", target=target, color=col_leaf))
+    return body, slots
+
+
+def _antiunify_ast_blob(asts, force_slots=False):
+    """blob(cellset) AST 들 → (skeleton, slots). 공통 코어에 cellset target emit 만 주입.
+    (기존 동작 유지 — 슬롯을 skeleton 에 임베드.)"""
+    body, slots = _antiunify_ast_group(asts, force_slots, _cellset_target)
+    if body is None:
+        return None, None
     return program(body, slots=slots), slots
+
+
+def _antiunify_ast_select(asts, force_slots=False):
+    """select(coordinate_of(select(...coord_in))) AST 들 → (skeleton, slots). cellset 과 동치 로직,
+    스켈레톤만 select-target 으로 emit(COMM=const coord_in, DIFF=var coord_in). slot kind 는 "cellset"
+    유지(다음 task resolve 가 그대로 소비) · values 는 좌표(r,c) 목록. skeleton 자체엔 슬롯을 임베드하지
+    않는다 — canonical slots 는 tuple 2nd 요소(generalize 가 sk["slots"] 를 이걸로 덮어씀)이고, 그래야
+    skeleton body 가 cellset 표기 없이 순수 select 표현으로 남는다(cellset 동치의 대체 표현)."""
+    body, slots = _antiunify_ast_group(asts, force_slots, _select_target)
+    if body is None:
+        return None, None
+    return program(body), slots
