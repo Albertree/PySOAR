@@ -640,9 +640,11 @@ def _grid_layout(defs, setg, colorings, compare=None):
                     outlines[rid] = cls
     row += 1
     scont = N("set_grid_contents", row, 0, "op")
+    result = N("result", row, 1, "end")
     edges.append((color_node, scont, "spine"))            # ★ 직선 spine: set_grid_color → set_grid_contents
     if chain_prev is not None:
-        edges.append((chain_prev, scont, "h"))            # coloring 체인 마지막 → contents 로 꽂힘
+        edges.append((chain_prev, result, "spine"))       # 마지막 coloring → result (복구)
+    edges.append((scont, result, "h"))                    # set_grid_contents → result (arg, 옆에)
     row += 1
     outg = N("output_grid", row, 0, "end"); edges.append((scont, outg, "spine"))
     if "obj0" in defs:                                    # 중복노드 obj0 의 정의를 우측 상단에 따로
