@@ -319,21 +319,31 @@ def _pixelize(ast):
 
 
 def _display_pixelized(ast):
-    """픽셀객체화 program → **변수화된** 소스: 긴 coordinate_of(select(…)) 를 ?varN 로 hoist 해
-    가로 길이를 줄인다(줄 수는 늘어남 — 각 픽셀 1 coloring). grid body 아니면 None."""
+    """픽셀객체화 program → **A(display_grid) 와 같은 프레임**의 변수화 소스: g.size/g.color 헤더 →
+    긴 coordinate_of(select(…)) 를 ?varN 로 hoist(가로 길이↓) → g0=g.contents, gN=coloring(g{N-1},
+    ?varN, col) 스레딩 → result → set_grid_contents → output_grid. 이 A-포맷이라 solution_grid(그래프
+    데이터플로우 viz)가 파싱한다(③도 A 와 같은 신 viz). grid body 아니면 None."""
     body = (ast or {}).get("body") or []
     if not PA._is_grid_body(body):
         return None
     parts = {s["call"]: s["args"] for s in body}
+    sz = _disp_grid_leaf(parts["set_grid_size"]["size"], "size")
+    co = _disp_grid_leaf(parts["set_grid_color"]["color"], "color")
     inner = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
-    lines = ["grid = input_grid"]
+    lines = ["g = input_grid", f"g.size = set_grid_size({sz})",
+             f"g.color = set_grid_color({co})", ""]
+    vardefs, steps, prev = [], [], "g0"
     for n, s in enumerate(inner, start=1):
         label, _r = _disp_select_label(s["args"]["target"])
         col = _disp_leaf(s["args"]["color"])
-        lines.append(f"?var{n} = {label}")
-        lines.append(f"coloring(grid, ?var{n}, {col})")
-    lines.append("output_grid = grid")
-    return lines                                            # ← 리스트 반환(_pair_block sol_lines 계약: '\n'.join 대상)
+        vardefs.append(f"?var{n} = {label}")
+        cur = f"g{n}"
+        steps.append(f"{cur} = coloring({prev}, ?var{n}, {col})")
+        prev = cur
+    lines += vardefs + ["g0 = g.contents"] + steps
+    lines += [f"result = {prev if inner else 'g0'}",
+              "g.contents = set_grid_contents(result)", "output_grid = g"]
+    return lines                                            # 리스트(_pair_block sol_lines 계약)
 
 
 def _display_grid(body, slot_exprs=None):
@@ -917,11 +927,11 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
     return (f'<div class="pair">'
             f'<div class="lab">{html.escape(str(label))}</div>'
             f'<div class="views">'
-            f'<div class="view"><div class="vt">① text (통일 body · 실행형)</div>'
+            f'<div class="view v1"><div class="vt">① text (통일 body · 실행형)</div>'
             f'<pre class="hdr">{html.escape(_render_header_safe(ast, g0))}</pre>'
             f'<pre class="src">{html.escape(src_text)}</pre></div>'
-            f'<div class="view"><div class="vt">② AST 트리</div>{ast_tree(ast, slot_exprs)}</div>'
-            f'<div class="view viz"><div class="vt">③ 시각화</div>'
+            f'<div class="view v2"><div class="vt">② AST 트리</div>{ast_tree(ast, slot_exprs)}</div>'
+            f'<div class="view viz v3"><div class="vt">③ 시각화</div>'
             f'<div class="gridviz">{grid_svg}</div></div>'
             f'</div></div>')
 
@@ -1089,8 +1099,14 @@ CSS = """
    뒤에 와서 우선 → 현재 선택 탭(.on 파란 배경)에서도 풀이상태 테두리가 유지된다. */
 .tabs a.solved{border-color:#3fb950}
 .tabs a.unsolved{border-color:#f85149}
-.views{display:flex;gap:10px;align-items:flex-start;flex-wrap:nowrap;margin:6px 0 14px}
+.views{display:flex;gap:10px;align-items:stretch;flex-wrap:nowrap;margin:6px 0 14px}
 .view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:0 0 auto}
+/* ①②③ 토글: 상단 버튼이 body.hidevN 을 켜면 해당 뷰 숨김. stretch 라 남은 ②③ 박스는 세로길이 동일 */
+.viewtoggle{margin-left:14px;display:inline-flex;gap:6px;vertical-align:middle}
+.viewtoggle button{font:600 11px ui-monospace,monospace;color:#8fb4e0;background:#141a26;
+  border:1px solid #2e3b52;border-radius:6px;padding:3px 9px;cursor:pointer}
+.viewtoggle button.on{color:#0f1218;background:#6fa8dc;border-color:#6fa8dc}
+body.hidev1 .view.v1,body.hidev2 .view.v2,body.hidev3 .view.v3{display:none}
 /* ③ 시각화 pane 만 폭을 더 넓게: 색값 박스가 한 줄에서 안 밀려나려면 ③ pane 자체가 coloring
    스텝 한 줄(op+target+color+swatch)을 담을 만큼 넓어야 한다. ①②(텍스트/AST 트리)는 원래 폭
    그대로 — 그쪽은 이미 잘 줄바꿈되므로 건드릴 필요 없다. */
@@ -1452,6 +1468,8 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
           "if(!document.getElementById(h))h=TIDS[0];"
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(s.id===h)?'':'none'});"
           "document.querySelectorAll('.tabs a').forEach(function(a){a.classList.toggle('on',a.dataset.t===h)});}"
+          "function tv(b){b.classList.toggle('on');"
+          "document.body.classList.toggle('hidev'+b.dataset.v,!b.classList.contains('on'));}"
           "addEventListener('hashchange',sh);sh();</script>") % json.dumps(tids)
     import datetime as _dt
     _built = _dt.datetime.now().strftime("%m-%d %H:%M:%S")
@@ -1459,7 +1477,12 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
            f'<a class="back" href="{back_href}">← {back_label}</a>'
            f'<h1>{html.escape(title)} '
            f'<span style="font:12px ui-monospace,monospace;color:#5aa6d8;font-weight:400">'
-           f'· build {_built} (이 시각이 바뀌어야 새로고침 반영됨)</span></h1>'
+           f'· build {_built}</span>'
+           f'<span class="viewtoggle">'
+           f'<button data-v="1" class="on" onclick="tv(this)">① text</button>'
+           f'<button data-v="2" class="on" onclick="tv(this)">② AST</button>'
+           f'<button data-v="3" class="on" onclick="tv(this)">③ viz</button>'
+           f'</span></h1>'
            f'<p class="hs">solve 실행 → WM 의 PAIR.program 을 통일 body(실행형)·단일 box-flow 로 렌더.'
            f' 하단 코드 실행기에서 body 를 실행/검증(빌드타임 parity ✓/✗).</p>'
            f'<div class="tabs">{tabs}</div>{secs}'
