@@ -232,7 +232,10 @@ def _coloring_steps(body, slot_exprs=None, cell_w=None):
         elif ref == "coord":                          # 리터럴 좌표 직접
             r, c = tgt["index"]["const"]
             label = f"({r}, {c})"
-        elif ref == "cellset":                        # blob: resolved 이동식이 있으면 ①과 같은 표현식, 없으면 raw
+        elif "coordinate_of" in tgt:                  # select-target(coordinate_of(select(…,coord_in([…])))) — cellset 대체
+            label, resolved = _disp_select_label(tgt, slot_exprs)
+            ref = "select"
+        elif ref == "cellset":                        # (레거시) blob: resolved 이동식이 있으면 ①과 같은 표현식, 없으면 raw
             cl = tgt["cells"]
             var = cl.get("var") if isinstance(cl, dict) else None
             if slot_exprs and var in slot_exprs:      # ③ dest 박스에 이식할 함수-조합(select 인라인)
@@ -270,6 +273,21 @@ def _coloring_seq_lines(body, slot_exprs=None):
         lines.append(f"{st['g_to']} = coloring({st['g_from']}, {st['label']}, {col}){suffix}")
     lines.append(f"result = {steps[-1]['g_to'] if steps else 'g0'}")
     return lines
+
+
+def _disp_select_label(tgt, slot_exprs=None):
+    """select-target `coordinate_of(select(grid, level, coord_in(accessor,[coords]|var)))` → (label, resolved).
+    resolved 이동식(slot_exprs 에 그 var 가 있으면) → 함수-조합 표현으로 명확화, 아니면 구체 select 식."""
+    sel = tgt["coordinate_of"].get("select") if isinstance(tgt.get("coordinate_of"), dict) else None
+    if not sel:
+        return f"? /* 해석 불가 target: {json.dumps(tgt)} */", False
+    inp = sel["pred"].get("in") or sel["pred"].get("eq") or {}
+    vals = inp.get("values", inp.get("value"))
+    var = vals.get("var") if isinstance(vals, dict) else None
+    if slot_exprs and var in slot_exprs:
+        return SE.graft_expr(slot_exprs[var], slot_exprs), True
+    op = "∈" if "in" in sel["pred"] else "=="
+    return f'coordinate_of(select({sel["grid"]}, {sel["level"]}, {inp.get("accessor")} {op} {vals}))', False
 
 
 def _display_grid(body, slot_exprs=None):
@@ -310,7 +328,10 @@ def _display_pixel(body, slot_exprs=None):
         elif ref == "coord":                          # 리터럴 좌표 직접
             r, c = tgt["index"]["const"]
             lines.append(f"g = coloring(g, ({r}, {c}), {col})")
-        elif ref == "cellset":                        # blob: 셀 집합. resolved 이동식 있으면 명확화
+        elif "coordinate_of" in tgt:                  # select-target(coord_in) — cellset 대체
+            label, _res = _disp_select_label(tgt, slot_exprs)
+            lines.append(f"g = coloring(g, {label}, {col})")
+        elif ref == "cellset":                        # (레거시) blob: 셀 집합. resolved 이동식 있으면 명확화
             cl = tgt["cells"]
             var = cl.get("var") if isinstance(cl, dict) else None
             if slot_exprs and var in slot_exprs:
