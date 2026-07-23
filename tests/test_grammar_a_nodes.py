@@ -29,6 +29,18 @@ class TestGrammarANodes(unittest.TestCase):
         self.assertIn("select(input, pixel, pixel_coordinate==[3, 2])", src)
         self.assertIn("coordinate_of(", src)
 
+    def test_render_header_handles_select_target(self):
+        """select-target(coordinate_of) 엔 'ref' 키가 없음 — render_header 도 to_source 처럼
+        .get('ref') 로 안전해야 한다(KeyError 대신 accessor 스킵)."""
+        body = [PA.step("coloring",
+                        target=PA.coordinate_of(PA.select("input", "pixel",
+                                                          PA.eq("pixel_coordinate", [3, 2]))),
+                        color=PA.const(0))]
+        ast = PA.program(body)
+        grid_in = [[0, 0], [0, 0]]
+        header = PA.render_header(ast, grid_in)
+        self.assertIsInstance(header, str)
+
 
 if __name__ == "__main__":
     unittest.main()

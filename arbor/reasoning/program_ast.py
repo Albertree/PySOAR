@@ -431,7 +431,7 @@ def render_header(ast, grid_in) -> str:
     for s in (ast.get("body") or []):
         if s["call"] not in ops:
             ops.append(s["call"])
-        lvl = s["args"]["target"]["ref"]
+        lvl = s["args"]["target"].get("ref")
         acc = _LEVEL_ACCESSOR.get(lvl)
         if acc and acc not in accs:
             accs.append(acc)
