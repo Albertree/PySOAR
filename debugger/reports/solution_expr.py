@@ -7,6 +7,18 @@ import html
 import re
 
 
+def _target_cell_var(tgt):
+    """coloring target 의 DIFF 슬롯 var 이름 — cellset(레거시) 또는 select-coord_in(현행) 둘 다.
+    없으면 None. select: coordinate_of(select(…, coord_in(accessor, {"var":"?…"})))."""
+    if tgt.get("ref") == "cellset":
+        return tgt.get("cells", {}).get("var")
+    if "coordinate_of" in tgt:
+        sel = tgt["coordinate_of"].get("select") or {}
+        vals = (sel.get("pred") or {}).get("in", {}).get("values")
+        return vals.get("var") if isinstance(vals, dict) else None
+    return None
+
+
 def selector_to_condition(sel):
     """솔버 선택자 이름 → (select 조건식, shape_ref|None). 채택된 선택자 충실 렌더.
     bounded → color(o) != 0 (표현계층 색0≠배경 완화, 설계 §3-2)."""
@@ -175,7 +187,7 @@ def render_solution_lines(solution_ast, resolved, comm, shapes):
     prog = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
     for s in prog:
         tgt = s["args"]["target"]; colr = s["args"]["color"]
-        cell_var = tgt.get("cells", {}).get("var") if tgt.get("ref") == "cellset" else None
+        cell_var = _target_cell_var(tgt)
         # 좌표 변수
         if cell_var and cell_var in resolved:
             rt, ct, _ = _split_move(resolved[cell_var])
@@ -427,7 +439,7 @@ def render_solution_source(solution_ast, resolved, comm, shapes):
     gi = 0
     for s in prog:
         tgt = s["args"]["target"]; colr = s["args"]["color"]
-        cell_var = tgt.get("cells", {}).get("var") if tgt.get("ref") == "cellset" else None
+        cell_var = _target_cell_var(tgt)
         if cell_var and cell_var in resolved:
             rt, ct, _ = _split_move(resolved[cell_var])
             expr = move_to_vector(rt, ct, objvar) if rt else f"coordinate({objvar})"
