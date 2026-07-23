@@ -709,3 +709,28 @@ def solution_grid(lines, compare=None):
         return _grid_render(nodes, edges, outlines)
     except Exception:                                     # noqa: BLE001 — 표시용, 렌더 실패가 리포트를 죽이지 않게
         return ""
+
+
+def solution_grid_compare(lines0, lines1):
+    """두 program(lines0=렌더 대상 solid, lines1=상대) 를 노드 **position(row,col)** 으로 매칭해
+    **모든 노드**에 label 동일=comm(녹색)·다름=diff(빨강) 테두리를 매기고 lines0 을 렌더한다
+    (사용자 2026-07-24: 일부 값노드만이 아니라 처음~끝 전 박스를 비교·마킹). 두 program 은 같은
+    구조(op 순서 동일)라 노드 position 이 일치. 파싱/구조 불일치·실패면 outline 없이 lines0 만 렌더."""
+    try:
+        d0, s0, c0 = _grid_classify(lines0)
+        n0, e0, _ = _grid_layout(d0, s0, c0)
+        d1, s1, c1 = _grid_classify(lines1)
+        n1, _e1, _ = _grid_layout(d1, s1, c1)
+        lbl1 = {}
+        for (_i, label, r, c, _k) in n1:                  # 상대 program: position → label
+            lbl1[(r, c)] = str(label)
+        outlines = {}
+        for (i, label, r, c, _k) in n0:
+            other = lbl1.get((r, c))
+            outlines[i] = "comm" if (other is not None and other == str(label)) else "diff"
+        return _grid_render(n0, e0, outlines)
+    except Exception:                                     # noqa: BLE001 — 표시용
+        try:
+            return solution_grid(lines0)
+        except Exception:
+            return ""

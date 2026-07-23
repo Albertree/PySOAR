@@ -1008,29 +1008,24 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
-        # (사용자 2026-07-24) 구형 compress 옆박스 제거(pixelize/objectize 로 대체됨). Step B =
-        #   ① COMPARE: anti-unify 가 병합하는 대상(object 객체화 program)을 pair0/pair1 반투명 겹침
-        #      (solid=pair0 + ghost=pair1 대각선), ③ viz 만 사용, COMM=녹색·DIFF=빨강 테두리.
-        #   ② RESULT: anti-unify 결과(병합 골격 solution)를 ①②③ 3표현으로(resolve 전 raw ?var 골격).
+        # (사용자 2026-07-24) 구형 compress 옆박스·anti-unify 결과박스(=TASK.solution 과 동일) 제거.
+        # Step B = COMPARE 만: anti-unify 병합대상(object 객체화 program)을 pair0/pair1 반투명 겹침
+        # (solid=pair0 + ghost=pair1 대각선), ③ viz 만, **처음~끝 전 노드** label 동일=녹색·다름=빨강.
         g0 = groupings[0] if groupings else None
         g1 = groupings[1] if (groupings and len(groupings) > 1) else None
         o0 = _objectize(g0) if g0 else a0
         o1 = _objectize(g1) if g1 else a1
-        outline = _compare_asts(o0, o1)
         src0 = _display_pixelized(o0) if PA._is_grid_body(o0.get("body") or []) else display_source(o0)
         src1 = _display_pixelized(o1) if PA._is_grid_body(o1.get("body") or []) else display_source(o1)
-        grid0 = SE.solution_grid(src0, outline)
-        grid1 = SE.solution_grid(src1)
+        grid0 = SE.solution_grid_compare(src0, src1)      # solid: 전 노드 comm/diff 마킹
+        grid1 = SE.solution_grid(src1)                     # ghost
         overlay = (f'<div class="ovl gridovl">{grid0}<div class="ghost">{grid1}</div></div>'
                    f'<div class="legend"><span class="lg comm">COMM(일치) = 녹색 테두리</span>'
                    f'<span class="lg diff">DIFF(어긋남) = 빨강 테두리</span></div>')
         cmp_box = f'<div class="innerbox"><div class="lab">COMPARE (pair0 △ pair1 겹침)</div>{overlay}</div>'
-        res_box = ("" if solution is None else
-                   '<div class="innerbox">'
-                   + _pair_block("anti-unify 결과 (골격)", solution, ast_ex_pairs[0][1]) + '</div>')
         steps.append('<div class="stepcard stepB"><div class="stepttl">Step B · Anti-unification</div>'
                      '<div class="stepBcontent"><div class="stepBrow">'
-                     + cmp_box + res_box + '</div></div></div>')
+                     + cmp_box + '</div></div></div>')
 
     if solution is not None:
         sol_ex = {"input": test_input} if test_input is not None else ast_ex_pairs[0][1]
