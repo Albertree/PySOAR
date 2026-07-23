@@ -728,26 +728,35 @@ def solution_grid_compare(lines0, lines1):
         for (i, label, r, c, _k) in n0:
             other = lbl1.get((r, c))
             outlines[i] = "comm" if (other is not None and other == str(label)) else "diff"
-        # 주황(사용자 2026-07-24): comm 이지만 자기 subtree(spine=op시퀀스 제외, containment 만) 하위에
-        # diff 가 있는 분기점 → "여기 아래에 DIFF 있음". 일반화 사다리(diff→상위→상위)의 후보 경로.
-        adj = {}
+        # 주황은 **?placeholder 노드만** (사용자 2026-07-24): coordinate·==·select·set_grid_size 같은
+        # 구조/함수/연산자 노드는 두 program 에서 같으면 그냥 COMM(녹색), 값 leaf 만 DIFF(빨강).
+        # placeholder(?var/?p)는 "그 자리 표현(=그 def) 중 일부가 다름"을 뜻하므로, 그 표현에 diff 가
+        # 있으면 주황. **containment 인접** = h(함수→피연산자/인자체인) forward + v(피연산자 placeholder
+        # → 그 표현식) reverse. 이래야 infix(coordinate==[coords], ?p 로 명명·main 체인과 v 로만 연결)
+        # 하위의 diff 를 placeholder 로부터 닿고, placeholder 의 v-부모 subtree 에 없는 arg-체인 형제
+        # (색 등)에는 오염되지 않는다.
+        cadj, vpar = {}, {}
         for a, b, t in e0:
-            if t != "spine":
-                adj.setdefault(a, []).append(b)
-        memo = {}
+            if t == "h":
+                cadj.setdefault(a, []).append(b)
+            elif t == "v":
+                cadj.setdefault(b, []).append(a)              # ?p → 그 표현식(reverse v)
+                vpar[b] = a
+        cmemo = {}
 
-        def _reaches_diff(x):
-            if x in memo:
-                return memo[x]
-            memo[x] = False
-            for y in adj.get(x, []):
-                if outlines.get(y) == "diff" or _reaches_diff(y):
-                    memo[x] = True
+        def _c_reaches_diff(x):
+            if x in cmemo:
+                return cmemo[x]
+            cmemo[x] = False
+            for y in cadj.get(x, []):
+                if outlines.get(y) == "diff" or _c_reaches_diff(y):
+                    cmemo[x] = True
                     break
-            return memo[x]
+            return cmemo[x]
 
-        for (i, _l, _r, _c, _k) in n0:
-            if outlines.get(i) == "comm" and _reaches_diff(i):
+        for (i, label, _r, _c, _k) in n0:
+            if (outlines.get(i) == "comm" and str(label).startswith("?")
+                    and (_c_reaches_diff(i) or (i in vpar and _c_reaches_diff(vpar[i])))):
                 outlines[i] = "orange"
         return _grid_render(n0, e0, outlines)
     except Exception:                                     # noqa: BLE001 — 표시용
