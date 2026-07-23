@@ -290,6 +290,52 @@ def _disp_select_label(tgt, slot_exprs=None):
     return f'coordinate_of(select({sel["grid"]}, {sel["level"]}, {inp.get("accessor")} {op} {vals}))', False
 
 
+def _pixelize(ast):
+    """grid-body grouping(묶인 select) → **픽셀객체화** AST: 각 nested coloring 의
+    coord_in([c1..cN]) 를 **N 개의 단일좌표(eq) select coloring** 으로 푼다 — 각 픽셀이
+    좌표1개로 특정됨(묶음 해제, 코드는 길어짐; compress 아님). grid body 아니면 그대로."""
+    if not ast or not PA._is_grid_body(ast.get("body") or []):
+        return ast
+    parts = {s["call"]: s["args"] for s in ast["body"]}
+    cleaf = parts["set_grid_contents"]["contents"]
+    inner = (cleaf.get("program") or {}).get("body") if "program" in cleaf else None
+    if not inner:
+        return ast
+    new_inner = []
+    for s in inner:
+        tgt = s["args"]["target"]; col = s["args"]["color"]
+        sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
+        vals = (sel or {}).get("pred", {}).get("in", {}).get("values") if sel else None
+        if sel and isinstance(vals, list):                      # 좌표묶음 → 좌표1개씩 eq-select
+            for c in vals:
+                t = PA.coordinate_of(PA.select(sel["grid"], sel["level"], PA.eq("pixel_coordinate", c)))
+                new_inner.append(PA.step("coloring", target=t, color=col))
+        else:
+            new_inner.append(s)                                 # 이미 단일/var/기타는 그대로
+    body = [PA.set_grid_size(parts["set_grid_size"]["size"]),
+            PA.set_grid_color(parts["set_grid_color"]["color"]),
+            PA.set_grid_contents(PA.contents_program(new_inner))]
+    return PA.program(body)
+
+
+def _display_pixelized(ast):
+    """픽셀객체화 program → **변수화된** 소스: 긴 coordinate_of(select(…)) 를 ?varN 로 hoist 해
+    가로 길이를 줄인다(줄 수는 늘어남 — 각 픽셀 1 coloring). grid body 아니면 None."""
+    body = (ast or {}).get("body") or []
+    if not PA._is_grid_body(body):
+        return None
+    parts = {s["call"]: s["args"] for s in body}
+    inner = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
+    lines = ["grid = input_grid"]
+    for n, s in enumerate(inner, start=1):
+        label, _r = _disp_select_label(s["args"]["target"])
+        col = _disp_leaf(s["args"]["color"])
+        lines.append(f"?var{n} = {label}")
+        lines.append(f"coloring(grid, ?var{n}, {col})")
+    lines.append("output_grid = grid")
+    return "\n".join(lines)
+
+
 def _display_grid(body, slot_exprs=None):
     """grid body → Grid 객체 3속성 개별 대입 형태(정직: size/color 는 완성 contents 와
     일관해야 valid). contents leaf 가 `program`(하강 coloring 합성, c–h)이면 g.color 뒤에 빈 줄을
@@ -893,16 +939,19 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         for a, ex, p in ast_ex_pairs)
     steps = [f'<div class="stepcard stepA"><div class="stepttl">Step A · PAIR.program</div>{pair_boxes}</div>']
 
-    # Step A.5 · COMPRESS: post-compress 객체 program 을 pair.program 과 **동일한** _pair_block
-    # (①code+wrapper header ②AST ③viz)로 pair 전부에 렌더 — 픽셀→객체 중간단계를 code+wrapper+시각화로
-    # 눈으로 검증(사용자 요청 2026-07-23). groupings 없는(compress 안 돈) 태스크는 정직하게 카드 생략.
+    # Step A.5 · 픽셀객체화: grouping(묶인 select)을 **각 픽셀=좌표1개 select coloring** 으로 풀어(_pixelize)
+    # pair.program 과 동일한 _pair_block(①변수화 code ②AST ③viz)로 렌더(사용자 2026-07-24 — compress 아님,
+    # 묶음 해제·각 픽셀 개별 특정). grouping 은 anti-unify 용으로 그대로 유지(green). 없으면 카드 생략.
     if groupings and any(groupings):
-        comp_boxes = "".join(
-            f'<div class="innerbox">{_pair_block(f"COMPRESS PAIR {p + 1}", g, ex)}</div>'
-            for (a, ex, p), g in zip(ast_ex_pairs, groupings) if g)
-        if comp_boxes:
+        px_boxes = ""
+        for (a, ex, p), g in zip(ast_ex_pairs, groupings):
+            if not g:
+                continue
+            px = _pixelize(g)
+            px_boxes += f'<div class="innerbox">{_pair_block(f"픽셀객체화 PAIR {p + 1}", px, ex, sol_lines=_display_pixelized(px))}</div>'
+        if px_boxes:
             steps.append('<div class="stepcard stepA5"><div class="stepttl">'
-                         'Step A.5 · COMPRESS (픽셀→객체)</div>' + comp_boxes + '</div>')
+                         'Step A.5 · 픽셀객체화 (각 픽셀 = 좌표1개 select)</div>' + px_boxes + '</div>')
 
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
