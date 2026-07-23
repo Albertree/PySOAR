@@ -1008,22 +1008,29 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
-        # anti-unification 겹침 = 두 PAIR.program 의 grid SVG 를 반투명 겹침(사용자 2026-07-20:
-        # "이 그림을 두 개 겹쳐야하는거"). solid(pair0)+ghost(pair1) 대각선 오프셋. solid 레이어의
-        # 값노드는 _compare_asts(pair0 vs pair1) 로 COMM=녹색·DIFF=빨강 테두리(사용자 2026-07-20).
-        outline = _compare_asts(a0, a1)
-        grid0 = SE.solution_grid(display_source(a0), outline)
-        grid1 = SE.solution_grid(display_source(a1))
+        # (사용자 2026-07-24) 구형 compress 옆박스 제거(pixelize/objectize 로 대체됨). Step B =
+        #   ① COMPARE: anti-unify 가 병합하는 대상(object 객체화 program)을 pair0/pair1 반투명 겹침
+        #      (solid=pair0 + ghost=pair1 대각선), ③ viz 만 사용, COMM=녹색·DIFF=빨강 테두리.
+        #   ② RESULT: anti-unify 결과(병합 골격 solution)를 ①②③ 3표현으로(resolve 전 raw ?var 골격).
+        g0 = groupings[0] if groupings else None
+        g1 = groupings[1] if (groupings and len(groupings) > 1) else None
+        o0 = _objectize(g0) if g0 else a0
+        o1 = _objectize(g1) if g1 else a1
+        outline = _compare_asts(o0, o1)
+        src0 = _display_pixelized(o0) if PA._is_grid_body(o0.get("body") or []) else display_source(o0)
+        src1 = _display_pixelized(o1) if PA._is_grid_body(o1.get("body") or []) else display_source(o1)
+        grid0 = SE.solution_grid(src0, outline)
+        grid1 = SE.solution_grid(src1)
         overlay = (f'<div class="ovl gridovl">{grid0}<div class="ghost">{grid1}</div></div>'
                    f'<div class="legend"><span class="lg comm">COMM(일치) = 녹색 테두리</span>'
                    f'<span class="lg diff">DIFF(어긋남) = 빨강 테두리</span></div>')
-        box = f'<div class="innerbox"><div class="lab">PROGRAM COMPARISON (겹침)</div>{overlay}</div>'
-        # compress 단계(Task 6): pair0 픽셀 program → 4-인접 그룹핑 → 객체 program. groupings[0] 이
-        # 있는 태스크(compress 가 실제로 돈 태스크 — arc_human/move 전체)에서만 표시(정직 — 없는
-        # 태스크에 임의로 지어내지 않는다). PROGRAM COMPARISON 박스 오른쪽에 나란히(.stepBrow).
-        compress_html = _compress_stages(a0, groupings[0], ex0) if (groupings and groupings[0]) else ""
-        steps.append(f'<div class="stepcard stepB"><div class="stepttl">Step B · Anti-unification</div>'
-                     f'<div class="stepBcontent"><div class="stepBrow">{box}{compress_html}</div></div></div>')
+        cmp_box = f'<div class="innerbox"><div class="lab">COMPARE (pair0 △ pair1 겹침)</div>{overlay}</div>'
+        res_box = ("" if solution is None else
+                   '<div class="innerbox">'
+                   + _pair_block("anti-unify 결과 (골격)", solution, ast_ex_pairs[0][1]) + '</div>')
+        steps.append('<div class="stepcard stepB"><div class="stepttl">Step B · Anti-unification</div>'
+                     '<div class="stepBcontent"><div class="stepBrow">'
+                     + cmp_box + res_box + '</div></div></div>')
 
     if solution is not None:
         sol_ex = {"input": test_input} if test_input is not None else ast_ex_pairs[0][1]

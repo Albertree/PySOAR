@@ -20,8 +20,10 @@ class TestSolutionExprIntegration(unittest.TestCase):
         self.assertIn("color(o) != 0", html)
         self.assertIn("bottom_right(obj0)", html)       # BR 앵커
 
-    def test_compress_stages_present_for_move(self):
+    def test_objectify_stages_present_for_move(self):
+        # 구형 compress 옆박스 제거(사용자 2026-07-24) → 픽셀객체화·object 객체화 단계로 대체
         from debugger.reports import program_report as pr
         html = pr.task_section("move000ah", _load("move000ah"))
-        self.assertIn("compress", html.lower())          # compress 단계 라벨 등장
-        self.assertIn("픽셀", html)                       # 픽셀 단계 라벨
+        self.assertIn("픽셀객체화", html)                 # Step A.5
+        self.assertIn("object 객체화", html)              # Step A.6
+        self.assertNotIn("COMPRESS · 픽셀", html)         # 구형 compress 옆박스 사라짐
