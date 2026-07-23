@@ -363,7 +363,15 @@ def _antiunify_display(a0, a1):
     다른 leaf=?pN 변수(가장 안쪽 DIFF 지점을 통째 변수화). dict/list 재귀. 일반화 사다리(그 변수를
     diff→상위→상위로 재표현)는 후속 resolve 의 몫(사용자 2026-07-24). grid body 아니면 a0."""
     if not (a0 and a1 and PA._is_grid_body(a0.get("body") or []) and PA._is_grid_body(a1.get("body") or [])):
-        return a0
+        return None
+
+    def _inner(a):                                          # set_grid_contents 의 nested coloring body
+        parts = {s["call"]: s["args"] for s in a["body"]}
+        c = parts.get("set_grid_contents", {}).get("contents", {})
+        return (c.get("program") or {}).get("body") if isinstance(c, dict) and "program" in c else None
+    b0, b1 = _inner(a0), _inner(a1)
+    if not isinstance(b0, list) or not isinstance(b1, list) or len(b0) != len(b1):
+        return None                                         # coloring 수 불일치(op수 불일치) → 정렬 불가·골격 없음
     ctr = [0]
 
     def _is_leaf(n):
@@ -402,10 +410,12 @@ def _display_pixelized(ast):
     sz = _disp_grid_leaf(parts["set_grid_size"]["size"], "size")
     co = _disp_grid_leaf(parts["set_grid_color"]["color"], "color")
     inner = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
+    if not isinstance(inner, list):                         # 변수화된/비정형 body 방어
+        inner = []
     lines = ["g = input_grid", f"g.size = set_grid_size({sz})",
              f"g.color = set_grid_color({co})", ""]
     vardefs, steps, prev = [], [], "g0"
-    for n, s in enumerate(inner, start=1):
+    for n, s in enumerate([x for x in inner if isinstance(x, dict) and "args" in x], start=1):
         label, _r = _disp_select_label(s["args"]["target"])
         col = _disp_leaf(s["args"]["color"])
         vardefs.append(f"?var{n} = {label}")
