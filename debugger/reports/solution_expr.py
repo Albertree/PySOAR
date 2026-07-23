@@ -685,8 +685,13 @@ def _grid_render(nodes, edges, outlines=None, cw=176, rh=58, bw=146, bh=30):
         sw = 3 if oc else (1.9 if kind == "var" else 1.5)
         o.append(f'<rect x="{x - bw / 2}" y="{y - bh / 2}" width="{bw}" height="{bh}" rx="7" '
                  f'fill="{fl[kind]}" stroke="{stroke}" stroke-width="{sw}"/>')
+        # 라벨이 박스보다 현저히 길면(예: 긴 좌표리스트) …로 절단하고 전체값은 hover tooltip 으로
+        # (박스폭 bw≈146·12.5px monospace → ~19자). (사용자 2026-07-24)
+        full = str(label)
+        disp = full if len(full) <= 20 else full[:19] + "…"
+        tip = f'<title>{html.escape(full)}</title>' if disp != full else ""
         o.append(f'<text x="{x}" y="{y + 1}" text-anchor="middle" dominant-baseline="central" '
-                 f'font-size="12.5" fill="#1a1a1a">{html.escape(str(label))}</text>')
+                 f'font-size="12.5" fill="#1a1a1a">{html.escape(disp)}{tip}</text>')
     o.append("</svg>")
     return "".join(o)
 
