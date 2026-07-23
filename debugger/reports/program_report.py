@@ -333,7 +333,7 @@ def _display_pixelized(ast):
         lines.append(f"?var{n} = {label}")
         lines.append(f"coloring(grid, ?var{n}, {col})")
     lines.append("output_grid = grid")
-    return "\n".join(lines)
+    return lines                                            # ← 리스트 반환(_pair_block sol_lines 계약: '\n'.join 대상)
 
 
 def _display_grid(body, slot_exprs=None):
