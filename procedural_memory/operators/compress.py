@@ -14,8 +14,14 @@ from __future__ import annotations
 
 import json
 from arbor.reasoning.antiunify import parse_program, _components
-from arbor.reasoning.program_ast import (as_source, program, step, cellset, const, expr,
-    grid_program, set_grid_size, set_grid_color, set_grid_contents, contents_program, ops_of_ast)
+from arbor.reasoning.program_ast import (as_source, program, step, const, expr,
+    grid_program, set_grid_size, set_grid_color, set_grid_contents, contents_program, ops_of_ast,
+    coordinate_of, select, coord_in)
+
+
+def _select_target(cells):
+    """(r,c) 목록 → coordinate_of(select("input","pixel",coord_in(...))) target (cellset 동치, P2b)."""
+    return coordinate_of(select("input", "pixel", coord_in("pixel_coordinate", [[r, c] for (r, c) in cells])))
 
 
 def _blobs(cells_colored, W):
@@ -103,8 +109,7 @@ def _blob_body(ops, W, predicate="color"):
     blobs.sort(key=lambda b: b[0][0])
     body = []
     for (cells, col) in blobs:
-        idxs = [r * W + c for (r, c) in cells]
-        body.append(step("coloring", target=cellset(const(idxs)), color=const(col)))
+        body.append(step("coloring", target=_select_target(cells), color=const(col)))
     return body if body else None
 
 
@@ -199,17 +204,14 @@ def _object_change_program(g0, g1, W):
     body = []
     for cells0, cells1, col0, col1, kind in changes:
         if kind == "recolor":                                # 제자리 재채색 = 객체 셀 → 새 색
-            body.append(step("coloring", target=cellset(const([r * W + c for r, c in cells0])),
-                             color=const(col1)))
+            body.append(step("coloring", target=_select_target(cells0), color=const(col1)))
             continue
         set1 = set(cells1)                                   # move: erase 후 paint(색까지 반영)
         vac = [(r, c) for (r, c) in cells0 if (r, c) not in set1]
         if vac:
             vr, vc = vac[0]
-            body.append(step("coloring", target=cellset(const([r * W + c for r, c in cells0])),
-                             color=const(g1[vr][vc])))
-        body.append(step("coloring", target=cellset(const([r * W + c for r, c in cells1])),
-                         color=const(col1)))
+            body.append(step("coloring", target=_select_target(cells0), color=const(g1[vr][vc])))
+        body.append(step("coloring", target=_select_target(cells1), color=const(col1)))
     gp = grid_program(expr("size(input_grid)"), expr("color(input_grid)"), contents_program(body))
     return json.dumps(gp)
 

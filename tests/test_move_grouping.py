@@ -48,7 +48,7 @@ class TestCompressGridWrapped(unittest.TestCase):
         parts = {s["call"]: s["args"] for s in out["body"]}
         self.assertIn("set_grid_size", parts)                 # 래퍼 유지
         blob_body = parts["set_grid_contents"]["contents"]["program"]["body"]
-        self.assertTrue(all(s["args"]["target"]["ref"] == "cellset" for s in blob_body))
+        self.assertTrue(all("coordinate_of" in s["args"]["target"] for s in blob_body))
         self.assertEqual(len(blob_body), 2)                   # 2 덩어리(나간/들어온)
 
     def test_op_compress_reaches_grid_branch_live(self):
@@ -77,7 +77,7 @@ class TestCompressGridWrapped(unittest.TestCase):
         out = json.loads(next(v for (i, a, v) in wm if i == ppid and a == "grouping"))
         parts = {s["call"]: s["args"] for s in out["body"]}
         blob_body = parts["set_grid_contents"]["contents"]["program"]["body"]
-        self.assertTrue(all(s["args"]["target"]["ref"] == "cellset" for s in blob_body))
+        self.assertTrue(all("coordinate_of" in s["args"]["target"] for s in blob_body))
         self.assertEqual(len(blob_body), 2)                   # grid>blob 로 압축됨 = 분기 도달
         self.assertEqual(ag.kg["compress"]["n_pairs"], 1)     # 이 pair 가 실제로 재작성됨
 
@@ -88,7 +88,7 @@ class TestCompressGridWrapped(unittest.TestCase):
         out = json.loads(CG._blob_program(json.dumps(flat), 5))
         calls = [s["call"] for s in out["body"]]
         self.assertNotIn("set_grid_size", calls)              # 래퍼 없음(flat 유지)
-        self.assertTrue(all(s["args"]["target"]["ref"] == "cellset" for s in out["body"]))
+        self.assertTrue(all("coordinate_of" in s["args"]["target"] for s in out["body"]))
         self.assertEqual(len(out["body"]), 2)                 # 2 덩어리
 
 
@@ -161,9 +161,10 @@ class TestObjectMoveProgram(unittest.TestCase):
         prog = CG._object_move_program(g0, g1, 4)
         self.assertIsNotNone(prog)
         inner = json.loads(prog)["body"][2]["args"]["contents"]["program"]["body"]
-        cellsets = [sorted(s["args"]["target"]["cells"]["const"]) for s in inner]
-        self.assertIn([0, 1], cellsets)                       # 전체 source 객체 (부분 [0] 아님)
-        self.assertIn([1, 2], cellsets)                       # 전체 dest 객체 (부분 [2] 아님)
+        cellsets = [sorted(tuple(rc) for rc in s["args"]["target"]["coordinate_of"]["select"]["pred"]["in"]["values"])
+                    for s in inner]
+        self.assertIn([(0, 0), (0, 1)], cellsets)             # 전체 source 객체 (부분 [(0,0)] 아님)
+        self.assertIn([(0, 1), (0, 2)], cellsets)             # 전체 dest 객체 (부분 [(0,2)] 아님)
 
 
 class TestPropertySelectors(unittest.TestCase):

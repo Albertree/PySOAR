@@ -32,26 +32,31 @@ def _flat_coord(cells_colors):
     return PA.program(body)
 
 
-class TestBlobProgramFlatCoord(unittest.TestCase):
-    """`_blob_program`의 flat 분기가 coord 리터럴 program 도 cellset blob 으로 묶는지."""
+def _select_coords(tgt):
+    """coordinate_of(select(...coord_in(values))) target → 정렬된 (r,c) 튜플 리스트 (P2b select-shape)."""
+    return sorted(tuple(rc) for rc in tgt["coordinate_of"]["select"]["pred"]["in"]["values"])
 
-    def test_flat_coord_program_produces_cellset_blob(self):
+
+class TestBlobProgramFlatCoord(unittest.TestCase):
+    """`_blob_program`의 flat 분기가 coord 리터럴 program 도 select blob 으로 묶는지(P2b: cellset 폐기)."""
+
+    def test_flat_coord_program_produces_select_blob(self):
         # 3칸 재채색, 전부 4-인접(같은 행) → 한 덩어리
         ast = _flat_coord([((0, 0), 5), ((0, 1), 5), ((0, 2), 5)])
         out_json = CG._blob_program(json.dumps(ast), W=3)
         self.assertIsNotNone(out_json, "flat coord program 이 blobify 되지 않음(coord-blind 회귀)")
         out = json.loads(out_json)
-        self.assertTrue(all(s["args"]["target"]["ref"] == "cellset" for s in out["body"]))
+        self.assertTrue(all("coordinate_of" in s["args"]["target"] for s in out["body"]))
         self.assertEqual(len(out["body"]), 1)                       # 3셀이 4-인접 한 덩어리로
-        blob_cells = sorted(out["body"][0]["args"]["target"]["cells"]["const"])
-        self.assertEqual(blob_cells, [0, 1, 2])                     # (0,0),(0,1),(0,2) → idx 0,1,2 (W=3)
+        blob_cells = _select_coords(out["body"][0]["args"]["target"])
+        self.assertEqual(blob_cells, [(0, 0), (0, 1), (0, 2)])
 
     def test_flat_coord_two_disjoint_blobs(self):
         # 인접하지 않은 두 좌표 → 별개 덩어리 2개(연결성=1차 술어 확인)
         ast = _flat_coord([((0, 0), 5), ((2, 2), 7)])
         out = json.loads(CG._blob_program(json.dumps(ast), W=3))
         self.assertEqual(len(out["body"]), 2)
-        self.assertTrue(all(s["args"]["target"]["ref"] == "cellset" for s in out["body"]))
+        self.assertTrue(all("coordinate_of" in s["args"]["target"] for s in out["body"]))
 
 
 class TestGeneralizeCoordCompressDecision(unittest.TestCase):
