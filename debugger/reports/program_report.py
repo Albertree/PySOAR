@@ -318,6 +318,34 @@ def _pixelize(ast):
     return PA.program(body)
 
 
+def _objectize(ast):
+    """grid-body grouping(객체당 좌표묶음) → **object 객체화** AST: 각 coloring 의 좌표묶음을
+    그 object 의 **coordinate property** 로 지목 — select(input, object, coordinate == [[r,c],...]).
+    픽셀들이 한 ARCKG object 에 공통 소속임(그 좌표들이 object.coordinate)을 WM 정보로 표현(사용자
+    2026-07-24). 픽셀(coord_in) → object(eq coordinate). grid body 아니면 그대로."""
+    if not ast or not PA._is_grid_body(ast.get("body") or []):
+        return ast
+    parts = {s["call"]: s["args"] for s in ast["body"]}
+    cleaf = parts["set_grid_contents"]["contents"]
+    inner = (cleaf.get("program") or {}).get("body") if "program" in cleaf else None
+    if not inner:
+        return ast
+    new_inner = []
+    for s in inner:
+        tgt = s["args"]["target"]; col = s["args"]["color"]
+        sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
+        vals = (sel or {}).get("pred", {}).get("in", {}).get("values") if sel else None
+        if sel and isinstance(vals, list):                      # 좌표묶음 → object.coordinate == [그 좌표들]
+            t = PA.coordinate_of(PA.select("input", "object", PA.eq("coordinate", vals)))
+            new_inner.append(PA.step("coloring", target=t, color=col))
+        else:
+            new_inner.append(s)
+    body = [PA.set_grid_size(parts["set_grid_size"]["size"]),
+            PA.set_grid_color(parts["set_grid_color"]["color"]),
+            PA.set_grid_contents(PA.contents_program(new_inner))]
+    return PA.program(body)
+
+
 def _display_pixelized(ast):
     """픽셀객체화 program → **A(display_grid) 와 같은 프레임**의 변수화 소스: g.size/g.color 헤더 →
     긴 coordinate_of(select(…)) 를 ?varN 로 hoist(가로 길이↓) → g0=g.contents, gN=coloring(g{N-1},
@@ -963,6 +991,20 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
             steps.append('<div class="stepcard stepA5"><div class="stepttl">'
                          'Step A.5 · 픽셀객체화 (각 픽셀 = 좌표1개 select)</div>' + px_boxes + '</div>')
 
+    # Step A.6 · object 객체화: 픽셀객체화의 픽셀들을 **한 ARCKG object 로 묶어** 그 object 의 coordinate
+    # property 로 지목 — select(input, object, coordinate == [[r,c],...]) (사용자 2026-07-24 — WM 소속으로
+    # 좌표들을 object 단위로). grouping 은 anti-unify 용으로 유지(green). 없으면 카드 생략.
+    if groupings and any(groupings):
+        obj_boxes = ""
+        for (a, ex, p), g in zip(ast_ex_pairs, groupings):
+            if not g:
+                continue
+            ob = _objectize(g)
+            obj_boxes += f'<div class="innerbox">{_pair_block(f"object객체화 PAIR {p + 1}", ob, ex, sol_lines=_display_pixelized(ob))}</div>'
+        if obj_boxes:
+            steps.append('<div class="stepcard stepA6"><div class="stepttl">'
+                         'Step A.6 · object 객체화 (좌표들 → object.coordinate)</div>' + obj_boxes + '</div>')
+
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
@@ -1204,12 +1246,14 @@ body.hidev1 .view.v1,body.hidev2 .view.v2,body.hidev3 .view.v3{display:none}
 /* Step A/C(각 ①②③ views 3열 또는 PAIR 세로 stack)는 Step B(overlay 하나, 컨텐츠가 원래 좁음)보다
    여분 폭을 더 받아야 같은 줄에서 ①②③ 이 세로로 다 눌리지 않고 최대한 나란히 남는다(flex-grow 만
    다르게 — 기본 배분이면 Step B 도 필요 이상으로 넓어지고 A/C 는 좁아져 뷰가 1열로 눌린다). */
-.stepA,.stepA5,.stepC{flex-grow:3}
+.stepA,.stepA5,.stepA6,.stepC{flex-grow:3}
 .stepB{flex-grow:1}
 .stepA{background:#1a2036;border:1px solid #3a4a78}
 .stepA .stepttl{color:#9fb4e0}
 .stepA5{background:#2a2410;border:1px solid #6b5a2a}
 .stepA5 .stepttl{color:#e0c98f}
+.stepA6{background:#2a1420;border:1px solid #6b2a4a}
+.stepA6 .stepttl{color:#e08fb4}
 .stepB{background:#241a36;border:1px solid #4c3a78}
 .stepB .stepttl{color:#c8a8f0}
 .stepBcontent{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;align-items:center}
