@@ -337,11 +337,13 @@ def display_source(ast, slot_exprs=None):
     return _display_pixel(body, slot_exprs)
 
 
-def _runner_payload(tid, asts, pairs, task):
+def _runner_payload(tid, asts, pairs, task, groupings=None):
     """각 example program → 러너용 {tid, pair, body, input, expected}.
     expected = 실제 program_ast.execute(ast, input) (JS 미러 대조 기준 = 정직성 가드).
     pairs[k] = asts[k] 가 실제로 속한 train index(중간 pair 누락 시 리스트 위치 ≠ train index 이므로
-    반드시 carry 된 실 index 로 짝짓는다 — T5 index-carry 가드)."""
+    반드시 carry 된 실 index 로 짝짓는다 — T5 index-carry 가드).
+    groupings(선택) = compress 결과 객체 program(있으면) — pixel program 과 동일하게 실행형 wrapper 로
+    러너에 실어 parity 검증까지 받게 한다(kind='compress' 로 라벨 구분, pair.program 과 같은 대우)."""
     items = []
     for ast, p in zip(asts, pairs):
         ex = task["train"][p]
@@ -350,6 +352,16 @@ def _runner_payload(tid, asts, pairs, task):
             "body": display_source(ast),
             "input": ex["input"],
             "expected": PA.execute(ast, ex["input"]),
+        })
+    for g, p in zip(groupings or [], pairs):
+        if not g:
+            continue                                   # 없으면 정직하게 생략(compress 안 돈 태스크)
+        ex = task["train"][p]
+        items.append({
+            "tid": tid, "pair": p, "kind": "compress",
+            "body": display_source(g),
+            "input": ex["input"],
+            "expected": PA.execute(g, ex["input"]),
         })
     return items
 
@@ -860,6 +872,17 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         for a, ex, p in ast_ex_pairs)
     steps = [f'<div class="stepcard stepA"><div class="stepttl">Step A · PAIR.program</div>{pair_boxes}</div>']
 
+    # Step A.5 · COMPRESS: post-compress 객체 program 을 pair.program 과 **동일한** _pair_block
+    # (①code+wrapper header ②AST ③viz)로 pair 전부에 렌더 — 픽셀→객체 중간단계를 code+wrapper+시각화로
+    # 눈으로 검증(사용자 요청 2026-07-23). groupings 없는(compress 안 돈) 태스크는 정직하게 카드 생략.
+    if groupings and any(groupings):
+        comp_boxes = "".join(
+            f'<div class="innerbox">{_pair_block(f"COMPRESS PAIR {p + 1}", g, ex)}</div>'
+            for (a, ex, p), g in zip(ast_ex_pairs, groupings) if g)
+        if comp_boxes:
+            steps.append('<div class="stepcard stepA5"><div class="stepttl">'
+                         'Step A.5 · COMPRESS (픽셀→객체)</div>' + comp_boxes + '</div>')
+
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
@@ -1092,10 +1115,12 @@ CSS = """
 /* Step A/C(각 ①②③ views 3열 또는 PAIR 세로 stack)는 Step B(overlay 하나, 컨텐츠가 원래 좁음)보다
    여분 폭을 더 받아야 같은 줄에서 ①②③ 이 세로로 다 눌리지 않고 최대한 나란히 남는다(flex-grow 만
    다르게 — 기본 배분이면 Step B 도 필요 이상으로 넓어지고 A/C 는 좁아져 뷰가 1열로 눌린다). */
-.stepA,.stepC{flex-grow:3}
+.stepA,.stepA5,.stepC{flex-grow:3}
 .stepB{flex-grow:1}
 .stepA{background:#1a2036;border:1px solid #3a4a78}
 .stepA .stepttl{color:#9fb4e0}
+.stepA5{background:#2a2410;border:1px solid #6b5a2a}
+.stepA5 .stepttl{color:#e0c98f}
 .stepB{background:#241a36;border:1px solid #4c3a78}
 .stepB .stepttl{color:#c8a8f0}
 .stepBcontent{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;align-items:center}
@@ -1291,7 +1316,7 @@ function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
 (function(){
   var sel=document.getElementById("rsel");
   RUNNER_DATA.forEach(function(d,i){var o=document.createElement("option");
-    o.value=i; o.text=d.tid+" · pair "+(d.pair+1); sel.appendChild(o);});
+    o.value=i; o.text=d.tid+" · pair "+(d.pair+1)+(d.kind?" ["+d.kind+"]":""); sel.appendChild(o);});
   function load(){var d=RUNNER_DATA[sel.value]; document.getElementById("rcode").value=d.body;
     document.getElementById("regrid").innerHTML=gridHTML(d.expected); run();}   // load 후 즉시 실행
   function run(){var d=RUNNER_DATA[sel.value]; var err=document.getElementById("rerr");
@@ -1345,7 +1370,7 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
     for t in tids:
         asts, pairs, solution, attempts, slot_exprs, slot_vals, groupings = _collect(t, tasks[t])
         solved[t] = bool(attempts) and any(a["correct"] for a in attempts)   # 정답 attempt 존재 = 풀림(task_section:606 과 동일)
-        runner_data.extend(_runner_payload(t, asts, pairs, tasks[t]))
+        runner_data.extend(_runner_payload(t, asts, pairs, tasks[t], groupings))
         secs_list.append(task_section(t, tasks[t], precomputed=(
             asts, pairs, solution, attempts, slot_exprs, slot_vals, groupings)))
     secs = "".join(secs_list)
