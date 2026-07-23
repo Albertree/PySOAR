@@ -1147,7 +1147,8 @@ CSS = """
 .view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:0 0 auto}
 /* ②③ 동일 높이: JS mvh() 가 ②(.v2) 박스 높이를 ③(.viz.v3) viz 박스에 맞추고, ② AST 가 더 길면
    내부 .astree 를 세로 스크롤(대개 ② 가 ③ 보다 길어짐, 사용자 2026-07-24). box-sizing 으로 padding 포함. */
-.view.v2{box-sizing:border-box}.view.v2>.astree{overflow-y:auto}
+.view.v1,.view.v2{box-sizing:border-box}.view.v2>.astree{overflow-y:auto}
+/* ① program 박스: 한 스텝(A/A.5/A.6) 안 stacked pair 들의 가로길이를 JS mvw() 가 최대폭으로 통일 */
 /* ①②③ 토글: 상단 버튼이 body.hidevN 을 켜면 해당 뷰 숨김 */
 .viewtoggle{margin-left:14px;display:inline-flex;gap:6px;vertical-align:middle}
 .viewtoggle button{font:600 11px ui-monospace,monospace;color:#8fb4e0;background:#141a26;
@@ -1520,13 +1521,19 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
           "if(getComputedStyle(v2).display=='none'||getComputedStyle(v3).display=='none')return;"
           "var h=v3.offsetHeight;if(h>0){v2.style.height=h+'px';"
           "if(t)t.style.maxHeight=(h-30)+'px';}});}"
+          "function mvw(){document.querySelectorAll('.stepcard').forEach(function(sc){"
+          "var vs=sc.querySelectorAll('.view.v1');if(vs.length<2)return;var mx=0;"
+          "vs.forEach(function(v){v.style.width='';});"
+          "vs.forEach(function(v){if(v.offsetWidth>mx)mx=v.offsetWidth;});"
+          "if(mx>0)vs.forEach(function(v){v.style.width=mx+'px';});});}"
+          "function upd(){mvw();mvh();}"
           "function sh(){var h=location.hash.slice(1);"
           "if(!document.getElementById(h))h=TIDS[0];"
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(s.id===h)?'':'none'});"
-          "document.querySelectorAll('.tabs a').forEach(function(a){a.classList.toggle('on',a.dataset.t===h)});mvh();}"
+          "document.querySelectorAll('.tabs a').forEach(function(a){a.classList.toggle('on',a.dataset.t===h)});upd();}"
           "function tv(b){b.classList.toggle('on');"
-          "document.body.classList.toggle('hidev'+b.dataset.v,!b.classList.contains('on'));mvh();}"
-          "addEventListener('hashchange',sh);addEventListener('resize',mvh);sh();</script>") % json.dumps(tids)
+          "document.body.classList.toggle('hidev'+b.dataset.v,!b.classList.contains('on'));upd();}"
+          "addEventListener('hashchange',sh);addEventListener('resize',upd);sh();</script>") % json.dumps(tids)
     import datetime as _dt
     _built = _dt.datetime.now().strftime("%m-%d %H:%M:%S")
     doc = (f'<!doctype html><meta charset="utf-8"><title>program 뷰어</title><style>{_EV_CSS}{CSS}</style>'
