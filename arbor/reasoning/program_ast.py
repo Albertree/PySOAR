@@ -27,6 +27,11 @@ def eq(accessor, value):
     return {"eq": {"accessor": accessor, "value": value}}
 
 
+def coord_in(accessor, values):
+    """membership 술어: accessor(node) 의 값이 values 집합에 속함 (eq 의 집합판; coord 리스트 등)."""
+    return {"in": {"accessor": accessor, "values": values}}
+
+
 def select(grid, level, pred):
     """grid(노드참조 문자열 또는 'input' 마커) 아래 level 요소 중 pred 맞는 것.
     실행 시 raw grid 로부터 ARCKG 노드를 만들어 pixels_of/objects_of + pred 로 해소."""
@@ -189,7 +194,11 @@ def _sel_src(target):
     sel = inner.get("select")
     if sel is None:
         return None
-    p = sel["pred"]["eq"]
+    pred = sel["pred"]
+    if "in" in pred:
+        p = pred["in"]
+        return f"coordinate_of(select({sel['grid']}, {sel['level']}, {p['accessor']}∈{p['values']}))"
+    p = pred["eq"]
     return f"coordinate_of(select({sel['grid']}, {sel['level']}, {p['accessor']}=={p['value']}))"
 
 
@@ -305,15 +314,26 @@ def _norm_coord(v):
 
 
 def _compile_pred(pred):
-    """eq 술어 노드 → callable(node)->bool. accessor = property DSL 함수명."""
+    """eq·in 술어 노드 → callable(node)->bool. accessor = property DSL 함수명.
+    eq = 단일값 일치, in = values 집합 소속(eq 의 집합판; 다중 셀을 한 select 로 고르기 위함)."""
     from procedural_memory.dsl import property as _prop   # vendored property DSL
-    e = pred["eq"]
-    accessor = getattr(_prop, e["accessor"])
-    want = _norm_coord(e["value"])
+    if "eq" in pred:
+        e = pred["eq"]
+        accessor = getattr(_prop, e["accessor"])
+        want = _norm_coord(e["value"])
 
-    def ok(node):
-        return _norm_coord(accessor(node)) == want
-    return ok
+        def ok(node):
+            return _norm_coord(accessor(node)) == want
+        return ok
+    if "in" in pred:
+        e = pred["in"]
+        accessor = getattr(_prop, e["accessor"])
+        wants = {_norm_coord(v) for v in e["values"]}
+
+        def ok_in(node):
+            return _norm_coord(accessor(node)) in wants
+        return ok_in
+    raise ValueError(f"bad pred {pred}")
 
 
 def _resolve_select_coords(target, grid_in):
