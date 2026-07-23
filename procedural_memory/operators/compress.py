@@ -21,7 +21,7 @@ from arbor.reasoning.program_ast import (as_source, program, step, const, expr,
 
 def _select_target(cells):
     """(r,c) 목록 → coordinate_of(select("input","pixel",coord_in(...))) target (cellset 동치, P2b)."""
-    return coordinate_of(select("input", "pixel", coord_in("pixel_coordinate", [[r, c] for (r, c) in cells])))
+    return coordinate_of(select("input", "pixel", coord_in("coordinate", [[r, c] for (r, c) in cells])))
 
 
 def _blobs(cells_colored, W):

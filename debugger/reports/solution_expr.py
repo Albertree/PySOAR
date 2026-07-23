@@ -619,9 +619,18 @@ def _grid_layout(defs, setg, colorings, compare=None):
             key = "size" if label.endswith("size") else ("color" if label.endswith("color") else None)
             if key and compare.get(key):
                 outlines[rid] = compare[key]
+    # (사용자 2026-07-24) spine 이 set_grid_color 에서 두 번 꺾여 첫 coloring 으로 들어가던 것을 제거 —
+    # spine 은 color → set_grid_contents 로 **일직선**(col 0)으로 떨어지고, coloring 들은 색과 분리된
+    # 자체 체인(coloring1→coloring2→…)으로 옆(col 1)에 두고 마지막만 contents 에 꽂는다. 첫 coloring 은
+    # 다음 coloring 으로 이어지므로 색에서 들어오는 edge 가 없어도 고립되지 않는다.
+    color_node = prev
+    chain_prev = None
     for i, args in enumerate(colorings):
         h = max([hc(a) for a in args], default=0); row += h + 1
-        opid = N("coloring", row, 1, "op"); edges.append((prev, opid, "spine")); prev = opid
+        opid = N("coloring", row, 1, "op")
+        if chain_prev is not None:
+            edges.append((chain_prev, opid, "spine"))     # coloring 체인 내부(color 와 분리)
+        chain_prev = opid
         c = 2; p2 = opid
         for j, a in enumerate(args):
             w, rid = child(a, row, c); edges.append((p2, rid, "h")); p2 = rid; c += w
@@ -631,8 +640,9 @@ def _grid_layout(defs, setg, colorings, compare=None):
                     outlines[rid] = cls
     row += 1
     scont = N("set_grid_contents", row, 0, "op")
-    result = N("result", row, 1, "end")
-    edges.append((prev, result, "spine")); edges.append((scont, result, "h"))
+    edges.append((color_node, scont, "spine"))            # ★ 직선 spine: set_grid_color → set_grid_contents
+    if chain_prev is not None:
+        edges.append((chain_prev, scont, "h"))            # coloring 체인 마지막 → contents 로 꽂힘
     row += 1
     outg = N("output_grid", row, 0, "end"); edges.append((scont, outg, "spine"))
     if "obj0" in defs:                                    # 중복노드 obj0 의 정의를 우측 상단에 따로

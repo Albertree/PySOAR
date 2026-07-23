@@ -317,13 +317,23 @@ def _norm_coord(v):
     return v
 
 
-def _compile_pred(pred):
-    """eq·in 술어 노드 → callable(node)->bool. accessor = property DSL 함수명.
-    eq = 단일값 일치, in = values 집합 소속(eq 의 집합판; 다중 셀을 한 select 로 고르기 위함)."""
+def _accessor_fn(name):
+    """accessor 이름 → callable(node)->value. property DSL 함수명이면 그 함수, 아니면
+    node.to_json()[name](= property KEY). (사용자 2026-07-24: accessor 를 **검색가능한 property key**
+    이름으로 통일 — pixel 좌표는 함수명 pixel_coordinate 가 아니라 key 'coordinate'.)"""
     from procedural_memory.dsl import property as _prop   # vendored property DSL
+    fn = getattr(_prop, name, None)
+    if fn is not None:
+        return fn
+    return lambda node: node.to_json().get(name)
+
+
+def _compile_pred(pred):
+    """eq·in 술어 노드 → callable(node)->bool. accessor = property key(또는 DSL 함수명).
+    eq = 단일값 일치, in = values 집합 소속(eq 의 집합판; 다중 셀을 한 select 로 고르기 위함)."""
     if "eq" in pred:
         e = pred["eq"]
-        accessor = getattr(_prop, e["accessor"])
+        accessor = _accessor_fn(e["accessor"])
         want = _norm_coord(e["value"])
 
         def ok(node):
@@ -331,7 +341,7 @@ def _compile_pred(pred):
         return ok
     if "in" in pred:
         e = pred["in"]
-        accessor = getattr(_prop, e["accessor"])
+        accessor = _accessor_fn(e["accessor"])
         wants = {_norm_coord(v) for v in e["values"]}
 
         def ok_in(node):
@@ -654,7 +664,7 @@ def _cellset_target(sorted_cells, var_name):
 def _select_target(sorted_cells, var_name):
     """select 스켈레톤 target: COMM → coord_in const 좌표목록, DIFF → coord_in var. cellset 과 동치(좌표)."""
     cells_leaf = const([list(c) for c in sorted_cells]) if sorted_cells is not None else var(var_name)
-    return coordinate_of(select("input", "pixel", coord_in("pixel_coordinate", cells_leaf)))
+    return coordinate_of(select("input", "pixel", coord_in("coordinate", cells_leaf)))
 
 
 def _antiunify_ast_group(asts, force_slots, make_target):

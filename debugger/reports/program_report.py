@@ -308,7 +308,7 @@ def _pixelize(ast):
         vals = (sel or {}).get("pred", {}).get("in", {}).get("values") if sel else None
         if sel and isinstance(vals, list):                      # 좌표묶음 → 좌표1개씩 eq-select
             for c in vals:
-                t = PA.coordinate_of(PA.select(sel["grid"], sel["level"], PA.eq("pixel_coordinate", c)))
+                t = PA.coordinate_of(PA.select(sel["grid"], sel["level"], PA.eq("coordinate", c)))
                 new_inner.append(PA.step("coloring", target=t, color=col))
         else:
             new_inner.append(s)                                 # 이미 단일/var/기타는 그대로
