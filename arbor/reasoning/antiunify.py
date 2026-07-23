@@ -321,7 +321,11 @@ def _resolve_cellset(vals, train, comps, sels, test_comps=None):
     dests = []
     for i in range(N):
         W = len(train[i]["input"][0])
-        dests.append(sorted((idx // W, idx % W) for idx in vals[i]))
+        # vals[i] 원소: 픽셀 인덱스(int, cellset-body) 또는 (r,c) 좌표쌍(list/tuple, select-body).
+        # 후자는 이미 좌표라 idx//W 변환을 건너뛴다. 이후 로직(앵커·모양매칭·좌표문법)은 전부 (r,c)
+        # 공간이라 두 경로가 동일한 dests 를 얻어 산출 fn(=픽셀 인덱스)이 동치가 된다.
+        d = [(v[0], v[1]) if isinstance(v, (list, tuple)) else (v // W, v % W) for v in vals[i]]
+        dests.append(sorted(d))
     dest_anchor = [(min(r for r, _ in d), min(c for _, c in d)) for d in dests]  # (dr0, dc0) per pair
     keyed, tried = [], []
     for si, (sname, sfn) in enumerate(sels):

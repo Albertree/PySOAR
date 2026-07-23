@@ -340,6 +340,20 @@ def _compile_pred(pred):
     raise ValueError(f"bad pred {pred}")
 
 
+def _select_values_var(target):
+    """coordinate_of(select(...coord_in(var))) 의 var 이름 반환. values 가 var 슬롯이 아니면 None.
+    (const 좌표목록은 _resolve_select_coords 로, var 는 choice[var] 로 해소 — cellset-var 와 대칭.)"""
+    if "coordinate_of" not in target:
+        return None
+    sel = target["coordinate_of"].get("select")
+    if not sel:
+        return None
+    vals = ((sel.get("pred") or {}).get("in") or {}).get("values")
+    if isinstance(vals, dict) and "var" in vals:
+        return vals["var"]
+    return None
+
+
 def _resolve_select_coords(target, grid_in):
     """coordinate_of(select("input", level, pred)) → [(r,c)...] (정렬). select-target 아니면 None."""
     if "coordinate_of" not in target:
@@ -379,6 +393,15 @@ def _execute_pixel_body(body, grid_in, choice):
     for s in body:
         tgt = s["args"]["target"]
         col = _leaf_value(s["args"]["color"], grid_in, choice)
+        svar = _select_values_var(tgt)                       # select 의 coord_in.values 가 var 슬롯이면
+        if svar is not None:                                 # choice[var] 로 셀을 해소(cellset-var 와 대칭)
+            fn = (choice or {}).get(svar)
+            cells = fn(grid_in) if fn else None              # resolve 산출 = 픽셀 인덱스(cellset-var 동치)
+            if cells is not None and col is not None:
+                for (r, c) in sorted((ix // W, ix % W) for ix in cells):
+                    if 0 <= r < H and 0 <= c < W:
+                        grid[r][c] = col
+            continue
         coords = _resolve_select_coords(tgt, grid_in)
         if coords is not None:
             if col is not None:
