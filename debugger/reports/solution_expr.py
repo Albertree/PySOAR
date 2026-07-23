@@ -663,7 +663,7 @@ def _grid_render(nodes, edges, outlines=None, cw=176, rh=58, bw=146, bh=30):
     Hgt = max(p[1] for p in pos.values()) + bh + 20
     fl = {"var": "#e7dcef", "fn": "#f2f6fb", "lit": "#fbfaf6", "op": "#ffffff", "end": "#eeeeee"}
     sk = {"var": "#8a6ea6", "fn": "#3d6ea5", "lit": "#8a8574", "op": "#2b2b2b", "end": "#555555"}
-    ocol = {"comm": "#3fae6a", "diff": "#e23b3b"}
+    ocol = {"comm": "#3fae6a", "diff": "#e23b3b", "orange": "#e8912a"}   # orange=하위에 DIFF 있는 분기점
     o = [f'<svg viewBox="0 0 {W} {Hgt}" width="{W}" height="{Hgt}" '
          f'xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Menlo,monospace">',
          f'<rect x="0" y="0" width="{W}" height="{Hgt}" rx="12" fill="#f7f6f3"/>']
@@ -728,6 +728,27 @@ def solution_grid_compare(lines0, lines1):
         for (i, label, r, c, _k) in n0:
             other = lbl1.get((r, c))
             outlines[i] = "comm" if (other is not None and other == str(label)) else "diff"
+        # 주황(사용자 2026-07-24): comm 이지만 자기 subtree(spine=op시퀀스 제외, containment 만) 하위에
+        # diff 가 있는 분기점 → "여기 아래에 DIFF 있음". 일반화 사다리(diff→상위→상위)의 후보 경로.
+        adj = {}
+        for a, b, t in e0:
+            if t != "spine":
+                adj.setdefault(a, []).append(b)
+        memo = {}
+
+        def _reaches_diff(x):
+            if x in memo:
+                return memo[x]
+            memo[x] = False
+            for y in adj.get(x, []):
+                if outlines.get(y) == "diff" or _reaches_diff(y):
+                    memo[x] = True
+                    break
+            return memo[x]
+
+        for (i, _l, _r, _c, _k) in n0:
+            if outlines.get(i) == "comm" and _reaches_diff(i):
+                outlines[i] = "orange"
         return _grid_render(n0, e0, outlines)
     except Exception:                                     # noqa: BLE001 — 표시용
         try:

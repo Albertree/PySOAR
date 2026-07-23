@@ -287,7 +287,8 @@ def _disp_select_label(tgt, slot_exprs=None):
     if slot_exprs and var in slot_exprs:
         return SE.graft_expr(slot_exprs[var], slot_exprs), True
     op = "∈" if "in" in sel["pred"] else "=="
-    return f'coordinate_of(select({sel["grid"]}, {sel["level"]}, {inp.get("accessor")} {op} {vals}))', False
+    valstr = var if var else vals                         # anti-unify DIFF slot 은 ?pN 변수로
+    return f'coordinate_of(select({sel["grid"]}, {sel["level"]}, {inp.get("accessor")} {op} {valstr}))', False
 
 
 def _concrete_size_color(ex):
@@ -355,6 +356,38 @@ def _objectize(ast, ex=None):
     body = [PA.set_grid_size(sz), PA.set_grid_color(co),
             PA.set_grid_contents(PA.contents_program(new_inner))]
     return PA.program(body)
+
+
+def _antiunify_display(a0, a1):
+    """두 (같은 구조) object 객체화 program 을 병합해 **anti-unify 골격**: 동일 leaf=COMM 상수 유지,
+    다른 leaf=?pN 변수(가장 안쪽 DIFF 지점을 통째 변수화). dict/list 재귀. 일반화 사다리(그 변수를
+    diff→상위→상위로 재표현)는 후속 resolve 의 몫(사용자 2026-07-24). grid body 아니면 a0."""
+    if not (a0 and a1 and PA._is_grid_body(a0.get("body") or []) and PA._is_grid_body(a1.get("body") or [])):
+        return a0
+    ctr = [0]
+
+    def _is_leaf(n):
+        # 값 잎(const/expr/var/pending dict, 좌표리스트·스칼라 등 값) = 통째 원자. body 처럼 step(call)
+        # 리스트만 구조로 재귀. (size/color/좌표값을 height·width·좌표 단위로 쪼개지 않게 — 사용자 2026-07-24)
+        if isinstance(n, dict):
+            return any(k in n for k in ("const", "expr", "var", "pending"))
+        if isinstance(n, list):
+            return not (n and isinstance(n[0], dict) and "call" in n[0])
+        return True
+
+    def _m(n0, n1):
+        if json.dumps(n0, sort_keys=True) == json.dumps(n1, sort_keys=True):
+            return n0                                       # COMM
+        if _is_leaf(n0) or _is_leaf(n1):                    # 값 DIFF → 그 값 통째로 ?p 변수
+            ctr[0] += 1
+            return {"var": f"?p{ctr[0]}"}
+        if isinstance(n0, dict) and isinstance(n1, dict) and set(n0) == set(n1):
+            return {k: _m(n0[k], n1[k]) for k in n0}
+        if isinstance(n0, list) and isinstance(n1, list) and len(n0) == len(n1):
+            return [_m(x, y) for x, y in zip(n0, n1)]
+        ctr[0] += 1
+        return {"var": f"?p{ctr[0]}"}                       # 구조 불일치 → 변수
+    return _m(a0, a1)
 
 
 def _display_pixelized(ast):
@@ -1016,36 +1049,41 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
             steps.append('<div class="stepcard stepA6"><div class="stepttl">'
                          'Step A.6 · object 객체화 (좌표들 → object.coordinate)</div>' + obj_boxes + '</div>')
 
+    anti_skel = None
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
-        # (사용자 2026-07-24) 구형 compress 옆박스·anti-unify 결과박스(=TASK.solution 과 동일) 제거.
-        # Step B = COMPARE 만: anti-unify 병합대상(object 객체화 program)을 pair0/pair1 반투명 겹침
-        # (solid=pair0 + ghost=pair1 대각선), ③ viz 만, **처음~끝 전 노드** label 동일=녹색·다름=빨강.
+        # (사용자 2026-07-24) Step B = COMPARE 만: anti-unify 병합대상(object 객체화 program)을 pair0/pair1
+        # 반투명 겹침, ③ viz 만, **전 노드** 동일=녹색·다름=빨강·하위에DIFF있는분기점=주황.
         g0 = groupings[0] if groupings else None
         g1 = groupings[1] if (groupings and len(groupings) > 1) else None
         o0 = _objectize(g0, ex0) if g0 else a0
         o1 = _objectize(g1, ex1) if g1 else a1
+        anti_skel = _antiunify_display(o0, o1)             # C 용: COMM 상수·DIFF ?p 변수 골격
         src0 = _display_pixelized(o0) if PA._is_grid_body(o0.get("body") or []) else display_source(o0)
         src1 = _display_pixelized(o1) if PA._is_grid_body(o1.get("body") or []) else display_source(o1)
-        grid0 = SE.solution_grid_compare(src0, src1)      # solid: 전 노드 comm/diff 마킹
+        grid0 = SE.solution_grid_compare(src0, src1)      # solid: 전 노드 comm/diff/orange
         grid1 = SE.solution_grid(src1)                     # ghost
         overlay = (f'<div class="ovl gridovl">{grid0}<div class="ghost">{grid1}</div></div>'
-                   f'<div class="legend"><span class="lg comm">COMM(일치) = 녹색 테두리</span>'
-                   f'<span class="lg diff">DIFF(어긋남) = 빨강 테두리</span></div>')
+                   f'<div class="legend"><span class="lg comm">COMM = 녹색</span>'
+                   f'<span class="lg diff">DIFF = 빨강</span>'
+                   f'<span class="lg" style="color:#e8912a">하위 DIFF = 주황</span></div>')
         cmp_box = f'<div class="innerbox"><div class="lab">COMPARE (pair0 △ pair1 겹침)</div>{overlay}</div>'
         steps.append('<div class="stepcard stepB"><div class="stepttl">Step B · Anti-unification</div>'
                      '<div class="stepBcontent"><div class="stepBrow">'
                      + cmp_box + '</div></div></div>')
 
-    if solution is not None:
+    # Step C = anti-unify 결과(object 객체화 병합 골격: COMM 상수·DIFF ?p 변수). resolve(일반화 사다리)는 후속.
+    if anti_skel is not None and PA._is_grid_body(anti_skel.get("body") or []):
         sol_ex = {"input": test_input} if test_input is not None else ast_ex_pairs[0][1]
-        sol_box = f'<div class="innerbox">{_pair_block("TASK.solution (anti-unify 골격)", solution, sol_ex, slot_exprs, sol_lines)}</div>'
-        steps.append(f'<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
-                      f'<div class="stepCcontent">{sol_box}</div></div>')
+        sol_box = ('<div class="innerbox">'
+                   + _pair_block("TASK.solution (anti-unify 결과)", anti_skel, sol_ex,
+                                 sol_lines=_display_pixelized(anti_skel)) + '</div>')
+        steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
+                     '<div class="stepCcontent">' + sol_box + '</div></div>')
     else:
         steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
-                      '<p class="note">TASK.solution 미물질화(generalize 미도달)'
+                      '<p class="note">anti-unify 골격 없음(pair<2 또는 grouping 없음)'
                       ' — per-pair program 만 표시.</p></div>')
 
     arrow = '<div class="steparrow">→</div>'
