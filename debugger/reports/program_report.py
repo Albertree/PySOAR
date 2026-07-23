@@ -1099,9 +1099,12 @@ CSS = """
    뒤에 와서 우선 → 현재 선택 탭(.on 파란 배경)에서도 풀이상태 테두리가 유지된다. */
 .tabs a.solved{border-color:#3fb950}
 .tabs a.unsolved{border-color:#f85149}
-.views{display:flex;gap:10px;align-items:stretch;flex-wrap:nowrap;margin:6px 0 14px}
+.views{display:flex;gap:10px;align-items:flex-start;flex-wrap:nowrap;margin:6px 0 14px}
 .view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:0 0 auto}
-/* ①②③ 토글: 상단 버튼이 body.hidevN 을 켜면 해당 뷰 숨김. stretch 라 남은 ②③ 박스는 세로길이 동일 */
+/* ②③ 동일 높이: JS mvh() 가 ②(.v2) 박스 높이를 ③(.viz.v3) viz 박스에 맞추고, ② AST 가 더 길면
+   내부 .astree 를 세로 스크롤(대개 ② 가 ③ 보다 길어짐, 사용자 2026-07-24). box-sizing 으로 padding 포함. */
+.view.v2{box-sizing:border-box}.view.v2>.astree{overflow-y:auto}
+/* ①②③ 토글: 상단 버튼이 body.hidevN 을 켜면 해당 뷰 숨김 */
 .viewtoggle{margin-left:14px;display:inline-flex;gap:6px;vertical-align:middle}
 .viewtoggle button{font:600 11px ui-monospace,monospace;color:#8fb4e0;background:#141a26;
   border:1px solid #2e3b52;border-radius:6px;padding:3px 9px;cursor:pointer}
@@ -1464,13 +1467,20 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
     tabs = "".join(
         f'<a href="#{t}" data-t="{t}" class="{"solved" if solved[t] else "unsolved"}">{_tab_label(t)}</a>'
         for t in tids)
-    js = ("<script>var TIDS=%s;function sh(){var h=location.hash.slice(1);"
+    js = ("<script>var TIDS=%s;"
+          "function mvh(){document.querySelectorAll('.views').forEach(function(vs){"
+          "var v2=vs.querySelector('.view.v2'),v3=vs.querySelector('.view.viz.v3');if(!v2||!v3)return;"
+          "v2.style.height='';var t=v2.querySelector('.astree');if(t)t.style.maxHeight='';"
+          "if(getComputedStyle(v2).display=='none'||getComputedStyle(v3).display=='none')return;"
+          "var h=v3.offsetHeight;if(h>0){v2.style.height=h+'px';"
+          "if(t)t.style.maxHeight=(h-30)+'px';}});}"
+          "function sh(){var h=location.hash.slice(1);"
           "if(!document.getElementById(h))h=TIDS[0];"
           "document.querySelectorAll('section.task').forEach(function(s){s.style.display=(s.id===h)?'':'none'});"
-          "document.querySelectorAll('.tabs a').forEach(function(a){a.classList.toggle('on',a.dataset.t===h)});}"
+          "document.querySelectorAll('.tabs a').forEach(function(a){a.classList.toggle('on',a.dataset.t===h)});mvh();}"
           "function tv(b){b.classList.toggle('on');"
-          "document.body.classList.toggle('hidev'+b.dataset.v,!b.classList.contains('on'));}"
-          "addEventListener('hashchange',sh);sh();</script>") % json.dumps(tids)
+          "document.body.classList.toggle('hidev'+b.dataset.v,!b.classList.contains('on'));mvh();}"
+          "addEventListener('hashchange',sh);addEventListener('resize',mvh);sh();</script>") % json.dumps(tids)
     import datetime as _dt
     _built = _dt.datetime.now().strftime("%m-%d %H:%M:%S")
     doc = (f'<!doctype html><meta charset="utf-8"><title>program 뷰어</title><style>{_EV_CSS}{CSS}</style>'
