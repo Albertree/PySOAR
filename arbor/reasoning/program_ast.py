@@ -21,6 +21,23 @@ def ref(level, index_leaf):   return {"ref": level, "index": index_leaf}
 def pending(prop):            return {"pending": prop}
 
 
+# ── Grammar A: 조건-선택 표현 (cellset 대체) ──────────────
+def eq(accessor, value):
+    """직렬화되는 술어 노드: accessor(property DSL 함수명) 의 값이 value 와 같은가."""
+    return {"eq": {"accessor": accessor, "value": value}}
+
+
+def select(grid, level, pred):
+    """grid(노드참조 문자열 또는 'input' 마커) 아래 level 요소 중 pred 맞는 것.
+    실행 시 raw grid 로부터 ARCKG 노드를 만들어 pixels_of/objects_of + pred 로 해소."""
+    return {"select": {"grid": grid, "level": level, "pred": pred}}
+
+
+def coordinate_of(x):
+    """선택결과 → 좌표(들). coloring target 으로 쓰는 래핑."""
+    return {"coordinate_of": x}
+
+
 def cellset(cells_leaf):
     """blob target — 셀 집합(픽셀 인덱스)을 한 덩어리로. cells_leaf = {"const":[i,..]} | {"var":"?name"}."""
     return {"ref": "cellset", "cells": cells_leaf}
@@ -164,6 +181,18 @@ def _leaf_src(leaf):
     raise ValueError(f"bad leaf: {leaf}")
 
 
+def _sel_src(target):
+    """coordinate_of(select(...)) target → 소스 조각. select-target 이 아니면 None."""
+    if "coordinate_of" not in target:
+        return None
+    inner = target["coordinate_of"]
+    sel = inner.get("select")
+    if sel is None:
+        return None
+    p = sel["pred"]["eq"]
+    return f"coordinate_of(select({sel['grid']}, {sel['level']}, {p['accessor']}=={p['value']}))"
+
+
 def _contents_program_src(body):
     """contents leaf `program`(nested coloring 합성 — T4 하강 산출) → 소스 조각. 기존 pixel/object
     coloring step 표기를 재사용(파싱 계약은 안 늘림 — 표시 전용, `parse_program` 은 이 형태를 못
@@ -172,6 +201,10 @@ def _contents_program_src(body):
     for s in body:
         tgt = s["args"]["target"]
         col = _leaf_src(s["args"]["color"])
+        sel = _sel_src(tgt)
+        if sel is not None:
+            parts.append(f"coloring({sel}, color={col})")
+            continue
         if tgt.get("ref") == "cellset":
             cl = tgt["cells"]
             cells = str(cl["const"]) if "const" in cl else _leaf_src(cl)
@@ -210,12 +243,16 @@ def to_source(ast) -> str:
     # ── pixel/object/coord 계열 ──
     src_lines, seen = [], set()
     for s in body:
-        lvl = s["args"]["target"]["ref"]
+        lvl = s["args"]["target"].get("ref")          # select-target(coordinate_of) 엔 "ref" 없음 → None
         if lvl in _LEVEL and lvl not in seen:                 # coord 는 헤더(in_px=..) 불필요
             seen.add(lvl); src_lines.append(_LEVEL[lvl][0])
     defs, steps = list(src_lines), ["tfg0 = input_grid"]
     for i, s in enumerate(body):
         tgt = s["args"]["target"]; col = _leaf_src(s["args"]["color"])
+        sel = _sel_src(tgt)
+        if sel is not None:
+            steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {sel}, {col})")
+            continue
         if tgt["ref"] == "coord":                             # 리터럴 좌표 직접
             pos = tuple(tgt["index"]["const"]) if "const" in tgt["index"] else _leaf_src(tgt["index"])
             steps.append(f"tfg{i + 1} = apply_DSL(tfg{i}, coloring, {pos}, {col})")
