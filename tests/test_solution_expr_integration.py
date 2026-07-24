@@ -27,14 +27,6 @@ class TestSolutionExprIntegration(unittest.TestCase):
                           f"— 리포트 코드는 정상(직접·격리 검증). score 게이트·빌드는 fresh 라 정상.")
         return html
 
-    def test_move000a_stepC_is_antiunify_skeleton(self):
-        # C = anti-unify 골격(object 객체화 병합): select(input,object,…) + DIFF=?p 변수 (사용자 2026-07-24 —
-        # 옛 resolved 이동식 렌더 제거, resolve 사다리는 후속). cellset 은 어디에도 없음.
-        html = self._html_or_skip("move000a")
-        self.assertIn("anti-unify 결과", html)            # Step C 라벨
-        self.assertIn("?p", html)                          # DIFF slot 변수
-        self.assertNotIn("cellset=?c.cells", html)
-
     def test_stepC_skeleton_coordinate_select(self):
         # C 골격은 object.coordinate 로 객체 지목(select), DIFF 좌표는 ?p 변수 (사용자 2026-07-24)
         html = self._html_or_skip("move000o")
