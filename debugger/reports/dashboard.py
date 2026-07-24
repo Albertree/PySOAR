@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """ARBOR debugger.reports.dashboard — 풀이 과정 시각화(대시보드) 빌더 + 진입점.
-setup_focus_agent 으로 태스크를 SOAR 로 구동, 트레이스를 dashboard.html 로 렌더.
+build_agent 으로 태스크를 SOAR 로 구동, 트레이스를 dashboard.html 로 렌더.
 
     python -m debugger.reports.dashboard        # -> debugger/reports/dashboard.html
 """
 from __future__ import annotations
 import json, os, sys
 from arbor.procedural_memory.loader import PRODUCTIONS, OP_DOCS
-from arbor.agent.focus import setup_focus_agent
+from arbor.agent import build_agent
 from env.dataset import list_tasks, load_task
 
 

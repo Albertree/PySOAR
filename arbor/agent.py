@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""ARBOR agent.focus — ARBOR 에이전트 조립: 지각 주입(inject_focus)
-+ SOAR 에이전트 셋업(setup_focus_agent). PRODUCTIONS/OPERATOR_BODIES 는 procedural memory 에서."""
+"""ARBOR agent — SOAR 코어(arbor.soar.Agent)를 ARBOR 로 씌우는 조립층.
+build_agent: 코어 Agent 인스턴스 + ARBOR 규칙/operator/지각 배선.
+inject_perception: ARCKG+percept 를 상태에 주입(input 훅). PRODUCTIONS/OPERATOR_BODIES 는 procedural memory 에서."""
 from __future__ import annotations
 import json, os, sys
 from arbor.soar import Agent
@@ -10,7 +11,7 @@ from arbor.perception.nav import index_arckg
 from arbor.expr_solver import build_arckg
 
 
-def inject_focus(ag):
+def inject_perception(ag):
     """INPUT: separate PERCEPTION from the agent's parsed MODEL (option a).
 
       input-link (percept):  I2 -^task-> <percept> -^raw-> {json}   [environment-owned, READ-ONLY]
@@ -60,10 +61,10 @@ def inject_focus(ag):
     ag.wm.add("S1", "to-observe", "yes")              # 관측할 게 있음 → observe(arg 없이) 제안 → impasse → select
 
 
-def setup_focus_agent(task, tid="0a", record=False):
+def build_agent(task, tid="0a", record=False):
     ag = Agent(PRODUCTIONS, operator_bodies=OPERATOR_BODIES, record=record, io=True)
     ag.task = task
     ag.task_id = tid
     ag.kg = {"_focus": True, "relations": [], "roles": []}     # _focus: dashboard detail 라우팅
-    ag.input_functions.append(inject_focus)
+    ag.input_functions.append(inject_perception)
     return ag

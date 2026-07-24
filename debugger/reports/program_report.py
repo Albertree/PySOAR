@@ -2,7 +2,7 @@
 """program 뷰어 — easy000a~h(+i) 각 태스크의 PAIR.program(AST) + TASK.solution 을 한 페이지에서 확인
 (스펙 §12 후속 서브프로젝트 ②). 우상단 "이 문제 anti-unification" 버튼의 교체 대상.
 
-솔버(_Tracer+setup_focus_agent)를 실제로 돌려 WM 에 남은 값만 그대로 읽는다(재계산·재해석 없음).
+솔버(_Tracer+build_agent)를 실제로 돌려 WM 에 남은 값만 그대로 읽는다(재계산·재해석 없음).
 각 태스크의 example(train) pair 마다 PAIR.program 을:
 
   ① text    — display_source(ast)(뷰어 로컬 통일 실행형 body) + _render_header_safe(ast, 그 pair 의
@@ -42,7 +42,7 @@ import json
 import os
 import re
 
-from arbor.agent.focus import setup_focus_agent
+from arbor.agent import build_agent
 from arbor.engine.trace import _Tracer
 from env.dataset import list_tasks, load_task
 from arbor.reasoning import program_ast as PA
