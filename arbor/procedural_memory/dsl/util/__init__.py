@@ -37,16 +37,28 @@ def objects_of(grid):
     return grid.objects
 
 
-@dsl("util", ["grid"], "list[pixel]")
-def pixels_of(grid):
-    """grid 의 모든 셀을 행우선 PIXEL 노드 리스트로 (index i = r*width + c).
-    pixels_of(g)[i] 의 좌표 = (i // width, i % width) — 솔버 전역 idx 규약과 일치.
-    (grid.pixels 는 객체추출 파생이라 index 비정렬 → raw 에서 직접 생성.)"""
+@dsl("util", ["grid", "object"], "list[pixel]")
+def pixels_of(node):
+    """셀들을 PIXEL 노드 리스트로. **입력 계층에 따라 달라짐**:
+      grid   → 모든 셀 (행우선, index i = r*width + c; 좌표 = (i // width, i % width)).
+      object → 객체의 비투명 셀들 (색 포함, coordinate 순서).
+    둘 다 grid.pixels / obj.pixels(객체추출 파생) 를 안 쓰고 raw/colorgrid 에서 즉석 생성한다
+    → arckg build 가 pixel 을 미리 안 지어도 됨(경량 build 와 호환)."""
     from arbor.perception.arckg.pixel import Pixel
-    W = grid.width
+    if node.__class__.__name__ == "Object":                  # object: 비투명 셀만
+        rmin, cmin = node.pos
+        out, i = [], 0
+        for r, row in enumerate(node.colorgrid):
+            for c, cell in enumerate(row):
+                if cell != 13:                               # 13 = 투명
+                    out.append(Pixel(pixel_id=f"{node.node_id}.X{i}", color=cell,
+                                     row=rmin + r, col=cmin + c))
+                    i += 1
+        return out
+    W = node.width                                           # grid: 모든 셀 행우선
     out = []
-    for i in range(grid.height * W):
+    for i in range(node.height * W):
         r, c = divmod(i, W)
-        out.append(Pixel(pixel_id=f"{grid.node_id}.X{i}", color=grid.raw[r][c], row=r, col=c))
+        out.append(Pixel(pixel_id=f"{node.node_id}.X{i}", color=node.raw[r][c], row=r, col=c))
     return out
 
