@@ -133,7 +133,7 @@
   구현했다는 신호다.
 
 ### 2-5. 구조체를 바꿨으면 dashboard 에 반영하라 (2026-07-07 추가)
-- 사용자는 **`focus_dashboard.html`** 로 구현을 *시각적으로* 검증한다. WM/ARCKG/program/relation/solution
+- 사용자는 **`python -m debugger.reports.dashboard`** 로 생성되는 대시보드로 구현을 *시각적으로* 검증한다. WM/ARCKG/program/relation/solution
   등 **구조체(데이터 모델)를 추가·변경하면 그 변화가 dashboard 렌더링에 반드시 드러나야** 한다.
 - 새 아티팩트(`PAIR.program`·`TASK.solution`·relation edge)나 스키마 변경은 그 생성 코드(focus_solver /
   dashboard 생성부)에서 **패널·필드로 노출**한다. 화면에 안 보이면 검증 불가 = 미완.
@@ -242,6 +242,6 @@
       남는가? (없으면 finder — §1-5)
 - [ ] 서로 다른 문제가 서로 다른 탐색/step/**하강 깊이**를 낳는가? (같으면 함수에 숨은 것)
 - [ ] 막혔다면, 몰래 메우지 않고 **정직하게 impasse 로 드러내고** 사용자에게 제안했는가?
-- [ ] 구조체(program/solution/relation·스키마)를 바꿨으면 **`focus_dashboard.html`** 에 패널·필드로
-      반영했는가? (§2-5)
+- [ ] 구조체(program/solution/relation·스키마)를 바꿨으면 **`python -m debugger.reports.dashboard`**
+      대시보드에 패널·필드로 반영했는가? (§2-5)
 - [ ] 결과에 영향 주는 반복을 **정렬**했는가? `PYTHONHASHSEED` 를 바꿔도 solve 결과가 같은가? (§2-6)

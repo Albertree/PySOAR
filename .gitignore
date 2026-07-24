@@ -4,9 +4,6 @@ __pycache__/
 .ipynb_checkpoints/
 
 # generated report/dashboard artifacts (regenerable — kept on disk, not tracked)
-arc/*.html
-arc/compare_viz/*.html
-arc/*.csv
 debugger/traces/
 # generated report outputs that land next to their generators
 debugger/reports/*.html
