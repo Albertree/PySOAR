@@ -44,7 +44,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from soar import Agent, Cond, Action, Production          # noqa: E402
+from arbor.soar import Agent, Cond, Action, Production          # noqa: E402
 from arbor.expr_solver import build_arckg, _load_value, _tup   # noqa: E402 (reuse, read-only)
 from arbor.procedural_memory.operators import OPERATOR_BODIES  # 분리된 operator bodies
 from arbor.procedural_memory.loader import PRODUCTIONS, OP_DOCS  # JSON 실물 규칙

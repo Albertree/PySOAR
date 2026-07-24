@@ -57,7 +57,7 @@ class TestCompressGridWrapped(unittest.TestCase):
         한다(PAIR.program 은 픽셀 그대로 유지 — Task 3). (call-site 가 raw 대신 as_source(raw)=납작한
         텍스트를 넘기던 버그면 grid 미탐지→스킵→grouping 미생성으로 FAIL.)"""
         import types
-        from soar.wm import WorkingMemory
+        from arbor.soar.wm import WorkingMemory
         inner = [PA.step("coloring", target=PA.ref("pixel", PA.const(i)), color=PA.const(c))
                  for i, c in [(0, 0), (1, 0), (12, 3), (13, 3)]]
         gp = PA.grid_program(PA.expr("size(input_grid)"), PA.expr("color(input_grid)"),

@@ -6,7 +6,7 @@
 결과 자료구조는 기존 _Tracer.emit 산출과 동일."""
 from __future__ import annotations
 
-from soar.wm import _wm_key
+from arbor.soar.wm import _wm_key
 
 
 def render(sink):

@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from arbor.reasoning import program_ast as PA
 from arbor.procedural_memory.operators import compress as CG
 from arbor.procedural_memory.operators.generalize import _op_generalize
-from soar.wm import WorkingMemory
+from arbor.soar.wm import WorkingMemory
 
 
 def _flat_coord(cells_colors):

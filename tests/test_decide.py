@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from soar import ImpasseType, Slot, decide_context_slot, run_preference_semantics  # noqa: E402
+from arbor.soar import ImpasseType, Slot, decide_context_slot, run_preference_semantics  # noqa: E402
 
 
 def rps(slot):

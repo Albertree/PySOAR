@@ -25,7 +25,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from soar import Action, Cond, Elaborator, Production, WorkingMemory  # noqa: E402
+from arbor.soar import Action, Cond, Elaborator, Production, WorkingMemory  # noqa: E402
 from tests.oracle.soar_oracle import run_agent_state, soar_available  # noqa: E402
 
 ORACLE_AGENT = r"""

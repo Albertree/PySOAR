@@ -2,7 +2,7 @@
 """ARBOR operator body: hypothesize (procedural LTM leaf). focus_solver 분리."""
 from __future__ import annotations
 import json, os, sys
-from soar import Agent, Cond, Action, Production
+from arbor.soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.reasoning.program import _grid_decide
 from arbor.reasoning.program_ast import grid_program_from_decide, is_full_grid_program

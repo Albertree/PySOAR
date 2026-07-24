@@ -3,7 +3,7 @@
 + SOAR 에이전트 셋업(setup_focus_agent). PRODUCTIONS/OPERATOR_BODIES 는 procedural memory 에서."""
 from __future__ import annotations
 import json, os, sys
-from soar import Agent
+from arbor.soar import Agent
 from arbor.procedural_memory.loader import PRODUCTIONS
 from arbor.procedural_memory.operators import OPERATOR_BODIES
 from arbor.perception.nav import index_arckg

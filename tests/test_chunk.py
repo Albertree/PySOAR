@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from soar import Action, Agent, Cond, Production  # noqa: E402
+from arbor.soar import Action, Agent, Cond, Production  # noqa: E402
 
 
 def compute_productions():
@@ -38,7 +38,7 @@ def compute_productions():
 
 def chunk_struct(ch):
     """(frozenset{(attr, 'VAR'|const)}, (attr, 'VAR'|const)) for a PySOAR chunk."""
-    from soar.production import is_var
+    from arbor.soar.production import is_var
     cset = frozenset((c.attr, "VAR" if is_var(c.value) else c.value) for c in ch.conditions)
     a = ch.actions[0]
     return (cset, (a.attr, "VAR" if is_var(a.value) else a.value))

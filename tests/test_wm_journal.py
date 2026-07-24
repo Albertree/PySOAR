@@ -1,4 +1,4 @@
-from soar.wm import WorkingMemory
+from arbor.soar.wm import WorkingMemory
 
 
 def test_journal_none_by_default_no_error():

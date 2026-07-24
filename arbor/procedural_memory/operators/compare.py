@@ -2,7 +2,7 @@
 """ARBOR operator body: compare (procedural LTM leaf). focus_solver 분리."""
 from __future__ import annotations
 import json, os, sys
-from soar import Agent, Cond, Action, Production
+from arbor.soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.perception.perception import _score_frac
 from arbor.reasoning.compare_engine import _compare, _store_relation

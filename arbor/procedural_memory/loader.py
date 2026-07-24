@@ -15,7 +15,7 @@ import glob
 import json
 import os
 
-from soar import Cond, Action, Production
+from arbor.soar import Cond, Action, Production
 
 _RULES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "production_rules")
 
