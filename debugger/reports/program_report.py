@@ -318,7 +318,8 @@ def _pixelize(ast, ex=None):
         vals = (sel or {}).get("pred", {}).get("in", {}).get("values") if sel else None
         if sel and isinstance(vals, list):                      # 좌표묶음 → 좌표1개씩 eq-select
             for c in vals:
-                t = PA.coordinate_of(PA.select(sel["grid"], sel["level"], PA.eq("coordinate", c)))
+                # 좌표는 grid-무관 → 가능한 input 으로 통일(사용자 2026-07-24). pixel 화는 출처가 좌표.
+                t = PA.coordinate_of(PA.select("input", sel["level"], PA.eq("coordinate", c)))
                 new_inner.append(PA.step("coloring", target=t, color=col))
         else:
             new_inner.append(s)                                 # 이미 단일/var/기타는 그대로
@@ -331,9 +332,14 @@ def _pixelize(ast, ex=None):
 
 def _objectize(ast, ex=None):
     """grid-body grouping(객체당 좌표묶음) → **object 객체화** AST: 각 coloring 의 좌표묶음을
-    그 object 의 **coordinate property** 로 지목 — select(input, object, coordinate == [[r,c],...]).
-    픽셀들이 한 ARCKG object 에 공통 소속임(그 좌표들이 object.coordinate)을 WM 정보로 표현(사용자
-    2026-07-24). ex 주면 size/color 를 그 pair 의 구체 값으로. 픽셀(coord_in) → object(eq coordinate)."""
+    그 object 의 **coordinate property** 로 지목 — select(grid, object, coordinate == [[r,c],...]).
+    ── grid 구별(사용자 2026-07-24): **좌표는 두 grid에 공통**이라 A.5 pixelize 는 grid-무관(가능한 input
+    으로 통일). 그러나 그 좌표들을 **object 로 뭉치는 건 grid-특정**이다. 우선순위 = **output**: 그
+    좌표들이 **output grid 에서 한 object(component)면 output**(결과 객체; input 에도 있어도 output 우선),
+    **output 엔 없고 input 에만 있으면 input**(예: 이동 소스 자리). 배경색 가정 없이 component 정확일치
+    (§no-arbitrary-filters).
+    픽셀들이 한 ARCKG object 에 공통 소속임(그 좌표들이 object.coordinate)을 WM 정보로 표현. ex 주면
+    size/color 를 그 pair 의 구체 값으로. 픽셀(coord_in) → object(eq coordinate)."""
     if not ast or not PA._is_grid_body(ast.get("body") or []):
         return ast
     parts = {s["call"]: s["args"] for s in ast["body"]}
@@ -347,7 +353,17 @@ def _objectize(ast, ex=None):
         sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
         vals = (sel or {}).get("pred", {}).get("in", {}).get("values") if sel else None
         if sel and isinstance(vals, list):                      # 좌표묶음 → object.coordinate == [그 좌표들]
-            t = PA.coordinate_of(PA.select("input", "object", PA.eq("coordinate", vals)))
+            # object 는 grid-특정. 우선순위 = output(사용자 2026-07-24): 좌표들이 output 에서 한
+            # object(component)면 output(결과; input 에도 있어도 output 우선), output 엔 없고 input 에만
+            # 있으면 input(예: 이동 소스 자리). 배경색 가정 없이 component 정확일치.
+            from arbor.perception.spelke import _cohesion_components
+            key = frozenset((r, c) for r, c in vals)
+            out_comps = ({frozenset(c) for c, _ in _cohesion_components(ex["output"])}
+                         if ex and ex.get("output") else set())
+            in_comps = ({frozenset(c) for c, _ in _cohesion_components(ex["input"])}
+                        if ex is not None else set())
+            grid = "output" if key in out_comps else ("input" if key in in_comps else "output")
+            t = PA.coordinate_of(PA.select(grid, "object", PA.eq("coordinate", vals)))
             new_inner.append(PA.step("coloring", target=t, color=col))
         else:
             new_inner.append(s)
@@ -1046,8 +1062,8 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
                          'Step A.5 · 픽셀객체화 (각 픽셀 = 좌표1개 select)</div>' + px_boxes + '</div>')
 
     # Step A.6 · object 객체화: 픽셀객체화의 픽셀들을 **한 ARCKG object 로 묶어** 그 object 의 coordinate
-    # property 로 지목 — select(input, object, coordinate == [[r,c],...]) (사용자 2026-07-24 — WM 소속으로
-    # 좌표들을 object 단위로). grouping 은 anti-unify 용으로 유지(green). 없으면 카드 생략.
+    # property 로 지목 — select(grid, object, …): output 에 object 면 output(결과, in-both 도 output 우선),
+    # output 엔 없고 input 에만 있으면 input(이동 소스 자리). grouping 은 anti-unify 용 유지(green). 없으면 생략.
     if groupings and any(groupings):
         obj_boxes = ""
         for (a, ex, p), g in zip(ast_ex_pairs, groupings):
