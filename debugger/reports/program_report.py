@@ -1835,7 +1835,7 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
            f'<script>var RUNNER_DATA={json.dumps(runner_data)};</script>'
            f'{_RUNNER_HTML}{js}')
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), out_name)
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8") as f:
         f.write(doc)
     return out
 
@@ -1852,6 +1852,13 @@ def build_objc():
     return build(dataset="objc", out_name="objc_program_report.html",
                  title="object_coloring program 뷰어",
                  back_href="objc_dashboard.html", back_label="objc_dashboard")
+
+
+def build_rotate():
+    """arc_human/rotate 전 태스크 → rotate_program_report.html (동일 구성)."""
+    return build(dataset="rotate", out_name="rotate_program_report.html",
+                 title="rotate program 뷰어 (arc_human/rotate)",
+                 back_href="rotate_dashboard.html", back_label="rotate_dashboard")
 
 
 if __name__ == "__main__":
