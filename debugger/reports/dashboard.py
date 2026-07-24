@@ -159,7 +159,7 @@ def build_move_dashboard():
 
 def build_objc_dashboard():
     """object_coloring 전 태스크 → objc_dashboard.html (dashboard 와 동일 구성)."""
-    tasks = [(tid, load_task(p)) for tid, p in list_tasks("object_coloring")]
+    tasks = [(tid, load_task(p)) for tid, p in list_tasks("objc")]
     print(f"objc dashboard: {len(tasks)} 태스크 — max_cycles=500")
     return make_dashboard(tasks, dataset="ARC_human/object_coloring",
                           out_name="objc_dashboard.html",

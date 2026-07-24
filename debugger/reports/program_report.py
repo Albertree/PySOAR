@@ -1850,7 +1850,7 @@ def build_move():
 
 def build_objc():
     """object_coloring 전 태스크 → objc_program_report.html (동일 구성)."""
-    return build(dataset="object_coloring", out_name="objc_program_report.html",
+    return build(dataset="objc", out_name="objc_program_report.html",
                  title="object_coloring program 뷰어",
                  back_href="objc_dashboard.html", back_label="objc_dashboard")
 
