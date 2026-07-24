@@ -8,7 +8,7 @@ from __future__ import annotations
 import json, os, sys
 from procedural_memory.loader import PRODUCTIONS, OP_DOCS
 from arbor.agent.focus import setup_focus_agent
-from arbor.env.survey import _load_survey, SURVEY_AGI
+from arbor.env.dataset import list_tasks, load_task
 
 
 def _cycle_tree(events):
@@ -150,7 +150,6 @@ def make_dashboard(tasks, dataset="focus (slice 1)", out_name="dashboard.html",
 
 def build_move_dashboard():
     """arc_human/move 전 태스크 → move_dashboard.html (dashboard 와 동일 구성)."""
-    from arbor.env.dataset import list_tasks, load_task
     tasks = [(tid, load_task(p)) for tid, p in list_tasks("move")]
     print(f"move dashboard: {len(tasks)} 태스크 — max_cycles=500")
     return make_dashboard(tasks, dataset="arc_human/move",
@@ -160,7 +159,6 @@ def build_move_dashboard():
 
 def build_objc_dashboard():
     """object_coloring 전 태스크 → objc_dashboard.html (dashboard 와 동일 구성)."""
-    from arbor.env.dataset import list_tasks, load_task
     tasks = [(tid, load_task(p)) for tid, p in list_tasks("object_coloring")]
     print(f"objc dashboard: {len(tasks)} 태스크 — max_cycles=500")
     return make_dashboard(tasks, dataset="ARC_human/object_coloring",
@@ -187,7 +185,15 @@ if __name__ == "__main__":
     else:
         # 사용자 요청(2026-07-17): 시간 단축 — 지정 ARC-AGI 5문제 제외. dashboard = easy a-h(8)
         # + 08ed6ac7(1) = 9. (easy000i·made000a/b 인프라는 데이터셋/코드에서 은퇴됨.)
-        tasks = _load_survey(agi_ids=SURVEY_AGI)                         # 8 + 1 = 9
+        _SURVEY = ["easy000a", "easy000b", "easy000c", "easy000d",
+                   "easy000e", "easy000f", "easy000g", "easy000h"] + ["08ed6ac7"]
+        tasks = []
+        for _tid in _SURVEY:
+            for _ds in ("easy", "agi"):
+                _hits = [(t, p) for t, p in list_tasks(_ds) if t == _tid]
+                if _hits:
+                    tasks.append((_hits[0][0], load_task(_hits[0][1])))
+                    break                                                # 8 + 1 = 9
         print(f"survey: {len(tasks)} 태스크 ({', '.join(t for t, _ in tasks)}) — max_cycles=500")
         out = make_dashboard(tasks, dataset="survey = easy a-h(8) + 08ed6ac7")
         sz = os.path.getsize(out) / 1e6
