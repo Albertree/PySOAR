@@ -45,21 +45,19 @@ def run_solve(tid, task, max_cycles=500, use_cache=True, mode="debug"):
                 return c["result"]
         except (pickle.PickleError, KeyError, OSError, EOFError):
             pass
-    from arbor.runtime.runner import Runner
     from arbor.agent import build_agent
     if mode == "score":
-        from arbor.runtime.sink import NullSink
-        tr = Runner(task, tid, setup=build_agent, sink=NullSink())
-        tr.run(max_cycles=max_cycles)
-        result = {"events": [], "wm": [list(t) for t in tr.ag.wm],
-                  "wm_states": [], "attempts": tr.attempts, "error": None}
+        from arbor.trace.sink import NullSink
+        agent = build_agent(task, tid)                # ArborAgent — 스스로 돈다
+        agent.run(sink=NullSink(), max_cycles=max_cycles)
+        result = {"events": [], "wm": [list(t) for t in agent.ag.wm],
+                  "wm_states": [], "attempts": agent.attempts, "error": None}
     else:
-        tr = Runner(task, tid, setup=build_agent)     # JournalSink 기본
-        tr.run(max_cycles=max_cycles)
-        # tr.events/tr._wm_states = lazy render+memoize(Task 3) → 단일 render 재사용
-        # (render(tr.sink) 직접 호출은 run() 의 return self.events 가 이미 튕긴 render 와 겹쳐 이중 render).
-        result = {"events": tr.events, "wm": [list(t) for t in tr.ag.wm],
-                  "wm_states": tr._wm_states, "attempts": tr.attempts, "error": None}
+        agent = build_agent(task, tid)                # JournalSink 기본(기록 → dashboard)
+        agent.run(max_cycles=max_cycles)
+        # agent.events/_wm_states = lazy render+memoize → 단일 render 재사용
+        result = {"events": agent.events, "wm": [list(t) for t in agent.ag.wm],
+                  "wm_states": agent._wm_states, "attempts": agent.attempts, "error": None}
     if use_cache:
         try:
             os.makedirs(_CACHE_DIR, exist_ok=True)
