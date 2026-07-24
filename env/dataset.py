@@ -45,8 +45,3 @@ def list_tasks(dataset: str, limit: int | None = None) -> list[tuple[str, str]]:
 def load_task(path: str) -> dict:
     """Load one ARC task as {'train': [...], 'test': [...]} with input/output."""
     return json.load(open(path))
-
-
-def available() -> dict:
-    return {name: len(glob.glob(os.path.join(path, "*.json")))
-            for name, path in DATASETS.items()}
