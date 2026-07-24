@@ -374,6 +374,166 @@ def _objectize(ast, ex=None):
     return PA.program(body)
 
 
+def _reexpress_obj0(ast, ex):
+    """A.6 objectize(결과=output 객체) → Focus2 재표현: 각 output-target 을 대응 입력객체(obj0)로 바꿔
+    output 참조를 없앤다. 색변형(제자리): obj0 = 같은 좌표의 입력객체(coord COMM = 최고 대응) →
+    target 을 select(input,…) 로(좌표 그대로) → coordinate_of(obj0)=그 좌표. 대응 입력객체가 없으면
+    (예: 이동 목적지=input 배경) 그대로(Δ 필요 — 후속). grid body 아니면 ast."""
+    if not ast or not PA._is_grid_body(ast.get("body") or []):
+        return ast
+    parts = {s["call"]: s["args"] for s in ast["body"]}
+    cleaf = parts["set_grid_contents"]["contents"]
+    inner = (cleaf.get("program") or {}).get("body") if "program" in cleaf else None
+    if not inner:
+        return ast
+    from arbor.perception.spelke import _cohesion_components
+    in_comps = ({frozenset(c) for c, _ in _cohesion_components(ex["input"])}
+                if ex is not None else set())
+    new_inner = []
+    for s in inner:
+        tgt = s["args"]["target"]; col = s["args"]["color"]
+        sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
+        pred = (sel or {}).get("pred", {})
+        vals = pred.get("eq", {}).get("value") if "eq" in pred else pred.get("in", {}).get("values")
+        if sel and isinstance(vals, list) and frozenset((r, c) for r, c in vals) in in_comps:
+            t = PA.coordinate_of(PA.select("input", sel.get("level", "object"), PA.eq("coordinate", vals)))
+            new_inner.append(PA.step("coloring", target=t, color=col))
+        else:
+            new_inner.append(s)                                 # 대응 입력객체 없음(이동 목적지 등) → 그대로
+    body = [PA.set_grid_size(parts["set_grid_size"]["size"]),
+            PA.set_grid_color(parts["set_grid_color"]["color"]),
+            PA.set_grid_contents(PA.contents_program(new_inner))]
+    return PA.program(body)
+
+
+def _obj_props(cells, grid):
+    """cells+grid → 그 객체의 ARCKG Object.to_json() property dict (고정 메뉴가 아니라 ARCKG 가 정의한
+    property 를 그대로 씀). 좌표는 bbox(투명=13)로 감싸 Object 구성."""
+    from arbor.perception.arckg.object import Object
+    cells = [tuple(c) for c in cells]
+    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+    r0, c0, r1, c1 = min(rs), min(cs), max(rs), max(cs)
+    cset = set(cells)
+    cg = [[grid[r][c] if (r, c) in cset else 13 for c in range(c0, c1 + 1)]
+          for r in range(r0, r1 + 1)]
+    return Object("_o", cg, (r0, c0)).to_json()
+
+
+def _prop_value(key, val):
+    """to_json property 값 → 술어 value: color dict({c:bool}) 는 스칼라 색으로, 그 외 그대로."""
+    if key == "color" and isinstance(val, dict):
+        trues = [c for c, b in val.items() if b]
+        return trues[0] if len(trues) == 1 else val
+    return val
+
+
+def _flatten_feats(j):
+    """ARCKG Object.to_json() → 스칼라 비교 feature dict. coordinate(대체 대상) 제외, size→height/width,
+    position→row/col(left_top), color→스칼라, dict/list 는 json 화. 고정 메뉴가 아니라 to_json 키를 편다."""
+    feats = {}
+    for k, v in j.items():
+        if k == "coordinate":
+            continue
+        if k == "color":
+            feats["color"] = _prop_value("color", v)
+        elif k == "size":
+            feats["height"] = v.get("height"); feats["width"] = v.get("width")
+        elif k == "position":
+            lt = v.get("left_top", {})
+            feats["row"] = lt.get("row_index"); feats["col"] = lt.get("col_index")
+        elif isinstance(v, (dict, list)):
+            feats[k] = json.dumps(v, sort_keys=True)
+        else:
+            feats[k] = v
+    return feats
+
+
+def _selecting_property(movers, inputs, test_input=None):
+    """구체 좌표 대신 movers 를 지목하는 선택 술어를 비교로 도출 — 고정 메뉴·배경 가정 없이 ARCKG
+    Object.to_json() feature(color/area/height/width/row/col/shape/…)를 비교한다. 공통값 property 를
+    **AND 조합**으로 탐색하되, 각 train grid 에서 mover 를 유일 선택하고 **test 입력에서도 ≥1 선택**하는
+    **가장 느슨한(조건 적은) 조합**을 채택(strict AND 는 test 에서 아무 것도 못 고를 수 있으므로 느슨화 —
+    사용자 2026-07-24). eq-공통이 없으면 neq(color != 같은 grid 다른 객체 공통색). 아니면 None."""
+    from arbor.perception.spelke import _cohesion_components
+    import itertools
+    if not movers or any(not m for m in movers):
+        return None
+    feats = [_flatten_feats(_obj_props(movers[i], inputs[i])) for i in range(len(movers))]
+    comm = {k: feats[0][k] for k in feats[0] if all(mf.get(k) == feats[0][k] for mf in feats)}
+    comps = [_cohesion_components(g) for g in inputs]
+    tcomps = _cohesion_components(test_input) if test_input else None
+
+    def match(cells, grid, keys):
+        f = _flatten_feats(_obj_props(cells, grid))
+        return all(f.get(k) == comm[k] for k in keys)
+
+    def train_unique(keys):
+        return all(sum(1 for cells, _ in comps[i] if match(cells, inputs[i], keys)) == 1
+                   for i in range(len(movers)))
+
+    def test_ok(keys):
+        return tcomps is None or any(match(cells, test_input, keys) for cells, _ in tcomps)
+
+    ckeys = list(comm.keys())
+    for size in range(1, len(ckeys) + 1):                            # 느슨(조건 적음)→strict
+        for sub in itertools.combinations(ckeys, size):
+            if train_unique(sub) and test_ok(sub):
+                conds = [{"eq": {"accessor": k, "value": comm[k]}} for k in sub]
+                return conds[0] if len(conds) == 1 else {"and": conds}
+    # eq-공통 없음 → neq(관계): mover color 가 같은 grid 다른 객체 전부와 다르고 그 '다른 값'이 단일 COMM
+    mcols, others = [], []
+    for i in range(len(movers)):
+        mc = [tuple(c) for c in movers[i]]
+        mcols.append(inputs[i][mc[0][0]][mc[0][1]])
+        others.append(frozenset(col for cells, col in comps[i] if set(cells) != set(mc)))
+    if (len(set(others)) == 1 and len(others[0]) == 1
+            and all(mcols[i] not in others[i] for i in range(len(movers)))
+            and all(sum(1 for _, col in comps[i] if col != next(iter(others[0]))) == 1
+                    for i in range(len(movers)))
+            and (tcomps is None or any(col != next(iter(others[0])) for _, col in tcomps))):
+        return {"neq": {"accessor": "color", "value": next(iter(others[0]))}}
+    return None
+
+
+def _task_solution(programs, exs, test_input=None):
+    """Focus2 재표현된 여러 pair object program → **최종 TASK.solution 골격**: 각 coloring 스텝의 movers
+    (구체 좌표)를 비교로 도출한 선택 property 술어로 지목(_selecting_property, test 로 loosen), color 는
+    COMM 상수(다르면 ?col). op 수 불일치면 None. property 미도출 스텝은 coordinate ?p 슬롯 유지(정직)."""
+    valid = [p for p in programs if p and PA._is_grid_body(p.get("body") or [])]
+    if len(valid) < 2:
+        return None
+    inners = []
+    for prog in valid:
+        parts = {s["call"]: s["args"] for s in prog["body"]}
+        inner = parts.get("set_grid_contents", {}).get("contents", {}).get("program", {}).get("body")
+        if not isinstance(inner, list):
+            return None
+        inners.append(inner)
+    n = len(inners[0])
+    if any(len(x) != n for x in inners):
+        return None
+    inputs = [e["input"] for e in exs]
+    new_inner = []
+    for j in range(n):
+        movers, colors = [], []
+        for inner in inners:
+            s = inner[j]
+            sel = s["args"]["target"].get("coordinate_of", {}).get("select")
+            vals = (sel or {}).get("pred", {}).get("eq", {}).get("value")
+            movers.append(vals if isinstance(vals, list) else [])
+            colors.append(s["args"]["color"])
+        same_col = all(json.dumps(c, sort_keys=True) == json.dumps(colors[0], sort_keys=True) for c in colors)
+        col_leaf = colors[0] if same_col else {"var": f"?col{j}"}
+        pred = _selecting_property(movers, inputs, test_input) or PA.eq("coordinate", {"var": f"?p{j}"})
+        t = PA.coordinate_of(PA.select("input", "object", pred))
+        new_inner.append(PA.step("coloring", target=t, color=col_leaf))
+    p0 = {s["call"]: s["args"] for s in valid[0]["body"]}
+    body = [PA.set_grid_size(p0["set_grid_size"]["size"]),
+            PA.set_grid_color(p0["set_grid_color"]["color"]),
+            PA.set_grid_contents(PA.contents_program(new_inner))]
+    return PA.program(body)
+
+
 def _antiunify_display(a0, a1):
     """두 (같은 구조) object 객체화 program 을 병합해 **anti-unify 골격**: 동일 leaf=COMM 상수 유지,
     다른 leaf=?pN 변수(가장 안쪽 DIFF 지점을 통째 변수화). dict/list 재귀. 일반화 사다리(그 변수를
@@ -442,6 +602,50 @@ def _display_pixelized(ast):
     lines += [f"result = {prev if inner else 'g0'}",
               "g.contents = set_grid_contents(result)", "output_grid = g"]
     return lines                                            # 리스트(_pair_block sol_lines 계약)
+
+
+def _display_solution(ast):
+    """최종 TASK.solution program → obj0-바인딩 소스(파싱 가능 심볼만; 자유텍스트·주석 없음):
+    objN = select(input, object, coordinate == [...]) 로 대응 입력객체를 묶고,
+    gN = coloring(g{N-1}, coordinate_of(objN), color) 로 그 객체 좌표를 칠한다(output 참조 없음).
+    grid body 아니면 None."""
+    body = (ast or {}).get("body") or []
+    if not PA._is_grid_body(body):
+        return None
+    parts = {s["call"]: s["args"] for s in body}
+    sz = _disp_grid_leaf(parts["set_grid_size"]["size"], "size")
+    co = _disp_grid_leaf(parts["set_grid_color"]["color"], "color")
+    inner = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
+    if not isinstance(inner, list):
+        inner = []
+    objdefs, steps, prev = [], [], "g0"
+    for n, s in enumerate([x for x in inner if isinstance(x, dict) and "args" in x]):
+        tgt = s["args"]["target"]
+        sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
+        col = _disp_leaf(s["args"]["color"])
+        cur = f"g{n + 1}"
+        if sel:
+            pred = sel.get("pred", {})
+
+            def _cond(p):
+                op = {"eq": "==", "neq": "!=", "in": "in"}
+                kk = next((x for x in ("eq", "neq", "in") if x in p), None)
+                if not kk:
+                    return json.dumps(p)
+                e = p[kk]; v = e.get("value", e.get("values"))
+                vt = v["var"] if isinstance(v, dict) and "var" in v else json.dumps(v)
+                return f'{e.get("accessor")} {op[kk]} {vt}'
+            pt = " and ".join(_cond(c) for c in pred["and"]) if "and" in pred else _cond(pred)
+            objdefs.append(f'obj{n} = select({sel.get("grid")}, {sel.get("level")}, {pt})')
+        else:
+            objdefs.append(f'obj{n} = {json.dumps(tgt)}')
+        steps.append(f"{cur} = coloring({prev}, coordinate_of(obj{n}), {col})")
+        prev = cur
+    lines = ["g = input_grid", f"g.size = set_grid_size({sz})", f"g.color = set_grid_color({co})", ""]
+    lines += objdefs + ["", "g0 = g.contents"] + steps
+    lines += [f"result = {prev if steps else 'g0'}",
+              "g.contents = set_grid_contents(result)", "output_grid = g"]
+    return lines
 
 
 def _display_grid(body, slot_exprs=None):
@@ -1075,17 +1279,20 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
             steps.append('<div class="stepcard stepA6"><div class="stepttl">'
                          'Step A.6 · object 객체화 (좌표들 → object.coordinate)</div>' + obj_boxes + '</div>')
 
-    anti_skel = None
+    # Focus2(output→obj0 재표현)는 별도 스텝이 아니라 anti-unification 의 첫 작업 — 각 pair 를 재표현해 둔다.
+    reexpressed, rex_exs = [], []
+    for (a, ex, p), g in zip(ast_ex_pairs, groupings or []):
+        if g:
+            reexpressed.append(_reexpress_obj0(_objectize(g, ex), ex))
+            rex_exs.append(ex)
+    final_skel = None
     if len(ast_ex_pairs) >= 2:
         a0, ex0, _p0 = ast_ex_pairs[0]
         a1, ex1, _p1 = ast_ex_pairs[1]
-        # (사용자 2026-07-24) Step B = COMPARE 만: anti-unify 병합대상(object 객체화 program)을 pair0/pair1
-        # 반투명 겹침, ③ viz 만, **전 노드** 동일=녹색·다름=빨강·하위에DIFF있는분기점=주황.
-        g0 = groupings[0] if groupings else None
-        g1 = groupings[1] if (groupings and len(groupings) > 1) else None
-        o0 = _objectize(g0, ex0) if g0 else a0
-        o1 = _objectize(g1, ex1) if g1 else a1
-        anti_skel = _antiunify_display(o0, o1)             # C 용: COMM 상수·DIFF ?p 변수 골격
+        # Step B = COMPARE: Focus2 재표현(output→obj0)된 pair0/pair1 반투명 겹침, ③ viz 만, **전 노드**
+        # 동일=녹색·다름=빨강·하위에DIFF있는분기점=주황.
+        o0 = reexpressed[0] if reexpressed else a0
+        o1 = reexpressed[1] if len(reexpressed) > 1 else a1
         src0 = _display_pixelized(o0) if PA._is_grid_body(o0.get("body") or []) else display_source(o0)
         src1 = _display_pixelized(o1) if PA._is_grid_body(o1.get("body") or []) else display_source(o1)
         grid0 = SE.solution_grid_compare(src0, src1)      # solid: 전 노드 comm/diff/orange
@@ -1098,18 +1305,20 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         steps.append('<div class="stepcard stepB"><div class="stepttl">Step B · Anti-unification</div>'
                      '<div class="stepBcontent"><div class="stepBrow">'
                      + cmp_box + '</div></div></div>')
+        # 최종 골격: 전 pair 재표현 program 의 구체 좌표를 비교로 도출한 선택 property 로 일반화(test 로 loosen).
+        final_skel = _task_solution(reexpressed, rex_exs, test_input)
 
-    # Step C = anti-unify 결과(object 객체화 병합 골격: COMM 상수·DIFF ?p 변수). resolve(일반화 사다리)는 후속.
-    if anti_skel is not None and PA._is_grid_body(anti_skel.get("body") or []):
+    # Step C = obj0(output 제거) + 구체 좌표를 비교-도출 property 로 지목한 최종 TASK.solution — ①②③ 3-representation.
+    if final_skel is not None and PA._is_grid_body(final_skel.get("body") or []):
         sol_ex = {"input": test_input} if test_input is not None else ast_ex_pairs[0][1]
         sol_box = ('<div class="innerbox">'
-                   + _pair_block("TASK.solution (anti-unify 결과)", anti_skel, sol_ex,
-                                 sol_lines=_display_pixelized(anti_skel)) + '</div>')
+                   + _pair_block("TASK.solution", final_skel, sol_ex,
+                                 sol_lines=_display_solution(final_skel)) + '</div>')
         steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
                      '<div class="stepCcontent">' + sol_box + '</div></div>')
     else:
         steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
-                      '<p class="note">anti-unify 골격 없음(pair<2 또는 grouping 없음)'
+                      '<p class="note">Focus1+2 골격 없음(pair<2 또는 grouping 없음)'
                       ' — per-pair program 만 표시.</p></div>')
 
     arrow = '<div class="steparrow">→</div>'
