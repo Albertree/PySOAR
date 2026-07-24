@@ -19,7 +19,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from soar import Slot, decide_context_slot  # noqa: E402
-from oracle.soar_oracle import ask_oracle, soar_available  # noqa: E402
+from tests.oracle.soar_oracle import ask_oracle, soar_available  # noqa: E402
 
 # (name, slot, winner_is_determinate)
 CASES = [
