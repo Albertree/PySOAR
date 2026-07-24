@@ -22,18 +22,7 @@ def grids_of(pair):
     return grids
 
 
-@dsl("util", ["grid"], "role")
-def role_of(grid):
-    """grid 역할 — node_id 끝 세그먼트로 판정: G0=input, G1=output."""
-    last = grid.node_id.split(".")[-1]
-    if last == "G0":
-        return "input"
-    if last == "G1":
-        return "output"
-    return last
-
-
-@dsl("util", ["set", "pred"], "set")
+@dsl("util", ["scope", "predicate"], "scope")
 def filter_(items, pred):
     """pred(x) 가 참인 원소만 남긴다."""
     return [x for x in items if pred(x)]

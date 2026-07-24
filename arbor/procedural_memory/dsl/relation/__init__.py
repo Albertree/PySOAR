@@ -16,7 +16,7 @@ from arbor.perception.arckg.comparison import compare as _kg_compare
 from arbor.procedural_memory.dsl.registry import dsl
 
 
-@dsl("relation", ["scope_a", "scope_b"], "receipts")
+@dsl("relation", ["scope", "scope"], "receipts")
 def compare(scope_a, scope_b):
     """두 scope 의 N:N 비교 → [(x, y, receipt), ...]. 같은 범위면 안끼리 pairwise."""
     a = scope_a if isinstance(scope_a, list) else [scope_a]

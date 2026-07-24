@@ -10,7 +10,7 @@ from arbor.procedural_memory.dsl.registry import dsl
 from arbor.procedural_memory.dsl.effect import effect
 
 
-@dsl("transformation", ["grid", "position", "color"], "grid", effect=effect("recolor", "grid"))
+@dsl("transformation", ["grid", "coordinate", "color"], "grid", effect=effect("recolor", "grid"))
 def coloring(grid, position, color):
     """grid 의 position=(row, col) 한 셀을 color 로 칠한 *새* 격자 반환."""
     r, c = position
@@ -32,7 +32,7 @@ def set_grid_color(grid, color):
     return grid                          # base/palette 는 표시·검증용; 산출은 contents 지배(Phase 1)
 
 
-@dsl("transformation", ["grid", "contents"], "grid", effect=effect("create", "grid"))
+@dsl("transformation", ["grid", "class"], "grid", effect=effect("create", "grid"))
 def set_grid_contents(grid, contents):
     """G1 의 셀 값 = coloring 조합(또는 상수/항등). Phase 1: const grid 그대로, keep=입력."""
     return [list(r) for r in contents] if contents is not None else grid

@@ -15,13 +15,13 @@ from arbor.procedural_memory.dsl.util import pairs_of, grids_of, objects_of, fil
 _LEVEL_CHILDREN = {"pair": pairs_of, "grid": grids_of, "object": objects_of, "pixel": pixels_of}
 
 
-@dsl("selection", ["anchor", "level"], "list[node]")
+@dsl("selection", ["node", "symbol"], "list[node]")
 def elements_at(anchor, level):
     """anchor 아래 level 의 원소들."""
     return _LEVEL_CHILDREN[level](anchor)
 
 
-@dsl("selection", ["anchor", "level", "pred"], "scope")
+@dsl("selection", ["node", "symbol", "predicate"], "scope")
 def select(anchor, level, pred=None):
     """anchor 아래 level 에서 pred 맞는 요소 (pred 없으면 전체).
     예: select(pair,"grid",role==out)=비교 범위 / select(grid,"object",pred)=객체 선택."""
