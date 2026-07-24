@@ -17,7 +17,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from arbor.reasoning import program_ast as PA
-from procedural_memory.operators import compress as CG
+from arbor.procedural_memory.operators import compress as CG
 
 
 def _load_move000a_pair0():

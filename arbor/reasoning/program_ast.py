@@ -321,7 +321,7 @@ def _accessor_fn(name):
     """accessor 이름 → callable(node)->value. property DSL 함수명이면 그 함수, 아니면
     node.to_json()[name](= property KEY). (사용자 2026-07-24: accessor 를 **검색가능한 property key**
     이름으로 통일 — pixel 좌표는 함수명 pixel_coordinate 가 아니라 key 'coordinate'.)"""
-    from procedural_memory.dsl import property as _prop   # vendored property DSL
+    from arbor.procedural_memory.dsl import property as _prop   # vendored property DSL
     fn = getattr(_prop, name, None)
     if fn is not None:
         return fn
@@ -372,14 +372,14 @@ def _resolve_select_coords(target, grid_in):
     if sel is None:
         return None
     from arbor.perception.arckg.grid import Grid
-    from procedural_memory.dsl.util import pixels_of, objects_of
+    from arbor.procedural_memory.dsl.util import pixels_of, objects_of
     gnode = Grid("_exec", grid_in)
     pred = _compile_pred(sel["pred"])
     if sel["level"] == "pixel":
         chosen = [p for p in pixels_of(gnode) if pred(p)]
         coords = [tuple(p.coord) for p in chosen]
     else:                                                    # object (P2 에서 본격 사용)
-        from procedural_memory.dsl.property import coordinate_of as _coord_of
+        from arbor.procedural_memory.dsl.property import coordinate_of as _coord_of
         chosen = [o for o in objects_of(gnode) if pred(o)]
         coords = [tuple(rc) for o in chosen for rc in _coord_of(o)]
     return sorted(coords)
