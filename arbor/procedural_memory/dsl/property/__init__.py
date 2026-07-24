@@ -8,7 +8,7 @@ property DSL — ARCKG 노드 to_json() 키를 함수형으로 노출 (재계산
 
   COMMON (다계층):     color_of · size_of · contents_of · coordinate_of
   OBJECT 전용:          area_of · position_of · shape_of · symmetry_of
-  라벨(카운팅 X):        type_of (pair→example/test, grid→input/output)
+  라벨(카운팅 X):        type_of (계층: task/pair/grid/object/pixel) · subtype_of (pair→example/test, grid→input/output)
   PAIR:                 role_of
   집계(_count):          example_pair_count · test_pair_count
   하위투영:              height_of · width_of · hori_symm_of · verti_symm_of ·
@@ -70,10 +70,16 @@ def symmetry_of(obj):
     return obj.to_json()["symmetry"]
 
 
-# ── 라벨: type_of (카운팅 대상 아님, node_id 구조에서 도출) ─────────────────
-@dsl("property", ["pair", "grid"], "label")
+# ── 라벨(카운팅 X): type_of=계층(5) · subtype_of=계층 내 하위구분 ────────────
+@dsl("property", ["task", "pair", "grid", "object", "pixel"], "layer")
 def type_of(node):
-    """계층 라벨. pair → example/test · grid → input/output. (node_id 구조에서 도출.)
+    """노드의 계층 텍스트: task / pair / grid / object / pixel. (5계층 전부; 클래스에서 도출.)"""
+    return node.__class__.__name__.lower()
+
+
+@dsl("property", ["pair", "grid"], "label")
+def subtype_of(node):
+    """계층 내 하위구분. pair → example/test · grid → input/output. (node_id 에서 도출.)
     Node ID: T{hex}.P{p}(.G{g}) — P<digit>=example / P<letter>=test · G0=input / G1=output."""
     seg = node.node_id.split(".")[-1]
     if seg.startswith("P"):
