@@ -11,7 +11,7 @@ class TestCoordIn(unittest.TestCase):
     def test_coord_in_single(self):
         body = [PA.step("coloring",
                         target=PA.coordinate_of(PA.select("input", "pixel",
-                                 PA.coord_in("pixel_coordinate", [[1, 1]]))),
+                                 PA.coord_in("coordinate", [[1, 1]]))),
                         color=PA.const(3))]
         out = PA.execute(PA.program(body), self.g)
         self.assertEqual(out[1][1], 3)
@@ -20,7 +20,7 @@ class TestCoordIn(unittest.TestCase):
         # 두 셀을 한 op 로 (op수 보존): (0,0)과 (2,2) 를 5 로
         body = [PA.step("coloring",
                         target=PA.coordinate_of(PA.select("input", "pixel",
-                                 PA.coord_in("pixel_coordinate", [[0, 0], [2, 2]]))),
+                                 PA.coord_in("coordinate", [[0, 0], [2, 2]]))),
                         color=PA.const(5))]
         out = PA.execute(PA.program(body), self.g)
         self.assertEqual(out[0][0], 5); self.assertEqual(out[2][2], 5)
@@ -28,9 +28,9 @@ class TestCoordIn(unittest.TestCase):
 
     def test_to_source_coord_in(self):
         body = [PA.step("coloring", target=PA.coordinate_of(PA.select("input","pixel",
-                        PA.coord_in("pixel_coordinate", [[1,1]]))), color=PA.const(3))]
+                        PA.coord_in("coordinate", [[1,1]]))), color=PA.const(3))]
         src = PA.to_source(PA.program(body))
-        self.assertIn("coord_in", src) if "coord_in" in src else self.assertIn("pixel_coordinate", src)
+        self.assertIn("coord_in", src) if "coord_in" in src else self.assertIn("coordinate", src)
 
 
 if __name__ == "__main__":

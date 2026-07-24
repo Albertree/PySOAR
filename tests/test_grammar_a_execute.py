@@ -14,7 +14,7 @@ class TestGrammarAExecute(unittest.TestCase):
         # (3,2) 셀을 0 으로 칠함 = "원위치 비움"
         body = [PA.step("coloring",
                         target=PA.coordinate_of(PA.select("input", "pixel",
-                                                          PA.eq("pixel_coordinate", [3, 2]))),
+                                                          PA.eq("coordinate", [3, 2]))),
                         color=PA.const(0))]
         out = PA.execute(PA.program(body), self.g0)
         expect = [[0] * 8 for _ in range(8)]                 # (3,2) 도 0 → 전부 0
@@ -25,7 +25,7 @@ class TestGrammarAExecute(unittest.TestCase):
         W = 8
         sel_prog = PA.program([PA.step("coloring",
                      target=PA.coordinate_of(PA.select("input", "pixel",
-                              PA.eq("pixel_coordinate", [4, 3]))), color=PA.const(7))])
+                              PA.eq("coordinate", [4, 3]))), color=PA.const(7))])
         cell_prog = PA.program([PA.step("coloring",
                      target=PA.cellset(PA.const([4 * W + 3])), color=PA.const(7))])
         self.assertEqual(PA.execute(sel_prog, self.g0), PA.execute(cell_prog, self.g0))
@@ -34,7 +34,7 @@ class TestGrammarAExecute(unittest.TestCase):
         # 색7 픽셀을 3 으로 — pixel_color 술어
         body = [PA.step("coloring",
                         target=PA.coordinate_of(PA.select("input", "pixel",
-                                                          PA.eq("pixel_color", 7))),
+                                                          PA.eq("color", 7))),
                         color=PA.const(3))]
         out = PA.execute(PA.program(body), self.g0)
         self.assertEqual(out[3][2], 3)
