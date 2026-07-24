@@ -44,7 +44,7 @@ import re
 
 from arbor.agent.focus import setup_focus_agent
 from arbor.engine.trace import _Tracer
-from arbor.env.dataset import list_tasks, load_task
+from env.dataset import list_tasks, load_task
 from arbor.reasoning import program_ast as PA
 from debugger.reports import solution_expr as SE
 

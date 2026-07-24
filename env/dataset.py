@@ -12,7 +12,7 @@ import os
 
 # vendored into the repo (self-contained; raw task JSON only). was
 # ~/Desktop/ARC-solver/data — external hook removed so the repo runs standalone.
-_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
+_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
 # (2026-07-17 사용자 데이터 정리) ARC_easy_a → ARC_easy 로 rename(구 ARC_easy 삭제); made·multi 삭제;
 # ARC_human 은 사용자 제작 문제(flip/move/rotate 하위폴더)로 교체.

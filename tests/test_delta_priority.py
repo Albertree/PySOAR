@@ -1,5 +1,5 @@
 from arbor.reasoning.program import _resolve_decision, _grid_decide
-from arbor.env.dataset import list_tasks, load_task
+from env.dataset import list_tasks, load_task
 
 
 def test_delta_beats_output_const():

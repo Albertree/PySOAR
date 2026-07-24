@@ -8,7 +8,7 @@ from __future__ import annotations
 import json, os, sys
 from arbor.procedural_memory.loader import PRODUCTIONS, OP_DOCS
 from arbor.agent.focus import setup_focus_agent
-from arbor.env.dataset import list_tasks, load_task
+from env.dataset import list_tasks, load_task
 
 
 def _cycle_tree(events):

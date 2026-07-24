@@ -15,7 +15,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # --- 진입점 (리팩터로 이동하면 여기만 바꾼다) ---
 from debugger.reports.dashboard import _dash_data          # noqa: E402
-from arbor.env.dataset import list_tasks, load_task     # noqa: E402
+from env.dataset import list_tasks, load_task     # noqa: E402
 
 
 def main() -> int:

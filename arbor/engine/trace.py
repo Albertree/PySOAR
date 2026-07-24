@@ -68,7 +68,7 @@ class _Tracer:
         # 감지(원본 SOAR: no-change 는 한 사이클 뒤에 드러남). kind: 'arg'(observe/compare) | 'descend'(solve).
         self._pending_onc: dict = {}            # goal_id -> (op_name, kind)
         # ARC-AGI 3회 재시도 환경 (submit → 채점 → 오답이면 다음 후보로 retry)
-        from arbor.env.environment import ARCEnvironment
+        from env.environment import ARCEnvironment
         self.env = ARCEnvironment([(tid, task)])
         self.env.reset()
         self.attempts: list = []               # [{answer, correct, hyp}] — 대시보드 후보
