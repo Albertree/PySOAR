@@ -13,7 +13,7 @@ property DSL — ARCKG 노드 to_json() 키를 함수형으로 노출 (재계산
 (각 함수의 입력 타입 = 그 property 의 계층. registry SPECS 의 in[0] 으로도 계층을 안다.)
 """
 
-from procedural_memory.dsl.registry import dsl
+from arbor.procedural_memory.dsl.registry import dsl
 
 
 # ── TASK-level ──────────────────────────────────────────────

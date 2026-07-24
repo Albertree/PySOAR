@@ -3,7 +3,7 @@ import json, os, sys, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from arbor.reasoning import program_ast as PA
 from arbor.reasoning import antiunify as AU
-from procedural_memory.operators import compress as CG
+from arbor.procedural_memory.operators import compress as CG
 
 
 class TestGridBlobAntiunify(unittest.TestCase):

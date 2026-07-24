@@ -1,6 +1,6 @@
 import json
 from arbor.reasoning import program_ast as PA
-from procedural_memory.operators.verify import _literal_grid_props
+from arbor.procedural_memory.operators.verify import _literal_grid_props
 
 
 def test_literal_grid_props_from_output():
@@ -13,7 +13,7 @@ def test_literal_grid_props_from_output():
 def test_assembled_program_has_literal_size_not_pending():
     # skeleton(size=pending·color=pending·contents=pending) + 하강 coloring body → 조립 결과가
     # 그 pair 출력의 리터럴 size/color 를 갖고, pending 이 없어야 한다.
-    import procedural_memory.operators.verify as V
+    import arbor.procedural_memory.operators.verify as V
     sk = PA.grid_program(PA.pending("size"), PA.pending("color"),
                          PA.set_grid_contents(PA.pending("contents"))["args"]["contents"])
     code = json.dumps(PA.program([PA.step("coloring", target=PA.ref("coord", PA.const([0, 1])),

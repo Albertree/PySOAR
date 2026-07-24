@@ -5,7 +5,7 @@ import json, os, sys
 from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.perception.nav import _focus_group
-from procedural_memory.operators.observe import _build_agenda
+from arbor.procedural_memory.operators.observe import _build_agenda
 
 
 def _op_select(ag):

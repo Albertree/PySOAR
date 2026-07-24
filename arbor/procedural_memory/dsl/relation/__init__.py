@@ -13,7 +13,7 @@ compare 자체는 ARCKG/comparison.py 재사용. receipt 요약은 verdict.
 from itertools import combinations
 
 from arbor.perception.arckg.comparison import compare as _kg_compare
-from procedural_memory.dsl.registry import dsl
+from arbor.procedural_memory.dsl.registry import dsl
 
 
 @dsl("relation", ["scope_a", "scope_b"], "receipts")

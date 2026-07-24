@@ -6,8 +6,8 @@ transformation DSL — 그리드 변형 *동결 원자 하나(coloring)* (씨앗
 라이브러리의 시작 상태 — Slice 2 의 anti-unification 이 여기서 자란다.
 """
 
-from procedural_memory.dsl.registry import dsl
-from procedural_memory.dsl.effect import effect
+from arbor.procedural_memory.dsl.registry import dsl
+from arbor.procedural_memory.dsl.effect import effect
 
 
 @dsl("transformation", ["grid", "position", "color"], "grid", effect=effect("recolor", "grid"))

@@ -8,8 +8,8 @@ select(anchor, level, pred) = "anchor 아래 level 에서 pred 맞는 요소".
 relation(비교)·transformation(변형) 양쪽이 빌려 쓰므로 독립 카테고리. 재료는 util.
 """
 
-from procedural_memory.dsl.registry import dsl
-from procedural_memory.dsl.util import pairs_of, grids_of, objects_of, filter_, pixels_of
+from arbor.procedural_memory.dsl.registry import dsl
+from arbor.procedural_memory.dsl.util import pairs_of, grids_of, objects_of, filter_, pixels_of
 
 # level → anchor 아래 그 level 원소를 주는 util
 _LEVEL_CHILDREN = {"pair": pairs_of, "grid": grids_of, "object": objects_of, "pixel": pixels_of}

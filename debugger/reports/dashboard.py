@@ -6,7 +6,7 @@ setup_focus_agent 으로 태스크를 SOAR 로 구동, 트레이스를 dashboard
 """
 from __future__ import annotations
 import json, os, sys
-from procedural_memory.loader import PRODUCTIONS, OP_DOCS
+from arbor.procedural_memory.loader import PRODUCTIONS, OP_DOCS
 from arbor.agent.focus import setup_focus_agent
 from arbor.env.dataset import list_tasks, load_task
 

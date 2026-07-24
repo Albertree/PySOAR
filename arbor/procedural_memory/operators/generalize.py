@@ -46,7 +46,7 @@ def _train_all_changes(ag):
     """모든 train pair 가 **대응 객체의 변화**(이동 또는 재채색)를 포함하는가 — compress 라우팅 조건.
     move/recolor 를 특수조건으로 분기하지 않는다: 객체가 대응되고 차이(위치·색)가 있으면 그 차이를
     blob program 으로 메운다(구조 대응 = ARC analogical). 대응 변화 없으면(대응 불가) False."""
-    from procedural_memory.operators.compress import _object_changes
+    from arbor.procedural_memory.operators.compress import _object_changes
     train = ag.task.get("train") or []
     return bool(train) and all(_object_changes(e["input"], e["output"]) for e in train)
 

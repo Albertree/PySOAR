@@ -6,7 +6,7 @@ from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
 from arbor.perception.perception import _score_frac
 from arbor.reasoning.compare_engine import _compare, _store_relation
-from procedural_memory.operators.observe import _imbalance_goal
+from arbor.procedural_memory.operators.observe import _imbalance_goal
 
 
 def _op_compare(ag):

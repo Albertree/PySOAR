@@ -1,6 +1,6 @@
 import unittest
 from arbor.perception.arckg.grid import Grid
-from procedural_memory.dsl.property import height, width, size
+from arbor.procedural_memory.dsl.property import height, width, size
 
 
 class TestGridHW(unittest.TestCase):
@@ -12,7 +12,7 @@ class TestGridHW(unittest.TestCase):
         self.assertEqual(width(g), size(g)["width"])
 
     def test_registered_in_specs(self):
-        from procedural_memory.dsl.registry import SPECS
+        from arbor.procedural_memory.dsl.registry import SPECS
         self.assertEqual(SPECS["height"]["in"], ["grid"])
         self.assertEqual(SPECS["width"]["out"], "int")
 

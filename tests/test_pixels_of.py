@@ -1,7 +1,7 @@
 import unittest
 from arbor.perception.arckg.grid import Grid
-from procedural_memory.dsl.util import pixels_of
-from procedural_memory.dsl.selection import elements_at
+from arbor.procedural_memory.dsl.util import pixels_of
+from arbor.procedural_memory.dsl.selection import elements_at
 
 
 class TestPixelsOf(unittest.TestCase):

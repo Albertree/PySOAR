@@ -16,12 +16,12 @@ import json
 import os
 
 # @dsl 등록 트리거 (import 시 SPECS 채워짐)
-import procedural_memory.dsl.transformation  # noqa: F401
-import procedural_memory.dsl.property        # noqa: F401
-import procedural_memory.dsl.relation        # noqa: F401
-import procedural_memory.dsl.util            # noqa: F401
-import procedural_memory.dsl.selection       # noqa: F401
-from procedural_memory.dsl.registry import SPECS, spec
+import arbor.procedural_memory.dsl.transformation  # noqa: F401
+import arbor.procedural_memory.dsl.property        # noqa: F401
+import arbor.procedural_memory.dsl.relation        # noqa: F401
+import arbor.procedural_memory.dsl.util            # noqa: F401
+import arbor.procedural_memory.dsl.selection       # noqa: F401
+from arbor.procedural_memory.dsl.registry import SPECS, spec
 
 
 def build_ontology() -> str:

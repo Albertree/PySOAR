@@ -4,7 +4,7 @@ util DSL — 노드 계층 항해·필터 (Slice 1, SLICE_1_DEV §6).
 ARCKG 노드 구조를 함수형으로 노출만 한다 (계산 로직 없음).
 """
 
-from procedural_memory.dsl.registry import dsl
+from arbor.procedural_memory.dsl.registry import dsl
 
 
 @dsl("util", ["task"], "list[pair]")

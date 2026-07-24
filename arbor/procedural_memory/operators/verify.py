@@ -3,7 +3,7 @@
 from __future__ import annotations
 import json
 
-from procedural_memory.operators.hypothesize import pair_cursor
+from arbor.procedural_memory.operators.hypothesize import pair_cursor
 from arbor.reasoning import program_ast as PA
 
 

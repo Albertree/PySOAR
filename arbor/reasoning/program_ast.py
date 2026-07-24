@@ -474,7 +474,7 @@ _LEVEL_ACCESSOR = {"pixel": "pixels_of", "object": "objects_of"}
 
 def _sig(name):
     """SPECS 명세 → 한 줄 시그니처 (없으면 이름만)."""
-    from procedural_memory.dsl.registry import SPECS
+    from arbor.procedural_memory.dsl.registry import SPECS
     s = SPECS.get(name)
     if not s:
         return f"# {name}(...)"

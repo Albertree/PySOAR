@@ -4,8 +4,8 @@
 from __future__ import annotations
 import json, os, sys
 from soar import Agent
-from procedural_memory.loader import PRODUCTIONS
-from procedural_memory.operators import OPERATOR_BODIES
+from arbor.procedural_memory.loader import PRODUCTIONS
+from arbor.procedural_memory.operators import OPERATOR_BODIES
 from arbor.perception.nav import index_arckg
 from arbor.expr_solver import build_arckg
 
