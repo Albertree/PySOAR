@@ -1,0 +1,1593 @@
+<!doctype html><meta charset='utf-8'><title>object 비교 0·1·2차</title>
+<style>
+body{background:#0d1117;color:#d0d7de;font:13px/1.5 ui-monospace,monospace;margin:0;padding:22px}
+h1{font-size:17px;margin:0 0 4px} .lead{color:#8b949e;margin-bottom:18px;max-width:920px}
+section{border:1px solid #30363d;border-radius:9px;padding:12px 16px;margin:0 0 18px;background:#161b22}
+h2{font-size:16px;margin:0 0 4px;color:#e6edf3} .sd{color:#8b949e;margin:0 0 6px}
+h3{font-size:13px;margin:14px 0 6px;color:#adbac7} .dim{color:#6e7681;font-weight:normal}
+.row{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.card{border:1px solid #30363d;border-radius:7px;padding:8px 10px;background:#0d1117;max-width:430px}
+.card.wide{max-width:100%;flex:1 1 100%}
+.lbl{font-size:12px;margin-bottom:6px;color:#d2a8ff}
+table.g{border-collapse:collapse;margin-bottom:8px} table.g td{width:12px;height:12px;border:1px solid #1c1c1c}
+table.t{border-collapse:collapse;width:100%;font-size:12px}
+table.t th,table.t td{border:1px solid #30363d;padding:2px 7px;text-align:left}
+table.t th{background:#1c2128;color:#adbac7;font-weight:normal}
+tr.comm td{background:#0f1f13} tr.comm .v{color:#3fb950;font-weight:bold}
+tr.diff td{background:#2a1416} tr.diff .v{color:#f85149;font-weight:bold}
+tr.grp td{background:#21262d;color:#f0b72f;font-weight:bold;letter-spacing:.5px}
+td.sub{color:#8b949e;padding-left:16px}
+.note{margin-top:6px;color:#d29922}
+pre{background:#010409;border:1px solid #30363d;border-radius:6px;padding:6px 8px;margin:0;
+ overflow:auto;max-height:240px;font-size:11px;color:#c9d1d9;white-space:pre}
+</style>
+<h1>08ed6ac7 — object 비교 (0차 property · 1차 · 2차 제안)</h1>
+<p class=lead>08ed 는 회색 세로막대를 길이순위로 재채색(1위→파랑·2위→빨강·3위→초록·4위→노랑).
+세 시나리오로 object 를 골라 0·1·2차 비교. 2차는 verdict끼리 같음/다름만(하위값 없음).</p>
+<section><h2>시나리오 1 — 회색 1위 → 파랑 (올바른 대응)</h2><p class=sd>P0·P1 모두 '가장 긴 회색 → 파랑'. 같은 역할끼리 이은 대응.</p><h3>0차 — object property dict 4개</h3><div class=row><div class=card><div class=lbl>P0G0 회색 가장 긴</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 9,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: false,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: true,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   0,
+   5
+  ],
+  [
+   1,
+   5
+  ],
+  [
+   2,
+   5
+  ],
+  [
+   3,
+   5
+  ],
+  [
+   4,
+   5
+  ],
+  [
+   5,
+   5
+  ],
+  [
+   6,
+   5
+  ],
+  [
+   7,
+   5
+  ],
+  [
+   8,
+   5
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 0,
+   &quot;col_index&quot;: 5
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 0,
+   &quot;col_index&quot;: 5
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 5
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 5
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 9,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P0G1 파랑</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 9,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: true,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: false,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   0,
+   5
+  ],
+  [
+   1,
+   5
+  ],
+  [
+   2,
+   5
+  ],
+  [
+   3,
+   5
+  ],
+  [
+   4,
+   5
+  ],
+  [
+   5,
+   5
+  ],
+  [
+   6,
+   5
+  ],
+  [
+   7,
+   5
+  ],
+  [
+   8,
+   5
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 0,
+   &quot;col_index&quot;: 5
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 0,
+   &quot;col_index&quot;: 5
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 5
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 5
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 9,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P1G0 회색 가장 긴</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: false,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: true,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   7
+  ],
+  [
+   2,
+   7
+  ],
+  [
+   3,
+   7
+  ],
+  [
+   4,
+   7
+  ],
+  [
+   5,
+   7
+  ],
+  [
+   6,
+   7
+  ],
+  [
+   7,
+   7
+  ],
+  [
+   8,
+   7
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P1G1 파랑</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: true,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: false,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   7
+  ],
+  [
+   2,
+   7
+  ],
+  [
+   3,
+   7
+  ],
+  [
+   4,
+   7
+  ],
+  [
+   5,
+   7
+  ],
+  [
+   6,
+   7
+  ],
+  [
+   7,
+   7
+  ],
+  [
+   8,
+   7
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div></div><h3>1차 — compare(G0obj, G1obj) 2개</h3><div class=row><div class=card><div class=lbl>compare(P0G0 회색 가장 긴, P0G1 파랑)</div><table class=t><tr><th>property</th><th>verdict</th><th>값1</th><th>값2</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>9</td><td>9</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=comm><td class=sub>height</td><td class=v>COMM</td><td>9</td><td>9</td></tr><tr class=comm><td class=sub>width</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1], [1], [1…</td><td>[[1], [1], [1…</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>1</td><td class=v>DIFF</td><td>False</td><td>True</td></tr><tr class=comm><td class=sub>2</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>3</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>4</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>5</td><td class=v>DIFF</td><td>True</td><td>False</td></tr><tr class=comm><td class=sub>6</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>7</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>8</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>9</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[0, 5], [1, …</td><td>[[0, 5], [1, …</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=comm><td class=sub>left_bottom.col_index</td><td class=v>COMM</td><td>5</td><td>5</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>left_top.col_index</td><td class=v>COMM</td><td>5</td><td>5</td></tr><tr class=comm><td class=sub>left_top.row_index</td><td class=v>COMM</td><td>0</td><td>0</td></tr><tr class=comm><td class=sub>right_bottom.col_index</td><td class=v>COMM</td><td>5</td><td>5</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>right_top.col_index</td><td class=v>COMM</td><td>5</td><td>5</td></tr><tr class=comm><td class=sub>right_top.row_index</td><td class=v>COMM</td><td>0</td><td>0</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>diag_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>hori_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=comm><td class=sub>verti_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>[[5], [5], [5…</td><td>[[1], [1], [1…</td></tr></table></div><div class=card><div class=lbl>compare(P1G0 회색 가장 긴, P1G1 파랑)</div><table class=t><tr><th>property</th><th>verdict</th><th>값1</th><th>값2</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=comm><td class=sub>height</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>width</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1], [1], [1…</td><td>[[1], [1], [1…</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>1</td><td class=v>DIFF</td><td>False</td><td>True</td></tr><tr class=comm><td class=sub>2</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>3</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>4</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>5</td><td class=v>DIFF</td><td>True</td><td>False</td></tr><tr class=comm><td class=sub>6</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>7</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>8</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>9</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1, 7], [2, …</td><td>[[1, 7], [2, …</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=comm><td class=sub>left_bottom.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>left_top.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>left_top.row_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=comm><td class=sub>right_bottom.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>right_top.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>right_top.row_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>diag_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>hori_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=comm><td class=sub>verti_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>[[5], [5], [5…</td><td>[[1], [1], [1…</td></tr></table></div></div><h3>2차 — compare(1차,1차) 1개 <span class=dim>[제안]</span></h3><div class=row><div class=card wide><div class=lbl>compare(1차_P0, 1차_P1) <span class=dim>— 제안: verdict끼리 같음/다름만</span></div><table class=t><tr><th>property</th><th>1차_P0</th><th>1차_P1</th><th>관계 같음?</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=comm><td class=sub>(전체)</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=comm><td class=sub>height</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>width</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=comm><td class=sub>(전체)</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>1</td><td>DIFF</td><td>DIFF</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>2</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>3</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>4</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>5</td><td>DIFF</td><td>DIFF</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>6</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>7</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>8</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>9</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=comm><td class=sub>(전체)</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=comm><td class=sub>left_bottom.col_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>left_top.col_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>left_top.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>right_bottom.col_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>right_top.col_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>right_top.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>diag_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>hori_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>verti_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=comm><td class=sub>(전체)</td><td>DIFF</td><td>DIFF</td><td class=v>COMM</td></tr></table><div class=note>⇒ 두 pair 의 object 변환이 <b>구조적으로 동일</b></div></div></div></section><section><h2>시나리오 2 — P0(2위→빨강) vs P1(1위→파랑) (어긋난 대응)</h2><p class=sd>P0 는 '2번째 긴 회색 → 빨강', P1 은 '가장 긴 회색 → 파랑'. 역할이 어긋난 대응.</p><h3>0차 — object property dict 4개</h3><div class=row><div class=card><div class=lbl>P0G0 회색 2번째 긴</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: false,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: true,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   1
+  ],
+  [
+   2,
+   1
+  ],
+  [
+   3,
+   1
+  ],
+  [
+   4,
+   1
+  ],
+  [
+   5,
+   1
+  ],
+  [
+   6,
+   1
+  ],
+  [
+   7,
+   1
+  ],
+  [
+   8,
+   1
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 1
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 1
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 1
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 1
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P0G1 빨강</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#FF4136'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#FF4136'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#FF4136'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#FF4136'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#FF4136'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#FF4136'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#FF4136'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#FF4136'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: false,
+  &quot;2&quot;: true,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: false,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   2
+  ],
+  [
+   2
+  ],
+  [
+   2
+  ],
+  [
+   2
+  ],
+  [
+   2
+  ],
+  [
+   2
+  ],
+  [
+   2
+  ],
+  [
+   2
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   1
+  ],
+  [
+   2,
+   1
+  ],
+  [
+   3,
+   1
+  ],
+  [
+   4,
+   1
+  ],
+  [
+   5,
+   1
+  ],
+  [
+   6,
+   1
+  ],
+  [
+   7,
+   1
+  ],
+  [
+   8,
+   1
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 1
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 1
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 1
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 1
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P1G0 회색 가장 긴</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: false,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: true,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   7
+  ],
+  [
+   2,
+   7
+  ],
+  [
+   3,
+   7
+  ],
+  [
+   4,
+   7
+  ],
+  [
+   5,
+   7
+  ],
+  [
+   6,
+   7
+  ],
+  [
+   7,
+   7
+  ],
+  [
+   8,
+   7
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P1G1 파랑</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: true,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: false,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   7
+  ],
+  [
+   2,
+   7
+  ],
+  [
+   3,
+   7
+  ],
+  [
+   4,
+   7
+  ],
+  [
+   5,
+   7
+  ],
+  [
+   6,
+   7
+  ],
+  [
+   7,
+   7
+  ],
+  [
+   8,
+   7
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div></div><h3>1차 — compare(G0obj, G1obj) 2개</h3><div class=row><div class=card><div class=lbl>compare(P0G0 회색 2번째 긴, P0G1 빨강)</div><table class=t><tr><th>property</th><th>verdict</th><th>값1</th><th>값2</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=comm><td class=sub>height</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>width</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1], [1], [1…</td><td>[[1], [1], [1…</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>1</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>2</td><td class=v>DIFF</td><td>False</td><td>True</td></tr><tr class=comm><td class=sub>3</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>4</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>5</td><td class=v>DIFF</td><td>True</td><td>False</td></tr><tr class=comm><td class=sub>6</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>7</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>8</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>9</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1, 1], [2, …</td><td>[[1, 1], [2, …</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=comm><td class=sub>left_bottom.col_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>left_top.col_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=comm><td class=sub>left_top.row_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=comm><td class=sub>right_bottom.col_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>right_top.col_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=comm><td class=sub>right_top.row_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>diag_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>hori_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=comm><td class=sub>verti_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>[[5], [5], [5…</td><td>[[2], [2], [2…</td></tr></table></div><div class=card><div class=lbl>compare(P1G0 회색 가장 긴, P1G1 파랑)</div><table class=t><tr><th>property</th><th>verdict</th><th>값1</th><th>값2</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=comm><td class=sub>height</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>width</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1], [1], [1…</td><td>[[1], [1], [1…</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>1</td><td class=v>DIFF</td><td>False</td><td>True</td></tr><tr class=comm><td class=sub>2</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>3</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>4</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>5</td><td class=v>DIFF</td><td>True</td><td>False</td></tr><tr class=comm><td class=sub>6</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>7</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>8</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>9</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1, 7], [2, …</td><td>[[1, 7], [2, …</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=comm><td class=sub>left_bottom.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>left_top.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>left_top.row_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=comm><td class=sub>right_bottom.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>right_top.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>right_top.row_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>diag_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>hori_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=comm><td class=sub>verti_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>[[5], [5], [5…</td><td>[[1], [1], [1…</td></tr></table></div></div><h3>2차 — compare(1차,1차) 1개 <span class=dim>[제안]</span></h3><div class=row><div class=card wide><div class=lbl>compare(1차_P0, 1차_P1) <span class=dim>— 제안: verdict끼리 같음/다름만</span></div><table class=t><tr><th>property</th><th>1차_P0</th><th>1차_P1</th><th>관계 같음?</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=comm><td class=sub>(전체)</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=comm><td class=sub>height</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>width</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=comm><td class=sub>(전체)</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=diff><td class=sub>1</td><td>COMM</td><td>DIFF</td><td class=v>DIFF</td></tr><tr class=diff><td class=sub>2</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=comm><td class=sub>3</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>4</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>5</td><td>DIFF</td><td>DIFF</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>6</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>7</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>8</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>9</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=comm><td class=sub>(전체)</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=comm><td class=sub>left_bottom.col_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>left_top.col_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>left_top.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>right_bottom.col_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>right_top.col_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>right_top.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>diag_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>hori_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>verti_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=comm><td class=sub>(전체)</td><td>DIFF</td><td>DIFF</td><td class=v>COMM</td></tr></table><div class=note>⇒ 두 pair 의 object 변환이 <b>일부 property 에서 다름</b></div></div></div></section><section><h2>시나리오 3 — P0(2번째 긴 회색 ↔ 파랑) vs P1(가장 긴 회색 ↔ 파랑) (대상 자체가 어긋남)</h2><p class=sd>P0 는 '2번째 긴 회색'을 파랑과 비교하지만 파랑은 사실 '가장 긴 회색'의 재채색 — 서로 다른 객체를 이음. P1 은 올바른 대응. → 2차에 area·size·shape·position 등 DIFF 가 많이 뜬다.</p><h3>0차 — object property dict 4개</h3><div class=row><div class=card><div class=lbl>P0G0 회색 2번째 긴</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: false,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: true,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   1
+  ],
+  [
+   2,
+   1
+  ],
+  [
+   3,
+   1
+  ],
+  [
+   4,
+   1
+  ],
+  [
+   5,
+   1
+  ],
+  [
+   6,
+   1
+  ],
+  [
+   7,
+   1
+  ],
+  [
+   8,
+   1
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 1
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 1
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 1
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 1
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P0G1 파랑</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 9,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: true,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: false,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   0,
+   5
+  ],
+  [
+   1,
+   5
+  ],
+  [
+   2,
+   5
+  ],
+  [
+   3,
+   5
+  ],
+  [
+   4,
+   5
+  ],
+  [
+   5,
+   5
+  ],
+  [
+   6,
+   5
+  ],
+  [
+   7,
+   5
+  ],
+  [
+   8,
+   5
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 0,
+   &quot;col_index&quot;: 5
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 0,
+   &quot;col_index&quot;: 5
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 5
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 5
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 9,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P1G0 회색 가장 긴</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#AAAAAA'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: false,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: true,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ],
+  [
+   5
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   7
+  ],
+  [
+   2,
+   7
+  ],
+  [
+   3,
+   7
+  ],
+  [
+   4,
+   7
+  ],
+  [
+   5,
+   7
+  ],
+  [
+   6,
+   7
+  ],
+  [
+   7,
+   7
+  ],
+  [
+   8,
+   7
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div><div class=card><div class=lbl>P1G1 파랑</div><table class=g><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr><tr><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0d1117'></td><td style='background:#0074D9'></td><td style='background:#0d1117'></td></tr></table><pre>{
+ &quot;area&quot;: 8,
+ &quot;color&quot;: {
+  &quot;0&quot;: false,
+  &quot;1&quot;: true,
+  &quot;2&quot;: false,
+  &quot;3&quot;: false,
+  &quot;4&quot;: false,
+  &quot;5&quot;: false,
+  &quot;6&quot;: false,
+  &quot;7&quot;: false,
+  &quot;8&quot;: false,
+  &quot;9&quot;: false
+ },
+ &quot;contents&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;coordinate&quot;: [
+  [
+   1,
+   7
+  ],
+  [
+   2,
+   7
+  ],
+  [
+   3,
+   7
+  ],
+  [
+   4,
+   7
+  ],
+  [
+   5,
+   7
+  ],
+  [
+   6,
+   7
+  ],
+  [
+   7,
+   7
+  ],
+  [
+   8,
+   7
+  ]
+ ],
+ &quot;position&quot;: {
+  &quot;left_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_top&quot;: {
+   &quot;row_index&quot;: 1,
+   &quot;col_index&quot;: 7
+  },
+  &quot;left_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  },
+  &quot;right_bottom&quot;: {
+   &quot;row_index&quot;: 8,
+   &quot;col_index&quot;: 7
+  }
+ },
+ &quot;shape&quot;: [
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ],
+  [
+   1
+  ]
+ ],
+ &quot;size&quot;: {
+  &quot;height&quot;: 8,
+  &quot;width&quot;: 1
+ },
+ &quot;symmetry&quot;: {
+  &quot;hori_symm&quot;: true,
+  &quot;verti_symm&quot;: true,
+  &quot;diag_symm&quot;: false,
+  &quot;anti_symm&quot;: false
+ }
+}</pre></div></div><h3>1차 — compare(G0obj, G1obj) 2개</h3><div class=row><div class=card><div class=lbl>compare(P0G0 회색 2번째 긴, P0G1 파랑)</div><table class=t><tr><th>property</th><th>verdict</th><th>값1</th><th>값2</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>8</td><td>9</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=diff><td class=sub>height</td><td class=v>DIFF</td><td>8</td><td>9</td></tr><tr class=comm><td class=sub>width</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>[[1], [1], [1…</td><td>[[1], [1], [1…</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>1</td><td class=v>DIFF</td><td>False</td><td>True</td></tr><tr class=comm><td class=sub>2</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>3</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>4</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>5</td><td class=v>DIFF</td><td>True</td><td>False</td></tr><tr class=comm><td class=sub>6</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>7</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>8</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>9</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>[[1, 1], [2, …</td><td>[[0, 5], [1, …</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=diff><td class=sub>left_bottom.col_index</td><td class=v>DIFF</td><td>1</td><td>5</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=diff><td class=sub>left_top.col_index</td><td class=v>DIFF</td><td>1</td><td>5</td></tr><tr class=diff><td class=sub>left_top.row_index</td><td class=v>DIFF</td><td>1</td><td>0</td></tr><tr class=diff><td class=sub>right_bottom.col_index</td><td class=v>DIFF</td><td>1</td><td>5</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=diff><td class=sub>right_top.col_index</td><td class=v>DIFF</td><td>1</td><td>5</td></tr><tr class=diff><td class=sub>right_top.row_index</td><td class=v>DIFF</td><td>1</td><td>0</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>diag_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>hori_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=comm><td class=sub>verti_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>[[5], [5], [5…</td><td>[[1], [1], [1…</td></tr></table></div><div class=card><div class=lbl>compare(P1G0 회색 가장 긴, P1G1 파랑)</div><table class=t><tr><th>property</th><th>verdict</th><th>값1</th><th>값2</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=comm><td class=sub>height</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>width</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1], [1], [1…</td><td>[[1], [1], [1…</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>1</td><td class=v>DIFF</td><td>False</td><td>True</td></tr><tr class=comm><td class=sub>2</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>3</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>4</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=diff><td class=sub>5</td><td class=v>DIFF</td><td>True</td><td>False</td></tr><tr class=comm><td class=sub>6</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>7</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>8</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>9</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=comm><td class=sub>(전체)</td><td class=v>COMM</td><td>[[1, 7], [2, …</td><td>[[1, 7], [2, …</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=comm><td class=sub>left_bottom.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>left_top.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>left_top.row_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=comm><td class=sub>right_bottom.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td class=v>COMM</td><td>8</td><td>8</td></tr><tr class=comm><td class=sub>right_top.col_index</td><td class=v>COMM</td><td>7</td><td>7</td></tr><tr class=comm><td class=sub>right_top.row_index</td><td class=v>COMM</td><td>1</td><td>1</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>diag_symm</td><td class=v>COMM</td><td>False</td><td>False</td></tr><tr class=comm><td class=sub>hori_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=comm><td class=sub>verti_symm</td><td class=v>COMM</td><td>True</td><td>True</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=diff><td class=sub>(전체)</td><td class=v>DIFF</td><td>[[5], [5], [5…</td><td>[[1], [1], [1…</td></tr></table></div></div><h3>2차 — compare(1차,1차) 1개 <span class=dim>[제안]</span></h3><div class=row><div class=card wide><div class=lbl>compare(1차_P0, 1차_P1) <span class=dim>— 제안: verdict끼리 같음/다름만</span></div><table class=t><tr><th>property</th><th>1차_P0</th><th>1차_P1</th><th>관계 같음?</th></tr><tr class=grp><td colspan=4>area</td></tr><tr class=diff><td class=sub>(전체)</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=grp><td colspan=4>size</td></tr><tr class=diff><td class=sub>height</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=comm><td class=sub>width</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>shape</td></tr><tr class=diff><td class=sub>(전체)</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=grp><td colspan=4>color</td></tr><tr class=comm><td class=sub>0</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>1</td><td>DIFF</td><td>DIFF</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>2</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>3</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>4</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>5</td><td>DIFF</td><td>DIFF</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>6</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>7</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>8</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>9</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>coordinate</td></tr><tr class=diff><td class=sub>(전체)</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=grp><td colspan=4>position</td></tr><tr class=diff><td class=sub>left_bottom.col_index</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=comm><td class=sub>left_bottom.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=diff><td class=sub>left_top.col_index</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=diff><td class=sub>left_top.row_index</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=diff><td class=sub>right_bottom.col_index</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=comm><td class=sub>right_bottom.row_index</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=diff><td class=sub>right_top.col_index</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=diff><td class=sub>right_top.row_index</td><td>DIFF</td><td>COMM</td><td class=v>DIFF</td></tr><tr class=grp><td colspan=4>symmetry</td></tr><tr class=comm><td class=sub>anti_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>diag_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>hori_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=comm><td class=sub>verti_symm</td><td>COMM</td><td>COMM</td><td class=v>COMM</td></tr><tr class=grp><td colspan=4>contents</td></tr><tr class=comm><td class=sub>(전체)</td><td>DIFF</td><td>DIFF</td><td class=v>COMM</td></tr></table><div class=note>⇒ 두 pair 의 object 변환이 <b>일부 property 에서 다름</b></div></div></div></section>
