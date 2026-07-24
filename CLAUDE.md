@@ -2,7 +2,8 @@
 
 ## ⚠️ 필수: 매 행동 전 하네스를 읽는다
 **ARBOR 솔버**(operator body `arbor/procedural_memory/operators/` · 규칙 `arbor/procedural_memory/production_rules/` ·
-지각/추론 `arbor/` · 트레이서·대시보드 `debugger/` · 커널 `arbor/soar/`)를
+지각/추론 `arbor/perception`·`arbor/reasoning` · **단일 run** `arbor/agent.py::ArborAgent.run` ·
+트레이서·대시보드 `debugger/` · 커널 `arbor/soar/`)를
 설계·작성·수정·리팩터하거나 그 트레이스를 해석하기 **직전마다**, 반드시 [ARBOR_HARNESS.md](ARBOR_HARNESS.md)
 를 다시 읽고 그 §7 체크리스트로 스스로를 점검한다.
 
@@ -15,6 +16,8 @@
   (2차·n차)** 를 쓴다.
 - ARC = analogical reasoning: **Pair 간 GRID relation 을 비교해 공통 relation(structure mapping /
   anti-unification)** 을 찾는다. relation 은 property COMM/DIFF 일 수도, *sequence of transformation* 일 수도.
+- **문제를 푸는 run 은 하나**(`arbor/agent.py::ArborAgent.run`). 새 run/러너/평행 풀이 루프를 만들지 말고
+  이 **메인 run 을 직접 고쳐** 개발한다. 새 진입점이 필요해도 이 run 을 *호출*만 한다 (§1-6).
 
 ## 프로젝트 맥락
 - ARBOR = ARCKG(TASK→PAIR→GRID→OBJECT→PIXEL 5계층 지식그래프)로 ARC 를 푸는 symbolic 추론 에이전트.
