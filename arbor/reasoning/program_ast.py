@@ -397,7 +397,9 @@ def _leaf_value(leaf, grid_in, choice):
 
 
 def _execute_pixel_body(body, grid_in, choice):
-    """pixel/object/cellset coloring body → 출력 grid. (기존 execute 의 for 문 그대로 이동.)"""
+    """pixel/object/cellset coloring body → 출력 grid. 각 셀 채색은 transformation DSL 의
+    coloring 원자에 위임(단일출처). 여기선 AST 해석(leaf·target 해소)만 한다."""
+    from arbor.procedural_memory.dsl.transformation import coloring
     H, W = len(grid_in), len(grid_in[0])
     grid = [list(r) for r in grid_in]
     for s in body:
@@ -427,7 +429,7 @@ def _execute_pixel_body(body, grid_in, choice):
             for ix in cells:
                 r, c = ix // W, ix % W
                 if 0 <= r < H and 0 <= c < W:
-                    grid[r][c] = col
+                    grid = coloring(grid, [r, c], col)
             continue
         if tgt.get("ref") == "coord":                       # 리터럴 좌표 (r,c) 직접
             pos = _leaf_value(tgt["index"], grid_in, choice)
@@ -435,14 +437,14 @@ def _execute_pixel_body(body, grid_in, choice):
                 continue
             r, c = pos
             if 0 <= r < H and 0 <= c < W:
-                grid[r][c] = col
+                grid = coloring(grid, [r, c], col)
             continue
         ix = _leaf_value(tgt["index"], grid_in, choice)      # pixel/object
         if ix is None or col is None:
             continue
         r, c = ix // W, ix % W
         if 0 <= r < H and 0 <= c < W:
-            grid[r][c] = col
+            grid = coloring(grid, [r, c], col)
     return grid
 
 
@@ -459,8 +461,9 @@ def _execute_grid(body, grid_in, choice):
     """set_grid_size/color/contents → make_grid+coloring lowering. contents 가 산출을 지배."""
     parts = {s["call"]: s["args"] for s in body}
     ct = parts["set_grid_contents"]["contents"]
-    if "const" in ct:                     # 상수/결정된 grid = 그대로 산출
-        return [list(r) for r in ct["const"]]
+    if "const" in ct:                     # 상수/결정된 grid = set_grid_contents 원자로 산출(단일출처)
+        from arbor.procedural_memory.dsl.transformation import set_grid_contents as _apply_contents
+        return _apply_contents(grid_in, ct["const"])
     if "program" in ct:                                   # nested coloring 합성 = 하강 산출
         return _execute_pixel_body(ct["program"]["body"], grid_in, choice)
     # 그 외(expr(항등 등)/remap 등 leaf)는 Phase 1 범위 밖 → 항등 fallback (구현 확장 지점)
