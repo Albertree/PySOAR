@@ -54,10 +54,10 @@ def _wstr(t):
     return f"({t[0]} ^{t[1]} {vs})"
 
 
-class _Tracer:
+class Runner:
     def __init__(self, task, tid="0a", setup=None, sink=None):
         self.ag = setup(task, tid)             # io + the solver's input function
-        from arbor.engine.sink import JournalSink
+        from arbor.runtime.sink import JournalSink
         self.sink = sink if sink is not None else JournalSink(self.ag)
         self._rendered = None                       # (events, wm_states) 캐시 — 최초 접근 시 1회 render
         self.task = task
@@ -75,7 +75,7 @@ class _Tracer:
 
     def _render(self):
         if self._rendered is None:
-            from arbor.engine.renderer import render
+            from arbor.runtime.renderer import render
             self._rendered = render(self.sink)      # journal → (events, wm_states), 1회 memoize
         return self._rendered
 
@@ -571,4 +571,4 @@ class _Tracer:
 
 
 def fine_trace(task, tid="0a", setup=None, max_cycles=10):
-    return _Tracer(task, tid, setup=setup).run(max_cycles=max_cycles)
+    return Runner(task, tid, setup=setup).run(max_cycles=max_cycles)

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """ARBOR engine sinks — 실행(Engine)과 방출(디버거)을 잇는 이음새.
 
-Engine(_Tracer.run 사이클)은 방출 지점마다 sink.event(...) 만 호출한다(의존성 역전).
+Engine(Runner.run 사이클)은 방출 지점마다 sink.event(...) 만 호출한다(의존성 역전).
 NullSink = headless(채점·대량; 비용 0). JournalSink = debug.
-(stage c: event-sourcing 델타 기록 — 스냅샷은 Renderer(arbor/engine/renderer.py)가
+(stage c: event-sourcing 델타 기록 — 스냅샷은 Renderer(arbor/runtime/renderer.py)가
  journal 을 replay 해서 사후 재구성한다.)"""
 from __future__ import annotations
 

@@ -440,20 +440,6 @@ class Agent:
             self.elaborator.productions.append(ch)
         return learned
 
-    # -- convenience ---------------------------------------------------------
-    def run(self, max_cycles: int = 50) -> list:
-        trace = []
-        for _ in range(max_cycles):
-            before = (len(self.wm), tuple(g.id for g in self.stack),
-                      tuple(g.selected for g in self.stack))
-            res = self.step()
-            trace.extend(res.decisions)
-            after = (len(self.wm), tuple(g.id for g in self.stack),
-                     tuple(g.selected for g in self.stack))
-            if before == after and not res.decisions:
-                break
-        return trace
-
     def state_augs(self, sid: str = "S1") -> dict:
         augs: dict = {}
         for (i, a, v) in self.wm:

@@ -45,16 +45,16 @@ def run_solve(tid, task, max_cycles=500, use_cache=True, mode="debug"):
                 return c["result"]
         except (pickle.PickleError, KeyError, OSError, EOFError):
             pass
-    from arbor.engine.trace import _Tracer
+    from arbor.runtime.runner import Runner
     from arbor.agent import build_agent
     if mode == "score":
-        from arbor.engine.sink import NullSink
-        tr = _Tracer(task, tid, setup=build_agent, sink=NullSink())
+        from arbor.runtime.sink import NullSink
+        tr = Runner(task, tid, setup=build_agent, sink=NullSink())
         tr.run(max_cycles=max_cycles)
         result = {"events": [], "wm": [list(t) for t in tr.ag.wm],
                   "wm_states": [], "attempts": tr.attempts, "error": None}
     else:
-        tr = _Tracer(task, tid, setup=build_agent)     # JournalSink 기본
+        tr = Runner(task, tid, setup=build_agent)     # JournalSink 기본
         tr.run(max_cycles=max_cycles)
         # tr.events/tr._wm_states = lazy render+memoize(Task 3) → 단일 render 재사용
         # (render(tr.sink) 직접 호출은 run() 의 return self.events 가 이미 튕긴 render 와 겹쳐 이중 render).

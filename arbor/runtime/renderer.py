@@ -3,7 +3,7 @@
 
 순수 함수: 실행을 모르고 journal 만 본다. seed WM(부착 시점)에서 시작해 각 이벤트 cursor
 까지의 WM 델타를 시간순 적용해 그 시점 WM 을 복원하고, 안 바뀌면 직전 인덱스 재사용(dedup).
-결과 자료구조는 기존 _Tracer.emit 산출과 동일."""
+결과 자료구조는 기존 Runner.emit 산출과 동일."""
 from __future__ import annotations
 
 from arbor.soar.wm import _wm_key
