@@ -117,8 +117,8 @@ def _grid_decide(train, paG0):
         val, note = paG0, "항등"; kk.append(("KEEP", "항등", True))
     elif all(o == outs[0] for o in outs):
         val, note = outs[0], "상수출력"; kk.append(("CONST", "상수출력", True))
-    elif gm and any(k != v for k, v in gm.items()) and all(sz(i) == sz(o) for i, o in pairs):
-        val, note = [[gm.get(v, v) for v in row] for row in paG0], "전역remap"; kk.append(("MAP", "전역remap", True))
+    # (전역remap 제거 2026-07-24, 사용자): 손코딩 finder _global_recolor_program 폐기 — 재채색은
+    # 전역 색맵 특수프로그램이 아니라 **객체선택 경로**(pixel→object→anti-unify, color==s)로 DESCEND 해 푼다.
     out["contents"] = {"type": "CLASS", "within": [i == o for i, o in pairs], "cands": kk,
                        "decision": "DECIDE" if val is not None else "DESCEND", "value": val, "note": note}
     return out
@@ -177,26 +177,6 @@ def _color_map_search(train):
     if any(s != t and support.get(s, 0) < 2 for s, t in mp.items()):
         return None                                          # 비항등 매핑에 교차-pair 근거 없음 → 전역맵 무효
     return mp
-
-
-def _global_recolor_program(g0grid, cmap):
-    """전역 색맵을 **기존 coloring DSL** 만으로 표현(§1-1: 새 DSL 없이) — 목표색 t 로 바뀌는 입력셀
-    (색 s, cmap[s]=t≠s)을 셀 단위로 재채색하는 AST 로 물질화(program_ast). 셀을 target 색별로 묶어
-    순서대로 낸다(전 색 그룹핑은 정렬 안정을 위한 것일 뿐, 실행 산출 grid 는 셀단위와 동일)."""
-    import json
-    from arbor.reasoning import program_ast as PA
-    H, W = len(g0grid), len(g0grid[0])
-    body = []
-    bytarget = {}
-    for r in range(H):
-        for c in range(W):
-            s = g0grid[r][c]; t = cmap.get(s, s)
-            if t != s:
-                bytarget.setdefault(t, []).append((r, c))
-    for t in sorted(bytarget):
-        for (r, c) in bytarget[t]:
-            body.append(PA.step("coloring", target=PA.ref("pixel", PA.const(r * W + c)), color=PA.const(t)))
-    return json.dumps(PA.program(body))
 
 
 def _colorset(grid):

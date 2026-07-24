@@ -4,7 +4,7 @@ from __future__ import annotations
 import json, os, sys
 from soar import Agent, Cond, Action, Production
 from arbor.expr_solver import build_arckg, _load_value, _tup
-from arbor.reasoning.program import _global_recolor_program, _grid_decide, _size_expr_search
+from arbor.reasoning.program import _grid_decide, _size_expr_search
 from arbor.reasoning import program_ast as PA
 
 
@@ -63,13 +63,9 @@ def _op_synthesize(ag):
         old = next((v for (i, a, v) in ag.wm if i == ppid and a == "program"), None)
         if old in (None, "{}"):
             ag.wm.remove(ppid, "program", old)          # 실제 저장된 sentinel(None 또는 구 "{}") 제거
-        cmap = dec["color"].get("map")
-        # 전역remap: _global_recolor_program 이 이미 AST-json 반환(Task 7). 항등(output=input): 빈 body
-        # AST(execute 가 input 을 그대로 복사) — program_ast.program([]). 상수출력(입력과 무관한 고정
-        # grid)은 coloring 조합으로 표현 불가(새 atom 금지 §2) → 기존처럼 미합성 표식 문자열 유지
-        # (as_source 가 그대로 통과시킴; GRID-verdict 로만 노출).
-        prog = (_global_recolor_program(g0grid, cmap) if (cv["note"] == "전역remap" and cmap)
-                else json.dumps(PA.program([])) if cv["note"] == "항등"
+        # 항등(output=input): 빈 body AST(execute 가 input 그대로 복사). 상수출력(입력무관 고정 grid)은
+        # coloring 조합으로 표현 불가(새 atom 금지 §2) → 미합성 표식 문자열(as_source 통과; verdict 로만 노출).
+        prog = (json.dumps(PA.program([])) if cv["note"] == "항등"
                 else "output_grid = <상수 출력>")
         ag.wm.add(ppid, "program", prog)
         ag.kg["answer"] = cv["value"]; ag.add_output_wme("answer", tuple(tuple(r) for r in cv["value"]))
