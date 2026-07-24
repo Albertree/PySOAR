@@ -21,7 +21,7 @@ from arbor.procedural_memory.dsl.registry import dsl
 
 
 # ── COMMON: 입력 계층에 따라 결과가 달라지는 일반 property ─────────────────
-@dsl("property", ["grid", "object", "pixel"], "color|color-set")
+@dsl("property", ["grid", "object", "pixel"], "color|color_set")
 def color_of(node):
     """색. grid/object → 색집합 {0..9: bool} · pixel → 단일 색."""
     return node.to_json()["color"]
@@ -33,51 +33,51 @@ def size_of(node):
     return node.to_json()["size"]
 
 
-@dsl("property", ["grid", "object"], "contents")
+@dsl("property", ["grid", "object"], "class")
 def contents_of(node):
     """원시 2D 배열. grid/object."""
     return node.to_json()["contents"]
 
 
-@dsl("property", ["object", "pixel"], "coordinate|coordinate-set")
+@dsl("property", ["object", "pixel"], "coordinate|coordinate_set")
 def coordinate_of(node):
     """좌표. object → 좌표집합 [[r,c], ...] · pixel → 단일좌표 {row_index, col_index}."""
     return node.to_json()["coordinate"]
 
 
 # ── OBJECT 전용 ────────────────────────────────────────────────────────
-@dsl("property", ["object"], "area")
+@dsl("property", ["object"], "number")
 def area_of(obj):
     """객체 셀 수 (bbox 내 비투명)."""
     return obj.to_json()["area"]
 
 
-@dsl("property", ["object"], "position")
+@dsl("property", ["object"], "class")
 def position_of(obj):
     """bbox 네 모서리 {left_top, right_top, left_bottom, right_bottom} (각 단일좌표)."""
     return obj.to_json()["position"]
 
 
-@dsl("property", ["object"], "shape")
+@dsl("property", ["object"], "class")
 def shape_of(obj):
     """bbox 모양 2D (비투명=1, 투명=-1)."""
     return obj.to_json()["shape"]
 
 
-@dsl("property", ["object"], "symmetry")
+@dsl("property", ["object"], "class")
 def symmetry_of(obj):
     """대칭 {hori_symm, verti_symm, diag_symm, anti_symm}."""
     return obj.to_json()["symmetry"]
 
 
 # ── 라벨(카운팅 X): type_of=계층(5) · subtype_of=계층 내 하위구분 ────────────
-@dsl("property", ["task", "pair", "grid", "object", "pixel"], "layer")
+@dsl("property", ["task", "pair", "grid", "object", "pixel"], "symbol")
 def type_of(node):
     """노드의 계층 텍스트: task / pair / grid / object / pixel. (5계층 전부; 클래스에서 도출.)"""
     return node.__class__.__name__.lower()
 
 
-@dsl("property", ["pair", "grid"], "label")
+@dsl("property", ["pair", "grid"], "symbol")
 def subtype_of(node):
     """계층 내 하위구분. pair → example/test · grid → input/output. (node_id 에서 도출.)
     Node ID: T{hex}.P{p}(.G{g}) — P<digit>=example / P<letter>=test · G0=input / G1=output."""
@@ -90,57 +90,57 @@ def subtype_of(node):
 
 
 # ── PAIR ───────────────────────────────────────────────────────────────
-@dsl("property", ["pair"], "role-set")
+@dsl("property", ["pair"], "class")
 def role_of(pair):
     """pair 배선 presence {input: bool, output: bool}. '무엇이' 있고 빠졌는지 보존."""
     return pair.to_json()["roles"]
 
 
 # ── 집계 (_count — accessor 가 아니라 개수) ────────────────────────────────
-@dsl("property", ["task"], "int")
+@dsl("property", ["task"], "number")
 def example_pair_count(task):
     """example pair 수."""
     return len(task.example_pairs)
 
 
-@dsl("property", ["task"], "int")
+@dsl("property", ["task"], "number")
 def test_pair_count(task):
     """test pair 수."""
     return len(task.test_pairs)
 
 
 # ── 하위투영: 부모 property 를 투영 (새 데이터 아님) ────────────────────────
-@dsl("property", ["grid", "object"], "int")
+@dsl("property", ["grid", "object"], "number")
 def height_of(node):
     """높이 = size_of(node).height. grid/object."""
     return size_of(node)["height"]
 
 
-@dsl("property", ["grid", "object"], "int")
+@dsl("property", ["grid", "object"], "number")
 def width_of(node):
     """너비 = size_of(node).width. grid/object."""
     return size_of(node)["width"]
 
 
-@dsl("property", ["object"], "bool")
+@dsl("property", ["object"], "boolean")
 def hori_symm_of(obj):
     """수평 대칭 = symmetry_of(obj).hori_symm."""
     return symmetry_of(obj)["hori_symm"]
 
 
-@dsl("property", ["object"], "bool")
+@dsl("property", ["object"], "boolean")
 def verti_symm_of(obj):
     """수직 대칭."""
     return symmetry_of(obj)["verti_symm"]
 
 
-@dsl("property", ["object"], "bool")
+@dsl("property", ["object"], "boolean")
 def diag_symm_of(obj):
     """주대각 대칭."""
     return symmetry_of(obj)["diag_symm"]
 
 
-@dsl("property", ["object"], "bool")
+@dsl("property", ["object"], "boolean")
 def anti_symm_of(obj):
     """반대각 대칭."""
     return symmetry_of(obj)["anti_symm"]
@@ -183,13 +183,13 @@ def _single_coord(coord):
     raise TypeError("row_of/col_of 는 단일좌표만 받는다 (좌표집합엔 적용 불가)")
 
 
-@dsl("property", ["coordinate"], "int")
+@dsl("property", ["coordinate"], "number")
 def row_of(coord):
     """단일좌표의 행. object.coordinate 같은 좌표집합엔 적용 불가."""
     return _single_coord(coord)[0]
 
 
-@dsl("property", ["coordinate"], "int")
+@dsl("property", ["coordinate"], "number")
 def col_of(coord):
     """단일좌표의 열. 좌표집합엔 적용 불가."""
     return _single_coord(coord)[1]
