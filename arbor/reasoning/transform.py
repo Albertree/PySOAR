@@ -187,10 +187,11 @@ def solve_by_transform(train, test_input):
     return None
 
 
-# ── 선형(affine) 변환 탐색 (사용자 흐름 2026-07-26): 배경=0, 객체=비0. 같은 색 대응(color:COMM,
-#    coord:DIFF)에서 좌표변환 공식을 찾는다. 회전·반전·이동은 전부 선형 `r'=a·r+b·c+e` (a,b∈{-1,0,1}
-#    = +,-,* 조합) — 이걸 D4 8종으로 열거하고, 피벗(불변점)은 correspondence 가 밝히는 centroid 로.
-#    train 은 자유 평행이동으로 D4 를 찾고(가설 여럿 OK), 다음 pair 가 좁힌다. test 는 centroid 로 배치.
+# ── 선형(affine) 픽셀 이동식 (사용자 흐름 2026-07-26): 배경=0, 객체=비0. 같은 색 픽셀 대응(color:COMM,
+#    coord:DIFF)에서 **하나의 공통 이동식** `(r,c)→(a·r+b·c+e, d·r+f·c+g)` 을 찾는다. 선형부 (a,b,d,f)=D4
+#    8종, 오프셋 (e,g)=정수. 배치는 **객체 bbox중심 보존**(제자리 회전/반전)으로 정하며, 오프셋이 반 칸을
+#    요구하면(격자 칸 미적중; 예 h-w 홀수) **기각**한다. 회전축·대칭축은 이 식의 고정집합((r,c)=변환(r,c))으로
+#    역산되는 *해석*일 뿐 — 식을 탐색/적용하는 데 축·피벗·2배좌표·소수점은 필요 없다.
 _D4 = [("id", 1, 0, 0, 1), ("rot90", 0, 1, -1, 0), ("rot180", -1, 0, 0, -1), ("rot270", 0, -1, 1, 0),
        ("flipV", -1, 0, 0, 1), ("flipH", 1, 0, 0, -1), ("transpose", 0, 1, 1, 0), ("antitr", 0, -1, -1, 0)]
 
@@ -199,69 +200,20 @@ def _nonzero(grid):
     return {(r, c): v for r, row in enumerate(grid) for c, v in enumerate(row) if v != 0}
 
 
-def _pivots2(cells):
-    """피벗 후보(2배좌표): centroid(무게중심, 회전불변·입력계산) floor/ceil + bbox중심. 정수화 위해 2배."""
-    cells = list(cells)
-    n = len(cells)
-    if n == 0:
-        return set()
-    sr = sum(r for r, _ in cells); sc = sum(c for _, c in cells)
+def _place_inplace(cells, M):
+    """객체 픽셀에 M(D4 선형부)을 적용한 뒤, **bbox중심을 보존**하도록 정수 평행이동해 제자리에 놓는다.
+    오프셋이 반 칸을 요구하면(격자 칸에 안 떨어짐 = h-w 홀수 등) None 으로 기각. 소수점·피벗·2배좌표 없음.
+    반환 {(r,c):color}. — 이게 이동식 `(r,c)→(a·r+b·c+e, d·r+f·c+g)` 의 e,g 를 '중심 보존' 으로 정한 것."""
+    _, a, b, d, f = M
+    tr = {(a * r + b * c, d * r + f * c): col for (r, c), col in cells.items()}
     rs = [r for r, _ in cells]; cs = [c for _, c in cells]
-    prs = {(2 * sr) // n, -((-2 * sr) // n)}; pcs = {(2 * sc) // n, -((-2 * sc) // n)}
-    cand = {(pr, pc) for pr in prs for pc in pcs}
-    cand.add((min(rs) + max(rs), min(cs) + max(cs)))
-    return cand
-
-
-# 피벗 규칙 후보(이름 부여) — 강체변환(D4)의 불변점 가설. bbox중심을 앞에 둔다: 회전/반전은 도형의
-# bounding box 를 그 상(image)의 bbox 로 옮기므로 bbox중심이 자연스러운 고정점(스파이크 2026-07-26 로
-# 부류1 5문제 전부 train·test 정확재현 확인). centroid/그리드중심은 그다음 가설. 규칙을 **이름**으로 매기는
-# 이유: pair 마다 셀·크기가 달라도 "같은 규칙"을 index 아닌 이름으로 정합시켜 train 검증한다.
-def _pivot_named(cells, H, W):
-    """규칙이름 → 2배피벗 dict. 각 pair 에서 같은 이름끼리 대조해 train 정확재현 규칙을 고른다."""
-    cells = list(cells)
-    n = len(cells)
-    if n == 0:
-        return {}
-    sr = sum(r for r, _ in cells); sc = sum(c for _, c in cells)
-    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
-    rf, rc = (2 * sr) // n, -((-2 * sr) // n)       # centroid r floor/ceil
-    cf, cc = (2 * sc) // n, -((-2 * sc) // n)       # centroid c floor/ceil
-    return {
-        "bbox": (min(rs) + max(rs), min(cs) + max(cs)),
-        "cent_ff": (rf, cf), "cent_fc": (rf, cc), "cent_cf": (rc, cf), "cent_cc": (rc, cc),
-        "grid": (H - 1, W - 1),
-    }
-
-
-_PIVOT_ORDER = ["bbox", "cent_ff", "cent_fc", "cent_cf", "cent_cc", "grid"]
-
-
-def _verified_pivot_rule(ctx, train, M):
-    """전 train pair 를 **정확히** 재현하는 피벗 규칙 이름을 우선순위대로 찾는다(없으면 None).
-    _apply_pivot(입력, M, 규칙) == 출력 이 모든 pair 에서 성립해야 채택 — test 배치를 추측 아닌 검증으로."""
-    for name in _PIVOT_ORDER:
-        ok = True
-        for (ci, co), (gi, _go) in zip(ctx, train):
-            piv = _pivot_named(ci.keys(), len(gi), len(gi[0])).get(name)
-            if piv is None or _apply_pivot(ci, M, piv) != co:
-                ok = False
-                break
-        if ok:
-            return name
-    return None
-
-
-def _apply_pivot(cells, M, piv2):
-    """M 을 piv2(2배 피벗) 기준으로 적용. 정수 셀 안 떨어지면 None. {(r,c):color} 유지."""
-    a, b, d, f = M[1:]; pr2, pc2 = piv2; out = {}
-    for (r, c), col in cells.items():
-        rr2, cc2 = 2 * r - pr2, 2 * c - pc2
-        R2, C2 = a * rr2 + b * cc2 + pr2, d * rr2 + f * cc2 + pc2
-        if R2 % 2 or C2 % 2:
-            return None
-        out[(R2 // 2, C2 // 2)] = col
-    return out
+    tR = [r for r, _ in tr]; tC = [c for _, c in tr]
+    num_r = (min(rs) + max(rs)) - (min(tR) + max(tR))     # 중심 정렬에 필요한 2·오프셋
+    num_c = (min(cs) + max(cs)) - (min(tC) + max(tC))
+    if num_r % 2 or num_c % 2:                            # 반 칸 이동 필요 = 격자 미적중 → 기각
+        return None
+    e, g = num_r // 2, num_c // 2
+    return {(r + e, c + g): col for (r, c), col in tr.items()}
 
 
 def _match_free(cells, M, coset):
@@ -276,33 +228,22 @@ def _match_free(cells, M, coset):
 
 
 def solve_by_linear(train, test_input):
-    """배경=0 · 비0 객체를 하나의 선형 D4 로 변환. 전 train 쌍 공통 D4(자유 평행이동) → test centroid 배치."""
+    """배경=0 · 비0 객체 전체를 하나의 공통 D4 이동식으로. 중심보존 배치가 전 train 쌍을 정확재현하는
+    D4 를 찾아(추측 아닌 검증) test 에 적용. (제자리 회전/반전; 오프셋 e,g 는 중심보존으로 결정.)"""
     ctx = [(_nonzero(gi), _nonzero(go)) for gi, go in train]
     if any(not ci or not co or len(ci) != len(co) for ci, co in ctx):
         return None
-    common = [M for M in _D4 if all(_match_free(ci, M, co) for ci, co in ctx)]
     ti = _nonzero(test_input); H, W = len(test_input), len(test_input[0])
-
-    def _materialize(pred):
+    for M in _D4:
+        if not all(_place_inplace(ci, M) == co for ci, co in ctx):   # 중심보존이 전 train 정확재현?
+            continue
+        pred = _place_inplace(ti, M)
         if pred is None or not all(0 <= r < H and 0 <= c < W for (r, c) in pred) or len(pred) != len(ti):
-            return None
+            continue
         out = [[0] * W for _ in range(H)]
         for (r, c), col in pred.items():
             out[r][c] = col
         return out
-
-    for M in common:                                         # ① 피벗 규칙을 train 정확재현으로 검증 → test 적용
-        name = _verified_pivot_rule(ctx, train, M)
-        if name is not None:
-            tp = _pivot_named(ti.keys(), H, W).get(name)
-            got = _materialize(_apply_pivot(ti, M, tp)) if tp is not None else None
-            if got is not None:
-                return got
-    for M in common:                                         # ② 폴백: 검증 규칙 없을 때 centroid-first-in-grid 추측
-        for pv in sorted(_pivots2(ti.keys())):
-            got = _materialize(_apply_pivot(ti, M, pv))
-            if got is not None:
-                return got
     return None
 
 
@@ -322,7 +263,7 @@ def solve_by_linear_percolor(train, test_input):
             ctx.append((ci, co))
         if not ok:
             continue                                            # 색이 쌍마다 없거나 다름 → skip(정지 처리)
-        common = [M for M in _D4 if all(_match_free(ci, M, co) for ci, co in ctx)]
+        common = [M for M in _D4 if all(_place_inplace(ci, M) == co for ci, co in ctx)]
         if common:
             forms[col] = common[0]
     if not any(M[0] != "id" for M in forms.values()):           # 움직인 색이 하나도 없으면 무의미
@@ -332,16 +273,11 @@ def solve_by_linear_percolor(train, test_input):
     for col in colors:
         cells = {k: v for k, v in ti.items() if v == col}
         if col in forms:
-            placed = False
-            for pv in sorted(_pivots2(cells.keys())):
-                pr = _apply_pivot(cells, forms[col], pv)
-                if pr is not None and all(0 <= r < H and 0 <= c < W for (r, c) in pr):
-                    for (r, c), v in pr.items():
-                        out[r][c] = v
-                    placed = True
-                    break
-            if not placed:
+            pr = _place_inplace(cells, forms[col])              # 중심보존 배치(반칸이면 None)
+            if pr is None or not all(0 <= r < H and 0 <= c < W for (r, c) in pr):
                 return None
+            for (r, c), v in pr.items():
+                out[r][c] = v
         else:                                                   # 식 없는 색 = 정지(그대로)
             for (r, c), v in cells.items():
                 out[r][c] = v
@@ -407,7 +343,7 @@ def object_transform_candidates(train, test_input):
         if len(movers) != 1:                                # pair 당 mover 정확히 1개(현행 가정)
             return []
         a, b = movers[0]
-        d4 = {M[0] for M in _D4 if _match_free(a, M, b)}
+        d4 = {M[0] for M in _D4 if _place_inplace(a, M) == b}   # 중심보존 배치가 mover 를 정확재현하는 D4
         per_pair.append((a, b, d4))
     # mover 선택 규칙: area 불변? 색 불변? (train 쌍 전체에서 상수인 property) — area 우선
     cols = {_ocolor(a) for a, _b, _d in per_pair}; areas = {len(a) for a, _b, _d in per_pair}
@@ -423,21 +359,8 @@ def object_transform_candidates(train, test_input):
         common &= d4
     if not common:
         return []
-    verified = []                                           # (M, pivot규칙): 전 train mover 를 정확재현
-    for name in sorted(common):
-        M = next(x for x in _D4 if x[0] == name)
-        for pv in _PIVOT_ORDER:
-            ok = True
-            for a, b, _d in per_pair:
-                piv = _pivot_named(a.keys(), 9, 9).get(pv)
-                pr = _apply_pivot(a, M, piv) if piv is not None else None
-                if pr is None or set(pr.keys()) != set(b.keys()):
-                    ok = False
-                    break
-            if ok:
-                verified.append((M, pv)); break
-    if not verified:
-        return []
+    # common D4 는 이미 중심보존이 전 train mover 를 정확재현하는 것들(위 d4 교집합) → 별도 검증 불필요.
+    verified = [next(x for x in _D4 if x[0] == name) for name in sorted(common)]
     ti = _components(_nonzero(test_input)); H, W = len(test_input), len(test_input[0])
     per_obj = []; seen_obj = set()                          # 선택 객체별 후보(라운드로빈용)
     for kind, val in rules:
@@ -449,9 +372,8 @@ def object_transform_candidates(train, test_input):
                 continue
             seen_obj.add(key)
             gl = []
-            for M, pv in verified:
-                piv = _pivot_named(s.keys(), H, W).get(pv)
-                pr = _apply_pivot(s, M, piv) if piv is not None else None
+            for M in verified:
+                pr = _place_inplace(s, M)                    # 중심보존 배치(반칸이면 None)
                 if pr is None or not all(0 <= r < H and 0 <= c < W for (r, c) in pr):
                     continue
                 g = [[0] * W for _ in range(H)]
