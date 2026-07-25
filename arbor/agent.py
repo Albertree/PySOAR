@@ -468,16 +468,21 @@ class ArborAgent:
         rotate/flip 을 표준 solve 가 못 풀 때만 발동. 탐색은 train 만 사용(§P5), 정답판정은 최종 채점뿐.
         실패는 조용히(표준 결과 유지)."""
         try:
-            from arbor.reasoning.transform import solve_by_transform
+            from arbor.reasoning.transform import solve_by_transform, solve_by_linear
             test = self.task.get("test") or []
             if not test:
                 return
             pairs = [(p["input"], p["output"]) for p in self.task["train"]]
-            grid = solve_by_transform(pairs, test[0]["input"])
-            if grid is None:
-                return
-            correct = (grid == test[0]["output"])
-            self.attempts.append({"answer": grid, "correct": correct, "hyp": "transform (좌표식)"})
+            tin, tout = test[0]["input"], test[0]["output"]
+            # 심볼 좌표식(flip 강함) + 선형 D4(rotate 강함) 를 ARC 3-attempt 로 둘 다 제출 → 하나라도 맞으면 solved.
+            for hyp, fn in (("transform (좌표식)", solve_by_transform), ("linear D4 (회전/반전)", solve_by_linear)):
+                grid = fn(pairs, tin)
+                if grid is None:
+                    continue
+                correct = (grid == tout)
+                self.attempts.append({"answer": grid, "correct": correct, "hyp": hyp})
+                if correct:
+                    break                                       # 정답 나오면 멈춤
         except Exception:
             pass                                                # fallback 실패는 표준 결과를 해치지 않는다
 

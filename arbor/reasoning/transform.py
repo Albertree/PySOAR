@@ -185,3 +185,77 @@ def solve_by_transform(train, test_input):
         if pred is not None:
             return pred
     return None
+
+
+# ── 선형(affine) 변환 탐색 (사용자 흐름 2026-07-26): 배경=0, 객체=비0. 같은 색 대응(color:COMM,
+#    coord:DIFF)에서 좌표변환 공식을 찾는다. 회전·반전·이동은 전부 선형 `r'=a·r+b·c+e` (a,b∈{-1,0,1}
+#    = +,-,* 조합) — 이걸 D4 8종으로 열거하고, 피벗(불변점)은 correspondence 가 밝히는 centroid 로.
+#    train 은 자유 평행이동으로 D4 를 찾고(가설 여럿 OK), 다음 pair 가 좁힌다. test 는 centroid 로 배치.
+_D4 = [("id", 1, 0, 0, 1), ("rot90", 0, 1, -1, 0), ("rot180", -1, 0, 0, -1), ("rot270", 0, -1, 1, 0),
+       ("flipV", -1, 0, 0, 1), ("flipH", 1, 0, 0, -1), ("transpose", 0, 1, 1, 0), ("antitr", 0, -1, -1, 0)]
+
+
+def _nonzero(grid):
+    return {(r, c): v for r, row in enumerate(grid) for c, v in enumerate(row) if v != 0}
+
+
+def _pivots2(cells):
+    """피벗 후보(2배좌표): centroid(무게중심, 회전불변·입력계산) floor/ceil + bbox중심. 정수화 위해 2배."""
+    cells = list(cells)
+    n = len(cells)
+    if n == 0:
+        return set()
+    sr = sum(r for r, _ in cells); sc = sum(c for _, c in cells)
+    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+    prs = {(2 * sr) // n, -((-2 * sr) // n)}; pcs = {(2 * sc) // n, -((-2 * sc) // n)}
+    cand = {(pr, pc) for pr in prs for pc in pcs}
+    cand.add((min(rs) + max(rs), min(cs) + max(cs)))
+    return cand
+
+
+def _apply_pivot(cells, M, piv2):
+    """M 을 piv2(2배 피벗) 기준으로 적용. 정수 셀 안 떨어지면 None. {(r,c):color} 유지."""
+    a, b, d, f = M[1:]; pr2, pc2 = piv2; out = {}
+    for (r, c), col in cells.items():
+        rr2, cc2 = 2 * r - pr2, 2 * c - pc2
+        R2, C2 = a * rr2 + b * cc2 + pr2, d * rr2 + f * cc2 + pc2
+        if R2 % 2 or C2 % 2:
+            return None
+        out[(R2 // 2, C2 // 2)] = col
+    return out
+
+
+def _match_free(cells, M, coset):
+    """output(coset={(r,c):color}) 가 M(input) 의 평행이동인가 (색보존, 자유 평행이동)."""
+    a, b, d, f = M[1:]
+    tr = {(a * r + b * c, d * r + f * c): col for (r, c), col in cells.items()}
+    if len(tr) != len(cells):
+        return False
+    tr0 = (min(r for r, _ in tr), min(c for _, c in tr)); o0 = (min(r for r, _ in coset), min(c for _, c in coset))
+    dr, dc = o0[0] - tr0[0], o0[1] - tr0[1]
+    return {(r + dr, c + dc): col for (r, c), col in tr.items()} == coset
+
+
+def solve_by_linear(train, test_input):
+    """배경=0 · 비0 객체를 하나의 선형 D4 로 변환. 전 train 쌍 공통 D4(자유 평행이동) → test centroid 배치."""
+    ctx = [(_nonzero(gi), _nonzero(go)) for gi, go in train]
+    if any(not ci or not co or len(ci) != len(co) for ci, co in ctx):
+        return None
+    common = [M for M in _D4 if all(_match_free(ci, M, co) for ci, co in ctx)]
+    ti = _nonzero(test_input); H, W = len(test_input), len(test_input[0])
+    for M in common:                                         # 가설 여럿 → 단순 순서로 시도(결정적)
+        for pv in sorted(_pivots2(ti.keys())):
+            pred = _apply_pivot(ti, M, pv)
+            if pred is None:
+                continue
+            if all(0 <= r < H and 0 <= c < W for (r, c) in pred) and len(pred) == len(ti):
+                out = [[0] * W for _ in range(H)]
+                for (r, c), col in pred.items():
+                    out[r][c] = col
+                return out
+    return None
+
+
+def solve_any(train, test_input):
+    """심볼 좌표식 + 선형 D4 둘 다 시도(맞는 것). rotate 는 선형, flip 은 심볼이 강함."""
+    return solve_by_transform(train, test_input) or solve_by_linear(train, test_input)
