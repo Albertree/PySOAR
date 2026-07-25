@@ -1387,6 +1387,7 @@ def task_section(tid, task, precomputed=None):
                 " 물질화되지 않았다." if solved else
                 "solve 가 이 태스크의 example PAIR program 을 다 채우지 못했다 — 표시할 실제 AST 없음"
                 "(정직하게 미해결로 남김).")
+        tp = (task.get("test") or [{}])[0]                    # 이 분기(미합성)엔 tp 미정의였음(버그) — 국소 정의
         extra = _attempts_block(attempts, tp) if attempts else ""
         return (f'<section class="task" id="{tid}"><h2>{tid}<span class="na">미합성/크기변화</span></h2>'
                 f'<div class="thumbs">{thumbs}</div><p class="note">{html.escape(why + done)}</p>{extra}</section>')

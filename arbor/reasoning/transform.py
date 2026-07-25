@@ -256,6 +256,49 @@ def solve_by_linear(train, test_input):
     return None
 
 
+def solve_by_linear_percolor(train, test_input):
+    """다객체(색이 다른 여러 객체)를 **색별로 각자 D4**. 배경=0. 색마다 자기 centroid 피벗.
+    식 없는(정지) 색은 그대로. 색이 쌍마다 안 바뀌는(안정) 다객체에 유효."""
+    colors = set(_nonzero(test_input).values())
+    forms = {}
+    for col in colors:
+        ctx, ok = [], True
+        for gi, go in train:
+            ci = {k: v for k, v in _nonzero(gi).items() if v == col}
+            co = {k: v for k, v in _nonzero(go).items() if v == col}
+            if not ci or not co or len(ci) != len(co):
+                ok = False
+                break
+            ctx.append((ci, co))
+        if not ok:
+            continue                                            # 색이 쌍마다 없거나 다름 → skip(정지 처리)
+        common = [M for M in _D4 if all(_match_free(ci, M, co) for ci, co in ctx)]
+        if common:
+            forms[col] = common[0]
+    if not any(M[0] != "id" for M in forms.values()):           # 움직인 색이 하나도 없으면 무의미
+        return None
+    ti = _nonzero(test_input); H, W = len(test_input), len(test_input[0])
+    out = [[0] * W for _ in range(H)]
+    for col in colors:
+        cells = {k: v for k, v in ti.items() if v == col}
+        if col in forms:
+            placed = False
+            for pv in sorted(_pivots2(cells.keys())):
+                pr = _apply_pivot(cells, forms[col], pv)
+                if pr is not None and all(0 <= r < H and 0 <= c < W for (r, c) in pr):
+                    for (r, c), v in pr.items():
+                        out[r][c] = v
+                    placed = True
+                    break
+            if not placed:
+                return None
+        else:                                                   # 식 없는 색 = 정지(그대로)
+            for (r, c), v in cells.items():
+                out[r][c] = v
+    return out
+
+
 def solve_any(train, test_input):
-    """심볼 좌표식 + 선형 D4 둘 다 시도(맞는 것). rotate 는 선형, flip 은 심볼이 강함."""
-    return solve_by_transform(train, test_input) or solve_by_linear(train, test_input)
+    """심볼 좌표식 + 선형 D4(통째) + 선형 D4(색별) 순차 시도(첫 non-None)."""
+    return (solve_by_transform(train, test_input) or solve_by_linear(train, test_input)
+            or solve_by_linear_percolor(train, test_input))
