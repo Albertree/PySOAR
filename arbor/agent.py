@@ -457,7 +457,29 @@ class ArborAgent:
                           f"impasse {imp.name} (candidates={list(cands)}) — 미처리, 종료")
                 self._emit_output()
                 break
+        # ── 1차 통합 fallback (additive): 표준 경로가 정답을 못 냈으면 좌표식 변환 탐색(transform)을
+        #    시도한다. move 는 표준경로로 정답 attempt 를 내므로 이 fallback 을 타지 않는다(60/60 무영향).
+        if not any(a.get("correct") for a in self.attempts):
+            self._try_transform_fallback()
         return self.events
+
+    def _try_transform_fallback(self):
+        """좌표식 변환(arbor.reasoning.transform)으로 test 답을 시도해 attempt 로 추가(§1차통합, spec 2026-07-25).
+        rotate/flip 을 표준 solve 가 못 풀 때만 발동. 탐색은 train 만 사용(§P5), 정답판정은 최종 채점뿐.
+        실패는 조용히(표준 결과 유지)."""
+        try:
+            from arbor.reasoning.transform import solve_by_transform
+            test = self.task.get("test") or []
+            if not test:
+                return
+            pairs = [(p["input"], p["output"]) for p in self.task["train"]]
+            grid = solve_by_transform(pairs, test[0]["input"])
+            if grid is None:
+                return
+            correct = (grid == test[0]["output"])
+            self.attempts.append({"answer": grid, "correct": correct, "hyp": "transform (좌표식)"})
+        except Exception:
+            pass                                                # fallback 실패는 표준 결과를 해치지 않는다
 
     def _submit_and_maybe_retry(self):
         """submit 후: ARC 환경(3회 프로토콜)으로 답을 채점하고 피드백을 emit.
