@@ -213,6 +213,45 @@ def _pivots2(cells):
     return cand
 
 
+# 피벗 규칙 후보(이름 부여) — 강체변환(D4)의 불변점 가설. bbox중심을 앞에 둔다: 회전/반전은 도형의
+# bounding box 를 그 상(image)의 bbox 로 옮기므로 bbox중심이 자연스러운 고정점(스파이크 2026-07-26 로
+# 부류1 5문제 전부 train·test 정확재현 확인). centroid/그리드중심은 그다음 가설. 규칙을 **이름**으로 매기는
+# 이유: pair 마다 셀·크기가 달라도 "같은 규칙"을 index 아닌 이름으로 정합시켜 train 검증한다.
+def _pivot_named(cells, H, W):
+    """규칙이름 → 2배피벗 dict. 각 pair 에서 같은 이름끼리 대조해 train 정확재현 규칙을 고른다."""
+    cells = list(cells)
+    n = len(cells)
+    if n == 0:
+        return {}
+    sr = sum(r for r, _ in cells); sc = sum(c for _, c in cells)
+    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+    rf, rc = (2 * sr) // n, -((-2 * sr) // n)       # centroid r floor/ceil
+    cf, cc = (2 * sc) // n, -((-2 * sc) // n)       # centroid c floor/ceil
+    return {
+        "bbox": (min(rs) + max(rs), min(cs) + max(cs)),
+        "cent_ff": (rf, cf), "cent_fc": (rf, cc), "cent_cf": (rc, cf), "cent_cc": (rc, cc),
+        "grid": (H - 1, W - 1),
+    }
+
+
+_PIVOT_ORDER = ["bbox", "cent_ff", "cent_fc", "cent_cf", "cent_cc", "grid"]
+
+
+def _verified_pivot_rule(ctx, train, M):
+    """전 train pair 를 **정확히** 재현하는 피벗 규칙 이름을 우선순위대로 찾는다(없으면 None).
+    _apply_pivot(입력, M, 규칙) == 출력 이 모든 pair 에서 성립해야 채택 — test 배치를 추측 아닌 검증으로."""
+    for name in _PIVOT_ORDER:
+        ok = True
+        for (ci, co), (gi, _go) in zip(ctx, train):
+            piv = _pivot_named(ci.keys(), len(gi), len(gi[0])).get(name)
+            if piv is None or _apply_pivot(ci, M, piv) != co:
+                ok = False
+                break
+        if ok:
+            return name
+    return None
+
+
 def _apply_pivot(cells, M, piv2):
     """M 을 piv2(2배 피벗) 기준으로 적용. 정수 셀 안 떨어지면 None. {(r,c):color} 유지."""
     a, b, d, f = M[1:]; pr2, pc2 = piv2; out = {}
@@ -243,16 +282,27 @@ def solve_by_linear(train, test_input):
         return None
     common = [M for M in _D4 if all(_match_free(ci, M, co) for ci, co in ctx)]
     ti = _nonzero(test_input); H, W = len(test_input), len(test_input[0])
-    for M in common:                                         # 가설 여럿 → 단순 순서로 시도(결정적)
+
+    def _materialize(pred):
+        if pred is None or not all(0 <= r < H and 0 <= c < W for (r, c) in pred) or len(pred) != len(ti):
+            return None
+        out = [[0] * W for _ in range(H)]
+        for (r, c), col in pred.items():
+            out[r][c] = col
+        return out
+
+    for M in common:                                         # ① 피벗 규칙을 train 정확재현으로 검증 → test 적용
+        name = _verified_pivot_rule(ctx, train, M)
+        if name is not None:
+            tp = _pivot_named(ti.keys(), H, W).get(name)
+            got = _materialize(_apply_pivot(ti, M, tp)) if tp is not None else None
+            if got is not None:
+                return got
+    for M in common:                                         # ② 폴백: 검증 규칙 없을 때 centroid-first-in-grid 추측
         for pv in sorted(_pivots2(ti.keys())):
-            pred = _apply_pivot(ti, M, pv)
-            if pred is None:
-                continue
-            if all(0 <= r < H and 0 <= c < W for (r, c) in pred) and len(pred) == len(ti):
-                out = [[0] * W for _ in range(H)]
-                for (r, c), col in pred.items():
-                    out[r][c] = col
-                return out
+            got = _materialize(_apply_pivot(ti, M, pv))
+            if got is not None:
+                return got
     return None
 
 
@@ -298,7 +348,137 @@ def solve_by_linear_percolor(train, test_input):
     return out
 
 
+# ── 객체-선택 변환 (사용자 흐름 2026-07-26): 색이 쌍마다 바뀌는 다객체. 색별 exact 매칭이 안 되니
+#    pair 내 in↔out 객체를 (색 COMM ∧ area COMM) 대응으로 잇는다(shape·position DIFF 여도 매칭 — 부분
+#    일치). 대응쌍 중 shape 가 바뀐 것이 **mover**(제자리 D4), 나머지는 정지. mover 를 지목하는 **불변
+#    property**(색 또는 area 가 train 쌍 전체에서 상수)를 structure mapping 으로 찾고, 그 규칙으로 test
+#    객체를 골라 같은 D4 를 제자리(bbox 피벗)에 적용. train 만으로 안 갈리는 중의성(공통 D4 여럿·규칙 여럿·
+#    후보객체 여럿)은 후보를 생성해 attempt 로 제출(any-correct; §P5 탐색은 train, 판정은 최종 채점).
+def _components(cells):
+    """비배경 셀의 8-연결 성분들. cells={(r,c):color}. 반환 [{(r,c):color},...] (배경분리 객체)."""
+    from collections import deque
+    remain = dict(cells); seen = set(); out = []
+    for st in remain:
+        if st in seen:
+            continue
+        q = deque([st]); seen.add(st); comp = {st: remain[st]}
+        while q:
+            r, c = q.popleft()
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    p = (r + dr, c + dc)
+                    if p in remain and p not in seen:
+                        seen.add(p); comp[p] = remain[p]; q.append(p)
+        out.append(comp)
+    return out
+
+
+def _ocolor(comp):
+    return next(iter(sorted(set(comp.values()))))
+
+
+def _oshape(comp):
+    rs = [r for r, _ in comp]; cs = [c for _, c in comp]; r0, c0 = min(rs), min(cs)
+    return frozenset((r - r0, c - c0) for r, c in comp)
+
+
+def _correspond_by_prop(cin, cout):
+    """in↔out 성분을 (색 COMM ∧ area COMM) greedy 대응(부분일치 허용 — shape/pos DIFF 여도). 반환 [(a,b)] 또는 None."""
+    used = set(); pairs = []
+    for a in cin:
+        cand = [(j, b) for j, b in enumerate(cout)
+                if j not in used and _ocolor(b) == _ocolor(a) and len(b) == len(a)]
+        if not cand:
+            return None
+        j, _b = min(cand, key=lambda x: x[0]); used.add(j); pairs.append((a, cout[j]))
+    return pairs
+
+
+def object_transform_candidates(train, test_input):
+    """색-varying 다객체: mover(제자리 D4) 를 불변 property 로 지목해 test 후보 격자들을 생성(≤3).
+    반환 = 후보 격자 리스트(첫 유효부터, 객체 라운드로빈). 비해당/실패 시 []."""
+    per_pair = []                                            # (mover_in, mover_out, D4후보집합) per pair
+    for gi, go in train:
+        cin = _components(_nonzero(gi)); cout = _components(_nonzero(go))
+        mp = _correspond_by_prop(cin, cout)
+        if mp is None:
+            return []
+        movers = [(a, b) for a, b in mp if _oshape(a) != _oshape(b)]   # shape 바뀐 대응쌍 = 이동/변환
+        if len(movers) != 1:                                # pair 당 mover 정확히 1개(현행 가정)
+            return []
+        a, b = movers[0]
+        d4 = {M[0] for M in _D4 if _match_free(a, M, b)}
+        per_pair.append((a, b, d4))
+    # mover 선택 규칙: area 불변? 색 불변? (train 쌍 전체에서 상수인 property) — area 우선
+    cols = {_ocolor(a) for a, _b, _d in per_pair}; areas = {len(a) for a, _b, _d in per_pair}
+    rules = []
+    if len(areas) == 1:
+        rules.append(("area", next(iter(areas))))
+    if len(cols) == 1:
+        rules.append(("color", next(iter(cols))))
+    if not rules:
+        return []
+    common = set(per_pair[0][2])                             # 공통 D4 = 교집합
+    for _a, _b, d4 in per_pair[1:]:
+        common &= d4
+    if not common:
+        return []
+    verified = []                                           # (M, pivot규칙): 전 train mover 를 정확재현
+    for name in sorted(common):
+        M = next(x for x in _D4 if x[0] == name)
+        for pv in _PIVOT_ORDER:
+            ok = True
+            for a, b, _d in per_pair:
+                piv = _pivot_named(a.keys(), 9, 9).get(pv)
+                pr = _apply_pivot(a, M, piv) if piv is not None else None
+                if pr is None or set(pr.keys()) != set(b.keys()):
+                    ok = False
+                    break
+            if ok:
+                verified.append((M, pv)); break
+    if not verified:
+        return []
+    ti = _components(_nonzero(test_input)); H, W = len(test_input), len(test_input[0])
+    per_obj = []; seen_obj = set()                          # 선택 객체별 후보(라운드로빈용)
+    for kind, val in rules:
+        for s in ti:
+            key = id(s)
+            if key in seen_obj:
+                continue
+            if not (_ocolor(s) == val if kind == "color" else len(s) == val):
+                continue
+            seen_obj.add(key)
+            gl = []
+            for M, pv in verified:
+                piv = _pivot_named(s.keys(), H, W).get(pv)
+                pr = _apply_pivot(s, M, piv) if piv is not None else None
+                if pr is None or not all(0 <= r < H and 0 <= c < W for (r, c) in pr):
+                    continue
+                g = [[0] * W for _ in range(H)]
+                for c in ti:
+                    src = pr if c is s else c
+                    for (r, cc), v in src.items():
+                        g[r][cc] = v
+                if g not in gl:
+                    gl.append(g)
+            if gl:
+                per_obj.append(gl)
+    out = []; i = 0                                          # 객체 라운드로빈(각 후보객체가 먼저 1개씩)
+    while any(i < len(v) for v in per_obj):
+        for v in per_obj:
+            if i < len(v) and v[i] not in out:
+                out.append(v[i])
+        i += 1
+    return out[:3]
+
+
+def solve_by_object_transform(train, test_input):
+    """object_transform_candidates 의 첫 후보(단일 답 필요 시). 없으면 None."""
+    cs = object_transform_candidates(train, test_input)
+    return cs[0] if cs else None
+
+
 def solve_any(train, test_input):
-    """심볼 좌표식 + 선형 D4(통째) + 선형 D4(색별) 순차 시도(첫 non-None)."""
+    """심볼 좌표식 + 선형 D4(통째) + 선형 D4(색별) + 객체선택변환 순차 시도(첫 non-None)."""
     return (solve_by_transform(train, test_input) or solve_by_linear(train, test_input)
-            or solve_by_linear_percolor(train, test_input))
+            or solve_by_linear_percolor(train, test_input) or solve_by_object_transform(train, test_input))

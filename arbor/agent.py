@@ -469,13 +469,14 @@ class ArborAgent:
         실패는 조용히(표준 결과 유지)."""
         try:
             from arbor.reasoning.transform import (solve_by_transform, solve_by_linear,
-                                                    solve_by_linear_percolor)
+                                                    solve_by_linear_percolor,
+                                                    object_transform_candidates)
             test = self.task.get("test") or []
             if not test:
                 return
             pairs = [(p["input"], p["output"]) for p in self.task["train"]]
             tin, tout = test[0]["input"], test[0]["output"]
-            # 심볼(flip) + 선형D4 통째(rotate 단일객체) + 선형D4 색별(다객체) 를 attempt 로 제출 → 하나라도 맞으면 solved.
+            # 심볼(flip) + 선형D4 통째(단일객체) + 선형D4 색별(안정 다객체) 를 attempt 로 제출.
             for hyp, fn in (("transform (좌표식)", solve_by_transform),
                             ("linear D4 (통째)", solve_by_linear),
                             ("linear D4 (색별/다객체)", solve_by_linear_percolor)):
@@ -485,7 +486,14 @@ class ArborAgent:
                 correct = (grid == tout)
                 self.attempts.append({"answer": grid, "correct": correct, "hyp": hyp})
                 if correct:
-                    break                                       # 정답 나오면 멈춤
+                    return                                      # 정답 나오면 멈춤
+            # 객체선택변환(색-varying 다객체): 중의성 후보 ≤3 을 각각 attempt 로 → 하나라도 맞으면 solved.
+            for i, grid in enumerate(object_transform_candidates(pairs, tin), 1):
+                correct = (grid == tout)
+                self.attempts.append({"answer": grid, "correct": correct,
+                                      "hyp": f"객체선택변환 (mover D4, 후보{i})"})
+                if correct:
+                    return
         except Exception:
             pass                                                # fallback 실패는 표준 결과를 해치지 않는다
 

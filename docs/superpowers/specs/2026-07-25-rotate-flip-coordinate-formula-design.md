@@ -121,3 +121,29 @@ Task1 스파이크(scratchpad)로 실데이터 검증한 결론. **자유 심볼
 **1차 한계(후속):** (a) figure/ground=최빈색 휴리스틱(→ spelke/bounded 로 principled 화, §no-arbitrary-filters).
 (b) 다색 객체 검출 미해결. (c) 탐색 ~5s/태스크(원자·연산 캐싱/가지치기로 최적화). (d) fallback 이 SOAR
 operator 루프 밖(→ 후속에 resolve/operator 로 내재화, §1-1 은 §5 절차). (e) rotate 25% (90° disambiguation 개선 여지).
+
+---
+
+## 11. 완전 해결 (2026-07-26) — 배치 피벗 + 객체선택변환
+
+데이터 재작성(06:01) 후 현재 clean 데이터 기준. 실패를 두 부류로 진단하고 각각 해결:
+
+### 부류 1 — 배치(placement) 피벗: centroid → **train-검증 bbox중심**
+`solve_by_linear` 이 test 피벗을 객체 centroid 로 *추측*해 1칸 오차. 수정: 피벗 규칙을 **train 정확재현으로
+검증**(`_verified_pivot_rule`)해 살아남은 규칙만 test 에 적용. 강체변환 불변점 = **bbox중심**(min+max)이
+우선(스파이크로 train·test 전부 정확재현 확인). generate-and-test(§1-3 준수). → rotate 24→26, 회귀 0.
+
+### 부류 2 — 객체선택변환: 색-varying 다객체
+색이 쌍마다 바뀌어 색별 exact 매칭 불가. `object_transform_candidates`:
+1. **대응**: pair 내 in↔out 성분을 `(색 COMM ∧ area COMM)` greedy 로 잇는다(shape/pos DIFF 여도 = 부분일치).
+2. **mover 식별**: 대응쌍 중 shape 바뀐 1개 = mover(제자리 D4), 나머지 정지.
+3. **선택 규칙**: mover 를 지목하는 **불변 property**(색 또는 area 가 train 쌍 전체에서 상수)를 structure
+   mapping 으로 도출(area 우선). test 객체를 그 규칙으로 선택.
+4. **transform**: 공통 D4(교집합) + train-검증 피벗을 제자리 적용.
+5. **중의성**: 공통 D4 여럿·규칙 여럿·후보객체 여럿이면 **후보 ≤3 생성**(객체 라운드로빈), attempt 로 제출
+   (any-correct; §P5 탐색은 train, 판정은 최종 채점). rota000s(공통D4 2), flip000u(규칙 2), rota00ai(후보객체 2).
+
+**최종 게이트(현재 clean 데이터):** move **60/60 불변** · rotate **36/36** · flip **24/24**. 결정적.
+
+**주의(운영):** program_report 리포트 경로는 `run_solve(use_cache=True)` 이고 캐시 키가 task 내용 해시뿐이라
+**솔버 로직을 바꾸면 캐시가 낡는다**. 리포트 재생성 전 `clear_cache()` 필수(안 하면 옛 결과 표시).
