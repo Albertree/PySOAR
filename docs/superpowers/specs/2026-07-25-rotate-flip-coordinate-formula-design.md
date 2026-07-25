@@ -100,3 +100,24 @@ Task1 스파이크(scratchpad)로 실데이터 검증한 결론. **자유 심볼
 - 모든 rotate/flip 태스크 정답 보장 — 부분 성공으로 원리 검증.
 - move 경로 자체 재작성 — additive만.
 - 새 operator/DSL/property/run 신설 — 필요 시 §5 절차로 별도 승인.
+
+---
+
+## 10. 정정 + 1차 통합 완료 (2026-07-25)
+
+**§9 의 "색별 D4" 는 우회로였다 — 정정한다.** D4 8종을 직접 열거하면 변환 *종류*는 빠르게 찾지만
+**placement(변환된 객체가 test 에서 어디 놓이나)** 를 input 기반 앵커(tl/br/center)로 못 정해 **실제 test 정답 ~0%**.
+반면 **심볼 좌표식 탐색**(원자에 객체 bbox `r0,c0,r1,c1,h,w` 포함, 연산 `//` 포함, 일반성 tier)은 **placement 를
+식 자체에 학습**(예 flip `c'=(c0+c1)-c`, 회전 `r'=c-c0`)해 test 에 일반화된다. → **§4 의 원래 방향(심볼탐색)이 옳았다.**
+
+**확정 구현:** `arbor/reasoning/transform.py` (`solve_by_transform(train, test_input)`), 원자
+`{r,c,r0,c0,r1,c1,h,w,H,W}` + 연산 `{+,-,*,//}` ≤2, 색보존 set 검증, 일반성 tier.
+
+**1차 통합(additive fallback):** `arbor/agent.py::ArborAgent.run` 끝에서 표준경로가 정답 attempt 를 못 내면
+`solve_by_transform` 을 시도해 attempt 추가. 탐색은 train 만(§P5), 채점은 최종 test 대조.
+
+**실측 게이트(축소 clean 데이터):** move **60/60 불변**(fallback 미발동) · flip **14/24(58%)** · rotate **9/36(25%)**.
+
+**1차 한계(후속):** (a) figure/ground=최빈색 휴리스틱(→ spelke/bounded 로 principled 화, §no-arbitrary-filters).
+(b) 다색 객체 검출 미해결. (c) 탐색 ~5s/태스크(원자·연산 캐싱/가지치기로 최적화). (d) fallback 이 SOAR
+operator 루프 밖(→ 후속에 resolve/operator 로 내재화, §1-1 은 §5 절차). (e) rotate 25% (90° disambiguation 개선 여지).
