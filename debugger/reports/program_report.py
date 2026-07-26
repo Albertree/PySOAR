@@ -1904,10 +1904,12 @@ def _skel_solution_defs(final_skel, exs=None):
         tgt = s["args"]["target"]; col_leaf = s["args"]["color"]
         sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
         cur = f"g{n + 1}"
-        pn += 1; tp = f"?p{pn}"                              # target = 구조 hoist(§3)
-        if isinstance(col_leaf, dict) and "expr" in col_leaf:  # 함수식(color_of(objN)) → ?p 구조 hoist(§3)
-            pn += 1; cstr = f"?p{pn}"; order_p.append(cstr)
-            defs.append((cstr, col_leaf["expr"], "coloring 색(객체 보존색)"))
+        pn += 1; tp = f"?p{pn}"                              # target = 구조 hoist(§3, COMM 구조)
+        # coloring 색: comparison DIFF(pair 마다 다름) 은 **?var**(구조매칭 후 변수화, 사용자 2026-07-27).
+        # color_of(objN) 로 해소됐어도 DIFF 슬롯이므로 ?var(그 식이 정의). COMM const 만 리터럴.
+        if isinstance(col_leaf, dict) and "expr" in col_leaf:  # DIFF → 객체 보존색으로 해소 → ?var
+            cstr = nextvar(); order_var.append(cstr)
+            defs.append((cstr, col_leaf["expr"], "coloring 색(DIFF · 객체 보존색으로 해소)"))
         elif isinstance(col_leaf, dict) and "var" in col_leaf:  # DIFF 자유변수 → ?var
             cstr = nextvar(); order_var.append(cstr)
             defs.append((cstr, None, "pair 마다 다른 색(DIFF · 자유변수)"))
@@ -1934,6 +1936,14 @@ def _skel_solution_defs(final_skel, exs=None):
         if re.search(rf"\b{var}\b", joined):
             defs.append((var, expr, "")); order_bbox.append(var)
     order = order_obj + order_bbox + order_p + order_var     # 의존순: 객체 → bbox → target → ?var
+    # orphan 방지: 골격·정의식에서 참조됐으나 정의 없는 ?p/?var(예 property 미도출 fallback ?p0)을
+    # note-only 로 정의(미해결 흔적 정직 표기, 사용자 2026-07-27 — 미표현 슬롯 없게).
+    defined = {nm for nm, _e, _t in defs}
+    ref = set()
+    for txt in skel + [e for _n, e, _t in defs if e]:
+        ref |= set(re.findall(r'\?(?:p|var)\d+', txt))
+    for orph in sorted(ref - defined):
+        defs.append((orph, None, "비교로 도출 안 됨(미해결)")); order.append(orph)
     return skel, defs, order
 
 
