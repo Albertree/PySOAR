@@ -38,3 +38,9 @@ def _op_resolve(ag):
     ag.kg["resolve"] = {"resolved": {n: v[0][0] for n, v in resolved.items()},
                         "tried": tried_all}
     ag.wm.add(sid, "resolved", "yes" if ok_all else "failed")
+    # resolve 실패(slot 을 G0 유래식으로 못 세움)도 generalize 실패와 같은 dead-end 이다: apply_solution
+    # 은 resolved:yes 를 요구하므로 발화하지 않아 답이 안 나온다. 이때 generalize 실패 브랜치와 동일한
+    # needs-transform 신호를 세워 좌표식 해 도출(transform operator)로 넘긴다(옛 fallback 이 덮던 경로 —
+    # 새 property 아님, 기존 신호 재사용). transform 이 소진/해없음이면 스스로 transformed 로 되돌린다.
+    if not ok_all and not ag.wm.contains(sid, "transformed", "yes"):
+        ag.wm.add(sid, "needs-transform", "yes")

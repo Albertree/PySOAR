@@ -477,6 +477,21 @@ def solve_any(train, test_input):
             or solve_by_linear_percolor(train, test_input) or solve_by_object_transform(train, test_input))
 
 
+def transform_candidates(train, test_input):
+    """옛 fallback 과 같은 후보 격자들을 **중복제거·순서유지**로 모아 반환(≤3, ARC 3-attempt).
+    순서: 단일-답 전략(transform→linear→percolor) 먼저, 그다음 객체선택변환 후보. 해 없으면 [].
+    각 전략은 결정적이므로 반환도 결정적(set 순서 무관). operator 가 idx 로 순차 제출한다."""
+    out = []
+    for fn in (solve_by_transform, solve_by_linear, solve_by_linear_percolor):
+        g = fn(train, test_input)
+        if g is not None and g not in out:
+            out.append(g)
+    for g in object_transform_candidates(train, test_input):
+        if g not in out:
+            out.append(g)
+    return out[:3]
+
+
 def transform_solution_ast(train, test_input):
     """좌표식 해를 grid-body coloring AST + 테스트 answer 로. 없으면 None. 개념 이름 없음."""
     sol = transform_solution(train)

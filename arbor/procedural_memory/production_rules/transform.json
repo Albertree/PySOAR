@@ -1,13 +1,12 @@
 {
   "operator": "transform",
-  "doc": "generalize 가 op수 불일치로 막히고 compress 도 안 될 때(needs-transform) 발화 → train 좌표식 해를 탐색해 TASK.solution+answer 를 물질화하거나 해 없으면 generalized:failed. 이름=좌표식 해 도출(변환 종류 아님).",
+  "doc": "generalize 가 op수 불일치로 막히고 compress 도 안 될 때(needs-transform) 발화 → 후보 격자들을 탐색해 idx 순으로 answer 물질화(ARC 3-attempt). 오답 시 answer-ready 가 지워지고 needs-transform 이 남아 재발화. 소진/해없음에만 needs-transform 제거. 이름=좌표식 해 도출(변환 종류 아님).",
   "propose": [
     {
       "name": "propose*transform",
       "order": 31,
       "conditions": [
         {"id": "<s>", "attr": "needs-transform", "value": "yes", "negated": false},
-        {"id": "<s>", "attr": "transformed", "value": "<t>", "negated": true},
         {"id": "<s>", "attr": "answer-ready", "value": "<ar>", "negated": true}
       ],
       "actions": [
