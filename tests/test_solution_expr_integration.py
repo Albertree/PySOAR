@@ -34,7 +34,7 @@ class TestSolutionExprIntegration(unittest.TestCase):
 
     def test_objectify_stages_present_for_move(self):
         # 구형 compress 옆박스 제거(사용자 2026-07-24) → 픽셀객체화·object 객체화 단계로 대체
-        html = self._html_or_skip("move000ah")
+        html = self._html_or_skip("move00ah")
         self.assertIn("픽셀객체화", html)                  # Step A.5
         self.assertIn("object 객체화", html)               # Step A.6
         self.assertNotIn("COMPRESS · 픽셀", html)          # 구형 compress 옆박스 사라짐

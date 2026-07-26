@@ -508,38 +508,49 @@ def transform_candidates_invariant(train, test_input):
     return out[:3]
 
 
+def solution_ast_from_answer(answer, test_input):
+    """**주어진 정답 격자** answer(재계산 아님 — 이긴 attempt 그대로) 로 grid-body coloring AST 를
+    구성: 목적지=answer 의 비배경 셀(색별 coloring) + vacated(`nz(test_input) − nz(answer)`, 입력엔
+    있고 답엔 없는 셀)을 배경(0) 으로 coloring. `PA.execute(ast, test_input) == answer` 를 반드시
+    만족(단위검증 대상) — 옛 `transform_solution_ast` 는 vacated 를 안 지워 잔상이 남았다(§brief).
+    target AST 는 손으로 짓지 않고 program_ast 의 공개 빌더(coordinate_of/select/coord_in)로 조립한다 —
+    coord_in 의 values 는 **raw 좌표 리스트**([[r,c],...], leaf-wrap 아님) 라야 _compile_pred 의
+    `for v in e["values"]` 순회·_resolve_select_coords/_sel_src 가 그대로 해석 가능(accessor="coordinate"
+    ·소문자 level="pixel"). 이는 이미 컨슈머와 맞물려 쓰이는 유일한 실행가능 shape — operators/compress.py
+    `_select_target`(and tests/test_coord_in.py 등)과 동일 관례. (program_ast._select_target 는 antiunify
+    스켈레톤 전용이라 values 를 const(...) leaf 로 감싸 여기 실행 경로엔 안 맞는다 — 확인 후 미사용.)"""
+    from arbor.reasoning import program_ast as PA
+    from collections import defaultdict
+    H, W = len(test_input), len(test_input[0])
+
+    def sel_target(coords):
+        return PA.coordinate_of(PA.select("input", "pixel",
+                                 PA.coord_in("coordinate", [[r, c] for (r, c) in sorted(coords)])))
+    # 답 격자 셀을 색별로 묶어 coloring (전체 객체 재칠; op 수 = 객체 크기)
+    bycol = defaultdict(list)
+    for r in range(H):
+        for c in range(W):
+            if answer[r][c]:
+                bycol[answer[r][c]].append((r, c))
+    vac = [(r, c) for r in range(H) for c in range(W) if test_input[r][c] and not answer[r][c]]
+    inner = [{"call": "coloring", "args": {"target": sel_target(cs), "color": {"const": col}}}
+             for col, cs in sorted(bycol.items())]
+    if vac:                                            # 잔상 방지: 입력엔 있고 답엔 없는 셀 → 배경 0
+        inner.append({"call": "coloring", "args": {"target": sel_target(vac), "color": {"const": 0}}})
+    body = [{"call": "set_grid_size", "args": {"size": {"const": {"height": H, "width": W}}}},
+            {"call": "set_grid_color", "args": {"color": {"const": sorted({0, *bycol})}}},
+            {"call": "set_grid_contents", "args": {"contents": {"program": {"body": inner}}}}]
+    return {"input": {"grid": "G0"}, "body": body}
+
+
 def transform_solution_ast(train, test_input):
-    """좌표식 해를 grid-body coloring AST + 테스트 answer 로. 없으면 None. 개념 이름 없음."""
+    """좌표식 해를 grid-body coloring AST + 테스트 answer 로. 없으면 None. 개념 이름 없음.
+    (표시용 — 답은 solve_any 로 자체 계산; 리포트가 실제 채택 answer 로 원하면 solution_ast_from_answer
+    를 직접 그 answer 로 호출할 것 — solve_any 는 중의적 태스크에서 틀린 첫 답을 낼 수 있다.)"""
     sol = transform_solution(train)
     if sol is None:
         return None
     answer = solve_any(train, test_input)
     if answer is None:
         return None
-    H, W = len(test_input), len(test_input[0])
-    # test 에서 변환되는 객체 = train 과 같은 kind/규칙으로 재도출(간단히: solve_any 가 이미 답을 알므로
-    # 답 격자의 비배경을 객체색 coloring 으로 물질화; 정지객체 구분은 kind 로).
-    # target AST 는 손으로 짓지 않고 program_ast 의 공개 빌더(coordinate_of/select/coord_in)로 조립한다 —
-    # coord_in 의 values 는 **raw 좌표 리스트**([[r,c],...], leaf-wrap 아님) 라야 _compile_pred 의
-    # `for v in e["values"]` 순회·_resolve_select_coords/_sel_src 가 그대로 해석 가능(accessor="coordinate"
-    # ·소문자 level="pixel"). 이는 이미 컨슈머와 맞물려 쓰이는 유일한 실행가능 shape — operators/compress.py
-    # `_select_target`(and tests/test_coord_in.py 등)과 동일 관례. (program_ast._select_target 는 antiunify
-    # 스켈레톤 전용이라 values 를 const(...) leaf 로 감싸 여기 실행 경로엔 안 맞는다 — 확인 후 미사용.)
-    from arbor.reasoning import program_ast as PA
-
-    def sel_target(coords):
-        return PA.coordinate_of(PA.select("input", "pixel",
-                                 PA.coord_in("coordinate", [[r, c] for (r, c) in sorted(coords)])))
-    # 답 격자 셀을 색별로 묶어 coloring (전체 객체 재칠; op 수 = 객체 크기)
-    from collections import defaultdict
-    bycol = defaultdict(list)
-    for r in range(H):
-        for c in range(W):
-            if answer[r][c]:
-                bycol[answer[r][c]].append((r, c))
-    inner = [{"call": "coloring", "args": {"target": sel_target(cs), "color": {"const": col}}}
-             for col, cs in sorted(bycol.items())]
-    body = [{"call": "set_grid_size", "args": {"size": {"const": {"height": H, "width": W}}}},
-            {"call": "set_grid_color", "args": {"color": {"const": sorted({0, *bycol})}}},
-            {"call": "set_grid_contents", "args": {"contents": {"program": {"body": inner}}}}]
-    return {"input": {"grid": "G0"}, "body": body}, answer
+    return solution_ast_from_answer(answer, test_input), answer

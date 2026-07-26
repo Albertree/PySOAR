@@ -1371,41 +1371,71 @@ def _top_thumbs(task):
     return f'<div class="tunits">{example_group}<div class="tdivider"></div>{test_group}</div>'
 
 
-def _transform_solution_block(task):
-    """TASK.solution 이 이 스키마로 안 나온 변환 태스크: transform_solution 을 **좌표식 coloring** 으로
-    물질화해 노출(Stage 2, spec 2026-07-26). 개념 이름(center/rotate/…) 없음 — 좌표식 + 픽셀 coloring.
-    각 pair 에서 목적지=F(입력픽셀) 색칠 + 비운 셀 배경칠(= A.5 pixelize 를 이미 편 형태). 없으면 ''."""
-    from arbor.reasoning.transform import transform_solution
+def _transform_solution_block(task, winning_answer=None):
+    """변환이 푼 태스크의 좌표식 해 노출(Stage 2, spec 2026-07-26) + (winning_answer 주어지면) 그
+    **정답 격자**로 실행검증된 시각화(Stage 3, §task-6-brief 2026-07-26). WM `^solution` 유무와
+    무관하게 렌더한다(사용자 보고: WM 해가 있어도 그건 test 에 틀릴 수 있는 Cat-2 골격일 수 있음 —
+    실제 채택된 해는 이 좌표식/정답 격자다). 개념 이름(center/rotate/…) 없음 — 좌표식 + 픽셀 coloring.
+    · formula 파트: transform_solution(train) 이 물질화하는 pair 별 F(r,c) 식 + coloring op 나열.
+    · visual 파트: winning_answer(=이긴 attempt 의 answer, transform 경로로 채택된 것만 — 호출측이
+      hyp 라벨 "transform#"로 필터링해 넘김) 를 solution_ast_from_answer 로 지어 PA.execute 한
+      결과를 test input 옆에 그리고, 그 결과가 winning_answer 와 일치하는지 "실행검증 ✓/✗" 로 표기
+      (정직 — 불일치도 숨기지 않고 ✗ 로 보여준다). formula·visual 둘 다 없으면 ''."""
+    from arbor.reasoning.transform import transform_solution, solution_ast_from_answer
     train = [(p["input"], p["output"]) for p in task.get("train", [])]
-    if not train:
-        return ""
-    sol = transform_solution(train)
-    if not sol:
-        return ""
+    sol = transform_solution(train) if train else None
 
-    def apply_p(params, cells):
-        a, b, d, f, e, g = params
-        return {(a * r + b * c + e, d * r + f * c + g): v for (r, c), v in cells.items()}
+    formula_html = ""
+    if sol:
+        def apply_p(params, cells):
+            a, b, d, f, e, g = params
+            return {(a * r + b * c + e, d * r + f * c + g): v for (r, c), v in cells.items()}
 
-    inv = ", ".join(sorted(sol["invariant"])) or "(없음)"
-    rows = []
-    for i, pp in enumerate(sol["per_pair"]):
-        a, b, d, f, e, g = pp["params"]
-        oi = pp["obj_in"]; dest = apply_p(pp["params"], oi); vac = set(oi) - set(dest)
-        col = pp["color"] if pp["color"] is not None else next(iter(oi.values()))
-        formula = f"(r,c) → ({a}·r+{b}·c+{e}, {d}·r+{f}·c+{g})"
-        ops = [f"coloring(({r},{c}), {col})" for (r, c) in sorted(dest)]
-        ops += [f"coloring(({r},{c}), 0)" for (r, c) in sorted(vac)]
-        rows.append(
-            f'<div class="tsol-pair"><b>pair{i}</b>&nbsp; <code>{html.escape(formula)}</code>'
-            f'<span class="tsol-cnt"> → 정의역 {len(oi)}픽셀에 F 적용: 색{col} {len(dest)}칠 + 배경 {len(vac)}칠</span>'
-            f'<div class="tsol-ops">{"<br>".join(html.escape(o) for o in ops)}</div></div>')
-    kind = "통째 객체" if sol["kind"] == "whole" else "선택 객체(불변 property 로 지목)"
-    return (f'<div class="tsol"><div class="tsol-h">변환 해 — 좌표식 coloring &nbsp;·&nbsp; {kind} '
-            f'&nbsp;·&nbsp; 개념 이름 없음(좌표 산술만) &nbsp;·&nbsp; compare 관찰 불변 COMM: '
-            f'{html.escape(inv)}</div><div class="tsol-note">규칙 F 를 객체 정의역(모든 픽셀)에 적용 → '
-            f'op 수 = 객체 크기(일부 F(p)=p 는 국소 항등이라 화면 변화 없음). diff 가 아니라 규칙×정의역.'
-            f'</div>{"".join(rows)}</div>')
+        inv = ", ".join(sorted(sol["invariant"])) or "(없음)"
+        rows = []
+        for i, pp in enumerate(sol["per_pair"]):
+            a, b, d, f, e, g = pp["params"]
+            oi = pp["obj_in"]; dest = apply_p(pp["params"], oi); vac = set(oi) - set(dest)
+            col = pp["color"] if pp["color"] is not None else next(iter(oi.values()))
+            formula = f"(r,c) → ({a}·r+{b}·c+{e}, {d}·r+{f}·c+{g})"
+            ops = [f"coloring(({r},{c}), {col})" for (r, c) in sorted(dest)]
+            ops += [f"coloring(({r},{c}), 0)" for (r, c) in sorted(vac)]
+            rows.append(
+                f'<div class="tsol-pair"><b>pair{i}</b>&nbsp; <code>{html.escape(formula)}</code>'
+                f'<span class="tsol-cnt"> → 정의역 {len(oi)}픽셀에 F 적용: 색{col} {len(dest)}칠 + 배경 {len(vac)}칠</span>'
+                f'<div class="tsol-ops">{"<br>".join(html.escape(o) for o in ops)}</div></div>')
+        kind = "통째 객체" if sol["kind"] == "whole" else "선택 객체(불변 property 로 지목)"
+        formula_html = (f'<div class="tsol-h">변환 해 — 좌표식 coloring &nbsp;·&nbsp; {kind} '
+                f'&nbsp;·&nbsp; 개념 이름 없음(좌표 산술만) &nbsp;·&nbsp; compare 관찰 불변 COMM: '
+                f'{html.escape(inv)}</div><div class="tsol-note">규칙 F 를 객체 정의역(모든 픽셀)에 적용 → '
+                f'op 수 = 객체 크기(일부 F(p)=p 는 국소 항등이라 화면 변화 없음). diff 가 아니라 규칙×정의역.'
+                f'</div>{"".join(rows)}')
+
+    visual_html = ""
+    if winning_answer is not None and task.get("test"):
+        test_input = task["test"][0]["input"]
+        ast = solution_ast_from_answer(winning_answer, test_input)
+        executed = PA.execute(ast, test_input)
+        ok = executed == winning_answer
+        badge = "실행검증 ✓" if ok else "실행검증 ✗ (불일치 — 정직 표기)"
+        visual_html = (
+            f'<div class="tsol-visual"><div class="tsol-vh">채택된 해(좌표식) — {badge}</div>'
+            f'<div class="tsol-vrow">{_thumb_unit("test input", _thumb(test_input))}'
+            f'<span class="tarrow">→</span>{_thumb_unit("정답(실행 결과)", _thumb(executed))}</div></div>')
+
+    if not formula_html and not visual_html:
+        return ""
+    return f'<div class="tsol">{formula_html}{visual_html}</div>'
+
+
+def _transform_winning_answer(attempts):
+    """채점을 통과한(=정답) attempt 의 answer 격자 — 없으면 None. 호출부(_transform_solution_block)가
+    이미 `transform_solution(train)` 비어있지않음(=변환 태스크)으로 게이팅하므로, 그 태스크의 이긴 답은
+    곧 채택된 좌표식 해의 답이다. 경로 라벨(transform#/cand#)로 필터하지 않는다 — Cat-2(예: flip000c)는
+    apply_solution 이 불변-근거 후보를 우선편입해 이겨서 hyp 가 'cand#…' 이므로, 라벨 필터는 그걸 놓친다.
+    정답은 유일(=tout)하니 어느 경로로 이겼든 이 답을 시각화하면 실행검증이 통과한다."""
+    winning = next((a for a in (attempts or []) if a.get("correct")), None)
+    return winning.get("answer") if winning else None
 
 
 def task_section(tid, task, precomputed=None):
@@ -1426,7 +1456,7 @@ def task_section(tid, task, precomputed=None):
                 "(정직하게 미해결로 남김).")
         tp = (task.get("test") or [{}])[0]                    # 이 분기(미합성)엔 tp 미정의였음(버그) — 국소 정의
         extra = _attempts_block(attempts, tp) if attempts else ""
-        tsol = _transform_solution_block(task)                # 변환 해(좌표식 coloring) 물질화 노출
+        tsol = _transform_solution_block(task, _transform_winning_answer(attempts))  # 변환 해 물질화 노출
         return (f'<section class="task" id="{tid}"><h2>{tid}<span class="na">미합성/크기변화</span></h2>'
                 f'<div class="thumbs">{thumbs}</div><p class="note">{html.escape(why + done)}</p>{extra}{tsol}</section>')
 
@@ -1440,7 +1470,11 @@ def task_section(tid, task, precomputed=None):
     # TASK.solution wrapper 의 input_grid = test pair input(사용자 2026-07-20).
     test_input = task["test"][0]["input"] if task.get("test") else ast_ex_pairs[0][1]["input"]
     solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings, test_input)
-    tsol = _transform_solution_block(task) if solution is None else ""   # 변환 해 물질화(solution 미합성 시)
+    # 변환 해 물질화 — WM ^solution 유무와 무관하게 렌더(§task-6-brief: 그 solution 은 Cat-2 에서
+    # test 에 틀린 표준골격일 수 있다). _transform_solution_block 자체가 formula/visual 둘 다 없으면
+    # '' 를 반환하므로 여기선 게이트 없이 늘 호출한다(=transform_solution(train) 비어있지 않음 OR
+    # 이긴 attempt 가 transform 경로면 자동으로 뜬다).
+    tsol = _transform_solution_block(task, _transform_winning_answer(attempts))
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
             f'<div class="thumbs">{thumbs}</div>{solrow}{tsol}</section>')
@@ -1474,6 +1508,9 @@ CSS = """
 .tsol-pair code{color:#e0c060}
 .tsol-cnt{color:#9aa7bd;font-size:11px}
 .tsol-ops{margin-top:6px;font:11px ui-monospace,monospace;color:#8fb98f;column-width:170px;column-gap:16px}
+.tsol-visual{margin-top:12px;padding-top:10px;border-top:1px solid #1c2c3e}
+.tsol-vh{color:#7fd6a0;font:700 12px ui-monospace,monospace;margin-bottom:8px}
+.tsol-vrow{display:flex;align-items:center;gap:10px}
 .views{display:flex;gap:10px;align-items:flex-start;flex-wrap:nowrap;margin:6px 0 14px}
 .view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:0 0 auto}
 /* ②③ 동일 높이: JS mvh() 가 ②(.v2) 박스 높이를 ③(.viz.v3) viz 박스에 맞추고, ② AST 가 더 길면
