@@ -471,10 +471,112 @@ def transform_solution(train):
     return {"kind": "object", "per_pair": pp, "invariant": inv}
 
 
+def _move_axis_shifts(vals, bb, is_row):
+    """축별 위치차 vals(pair)+bbox → pair 마다 맞는 **모든** 위치차식 함수 리스트 f(b)->int. b=(r0,r1,c0,c1,H,W).
+    두 anchor(top-left·bottom-right)를 grid 특수점(0·끝)·임의 COMM 절대점·center·상수 로 검색. 여러 개면
+    모호(같은 높이 train 이 top→T ⟺ bottom→T' 를 구분 못 함) — 후보로 모두 반환해 3-attempt 로 해소."""
+    a0, a1, hw = (0, 1, 4) if is_row else (2, 3, 5)
+    n = len(vals)
+    T0 = [bb[i][a0] + vals[i] for i in range(n)]
+    T1 = [bb[i][a1] + vals[i] for i in range(n)]
+    Hs = [bb[i][hw] for i in range(n)]
+    fns = []
+    if all(t == 0 for t in T0):
+        fns.append(lambda b: -b[a0])                         # top/left → 0
+    if all(T1[i] == Hs[i] - 1 for i in range(n)):
+        fns.append(lambda b: b[hw] - 1 - b[a1])              # bottom/right → 끝
+    if all(t == 0 for t in T1):
+        fns.append(lambda b: -b[a1])
+    if all(T0[i] == Hs[i] - 1 for i in range(n)):
+        fns.append(lambda b: b[hw] - 1 - b[a0])
+    if len(set(T0)) == 1:
+        fns.append(lambda b, t=T0[0]: t - b[a0])             # top/left → 절대 COMM
+    if len(set(T1)) == 1:
+        fns.append(lambda b, t=T1[0]: t - b[a1])             # bottom/right → 절대 COMM
+    if all((Hs[i] - 1 - bb[i][a0] - bb[i][a1]) % 2 == 0
+           and (Hs[i] - 1 - bb[i][a0] - bb[i][a1]) // 2 == vals[i] for i in range(n)):
+        fns.append(lambda b: (b[hw] - 1 - b[a0] - b[a1]) // 2)   # center 정렬
+    if len(set(vals)) == 1:
+        fns.append(lambda b, v=vals[0]: v)                   # 상수 위치차(폴백)
+    return fns
+
+
+def _solve_by_move_impl(train, test_input, want_all):
+    """순수 이동 태스크 해결. want_all=True 면 모호 축의 모든 조합 후보 리스트, False 면 첫 후보(단일)."""
+    movers = []
+    for gi, go in train:
+        mp = _correspond_by_prop(_components(_nonzero(gi)), _components(_nonzero(go)))
+        if mp is None:
+            return [] if want_all else None
+        mv = [(a, b) for a, b in mp if _oshape(a) == _oshape(b) and set(a) != set(b)]
+        if len(mv) != 1:
+            return [] if want_all else None
+        movers.append(mv[0])
+    bb, disps = [], []
+    for i, (a, b) in enumerate(movers):
+        ar = [r for r, _ in a]; ac = [c for _, c in a]
+        dr = min(r for r, _ in b) - min(ar); dc = min(c for _, c in b) - min(ac)
+        if {(r + dr, c + dc) for r, c in a} != set(b):
+            return [] if want_all else None
+        bb.append((min(ar), max(ar), min(ac), max(ac), len(train[i][0]), len(train[i][0][0])))
+        disps.append((dr, dc))
+    frs = _move_axis_shifts([d[0] for d in disps], bb, True)
+    fcs = _move_axis_shifts([d[1] for d in disps], bb, False)
+    if not frs or not fcs:
+        return [] if want_all else None
+    cols = {_ocolor(a) for a, _ in movers}; areas = {len(a) for a, _ in movers}
+    rules = ([("area", next(iter(areas)))] if len(areas) == 1 else []) \
+        + ([("color", next(iter(cols)))] if len(cols) == 1 else [])
+    if all(len(_components(_nonzero(gi))) == 1 for gi, _ in train):
+        rules.append(("single", None))
+    if not rules:
+        return [] if want_all else None
+    ti = _components(_nonzero(test_input)); H, W = len(test_input), len(test_input[0])
+    out = []
+    for kind, val in rules:
+        cand = list(ti) if kind == "single" else \
+            [s for s in ti if (_ocolor(s) == val if kind == "color" else len(s) == val)]
+        if len(cand) != 1:
+            continue
+        s = cand[0]; sr = [r for r, _ in s]; sc = [c for _, c in s]
+        b = (min(sr), max(sr), min(sc), max(sc), H, W)
+        for fr in frs:
+            for fc in fcs:
+                dr, dc = fr(b), fc(b)
+                moved = {(r + dr, c + dc): v for (r, c), v in s.items()}    # 색 보존
+                if not all(0 <= r < H and 0 <= c < W for r, c in moved):
+                    continue
+                g = [[0] * W for _ in range(H)]
+                for comp in ti:
+                    for (r, c), v in (moved if comp is s else comp).items():
+                        g[r][c] = v
+                if g not in out:
+                    out.append(g)
+                    if not want_all:
+                        return [g]
+        if out:
+            break
+    return out if want_all else (out[0] if out else None)
+
+
+def solve_by_move_candidates(train, test_input):
+    """순수 이동 태스크의 후보 격자들(모호 anchor 축은 여러 후보). 없으면 []."""
+    return _solve_by_move_impl(train, test_input, want_all=True)
+
+
+def solve_by_move(train, test_input):
+    """**순수 이동(translation/anchor 정렬)** 태스크: mover(색·area 대응·shape 동일·위치 이동)를 찾아 목적지를
+    축별 anchor식으로 도출, 선택 property(area/color COMM 또는 단일객체)로 test 객체 지목, **색 보존**한 채 이동.
+    색·목적지 하드코딩 없음(mov2 대응). 첫 후보 반환(모호 시 candidates 로 전부). rotate/flip(shape 변함)·
+    objc(위치 불변)는 mover 조건 불충족이라 None → 간섭 없음."""
+    return _solve_by_move_impl(train, test_input, want_all=False)
+
+
 def solve_any(train, test_input):
-    """심볼 좌표식 + 선형 D4(통째) + 선형 D4(색별) + 객체선택변환 순차 시도(첫 non-None)."""
-    return (solve_by_transform(train, test_input) or solve_by_linear(train, test_input)
-            or solve_by_linear_percolor(train, test_input) or solve_by_object_transform(train, test_input))
+    """순수 이동(anchor·색보존) + 심볼 좌표식 + 선형 D4(통째) + 선형 D4(색별) + 객체선택변환 순차(첫 non-None)."""
+    return (solve_by_move(train, test_input) or solve_by_transform(train, test_input)
+            or solve_by_linear(train, test_input) or solve_by_linear_percolor(train, test_input)
+            or solve_by_object_transform(train, test_input))
 
 
 def transform_candidates(train, test_input):
@@ -482,6 +584,9 @@ def transform_candidates(train, test_input):
     순서: 단일-답 전략(transform→linear→percolor) 먼저, 그다음 객체선택변환 후보. 해 없으면 [].
     각 전략은 결정적이므로 반환도 결정적(set 순서 무관). operator 가 idx 로 순차 제출한다."""
     out = []
+    for g in solve_by_move_candidates(train, test_input):    # 모호 anchor 축은 후보 여럿(3-attempt 해소)
+        if g not in out:
+            out.append(g)
     for fn in (solve_by_transform, solve_by_linear, solve_by_linear_percolor):
         g = fn(train, test_input)
         if g is not None and g not in out:
@@ -498,6 +603,9 @@ def transform_candidates_invariant(train, test_input):
     심볼 좌표식(solve_by_transform)은 **제외**한다(move 에서도 후보를 내므로 우선순위 대상 아님).
     각 전략이 결정적이라 반환도 결정적(set 순서 무관). move 태스크에선 전부 [] → 빈 리스트."""
     out = []
+    for g in solve_by_move_candidates(train, test_input):    # 모호 anchor 축은 후보 여럿(3-attempt 해소)
+        if g not in out:
+            out.append(g)
     for fn in (solve_by_linear, solve_by_linear_percolor):
         g = fn(train, test_input)
         if g is not None and g not in out:
