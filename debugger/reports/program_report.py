@@ -1632,6 +1632,12 @@ def _transform_solution_gallery(train):
                                   "coloring(g0, ?p3, ?p4) · 값은 전부 ?p")
 
 
+def _fmt_colors(cs):
+    """색 집합 → 표기: **단일색은 값 하나**(`4`), **복수색만 `[.,.]`**(사용자 2026-07-27 통일)."""
+    cs = sorted(cs)
+    return str(cs[0]) if len(cs) == 1 else str(cs)
+
+
 def _palette_change_expr(exs, ncolor, obj0_name="obj0"):
     """pair 대조(compare) → set_grid_color 팔레트 표현식(문자열) or None(공통구조 없음 → 자유변수).
     palette = color_of(input_grid) − [제거] + [추가]. (사용자 2026-07-27 — 공통 재채색 변화 추적)
@@ -1650,16 +1656,18 @@ def _palette_change_expr(exs, ncolor, obj0_name="obj0"):
         return None
     add = sorted(next(iter(set(adds))))
     expr = "color_of(input_grid)"
-    if len(set(rems)) == 1:                                  # 제거 COMM → 리터럴(빈 것=제거 없음)
+    if len(set(rems)) == 1:                                  # 제거 COMM → 값(단일색은 그냥 값, 빈 것=제거 없음)
         rem = sorted(next(iter(set(rems))))
         if rem:
-            expr += f" - {rem}"
+            expr += f" - {_fmt_colors(rem)}"
     elif ncolor == 1 and all(len(r) == 1 for r in rems):     # 제거 DIFF·단일 = 재채색 객체 원색
-        expr += f" - [color_of({obj0_name})]"
+        # 괄호 없이 color_of(obj0) — 리스트 `[...]` 안에 넣으면 파서 _list()가 원시 토큰으로 깨뜨림
+        # (좌표 리스트 전용이라 표현식 미지원). 바로 두면 함수조합 → §3 로 `color_of ── obj0` 트리 렌더.
+        expr += f" - color_of({obj0_name})"
     else:
         return None                                          # 복잡(다중 제거 등) → 자유변수
     if add:
-        expr += f" + {add}"
+        expr += f" + {_fmt_colors(add)}"
     return expr
 
 
