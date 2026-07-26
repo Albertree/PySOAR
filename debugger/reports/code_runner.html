@@ -1,0 +1,146 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<title>ARBOR DSL 코드 실행기 (standalone)</title>
+<style>
+  :root{color-scheme:dark}
+  body{background:#0d1016;color:#d6dae2;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:24px}
+  h1{font-size:17px;margin:0 0 4px;color:#8fb9ff} .sub{color:#7d8aa0;font-size:12px;margin:0 0 18px}
+  .wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1200px}
+  .col{display:flex;flex-direction:column;gap:6px} .lab{font-size:12px;color:#9aa7bd;font-weight:700}
+  textarea{background:#12161f;color:#d6dae2;border:1px solid #262b34;border-radius:8px;padding:10px;
+    font:13px/1.45 ui-monospace,monospace;resize:vertical;tab-size:2}
+  #wrapper{height:120px} #main{height:320px}
+  .bar{display:flex;align-items:center;gap:12px;margin:14px 0}
+  button{background:#1f6feb;color:#fff;border:0;border-radius:7px;padding:8px 18px;font:600 13px ui-monospace,monospace;cursor:pointer}
+  button:hover{background:#2a7bff}
+  select{background:#12161f;color:#d6dae2;border:1px solid #262b34;border-radius:7px;padding:7px 10px;font:13px ui-monospace,monospace}
+  .badge{font-size:12px;font-weight:700;padding:3px 10px;border-radius:6px}
+  .ok{background:#123a1f;color:#6fdb8f} .no{background:#3a1414;color:#e88f8f}
+  .out{display:flex;gap:26px;margin-top:16px;flex-wrap:wrap}
+  .outbox{display:flex;flex-direction:column;gap:6px} .olab{font-size:12px;color:#9aa7bd}
+  .err{color:#e88f8f;font-size:12px;white-space:pre-wrap;margin-top:10px;min-height:16px}
+  .note{color:#7d8aa0;font-size:11px;margin-top:6px}
+  svg{border:1px solid #262b34;border-radius:4px;background:#000}
+  code{color:#e0c060}
+</style><script>window.RUNNER_EXAMPLES={"objc · objc000a": {"wrapper": "input_grid = [[0, 0, 0, 0, 5, 5, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]", "main": "g = input_grid\ng.size = set_grid_size(size_of(input_grid))\ng.color = set_grid_color([0, 4])\n\nobj0 = select(input, object, color != 0)\n\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 4)\nresult = g1\ng.contents = set_grid_contents(result)\noutput_grid = g", "expected": [[0, 0, 0, 0, 4, 4, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}, "objc · objc000b": {"wrapper": "input_grid = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 2, 0, 0], [2, 2, 2, 0], [0, 2, 0, 0], [0, 0, 0, 0]]", "main": "g = input_grid\ng.size = set_grid_size(size_of(input_grid))\ng.color = set_grid_color([0, 8])\n\nobj0 = select(input, object, color != 0)\n\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 8)\nresult = g1\ng.contents = set_grid_contents(result)\noutput_grid = g", "expected": [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 8, 0, 0], [8, 8, 8, 0], [0, 8, 0, 0], [0, 0, 0, 0]]}, "objc · objc000c": {"wrapper": "input_grid = [[0, 0, 2, 2, 2, 0, 0, 0], [0, 0, 0, 0, 2, 2, 0, 0], [0, 0, 0, 0, 2, 2, 0, 0], [0, 0, 8, 8, 0, 0, 0, 0], [0, 8, 8, 8, 0, 0, 0, 0]]", "main": "g = input_grid\ng.size = set_grid_size(size_of(input_grid))\ng.color = set_grid_color(color_of(input_grid) - 8 + 7)\n\nobj0 = select(input, object, color == 8)\n\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 7)\nresult = g1\ng.contents = set_grid_contents(result)\noutput_grid = g", "expected": [[0, 0, 2, 2, 2, 0, 0, 0], [0, 0, 0, 0, 2, 2, 0, 0], [0, 0, 0, 0, 2, 2, 0, 0], [0, 0, 7, 7, 0, 0, 0, 0], [0, 7, 7, 7, 0, 0, 0, 0]]}, "objc · objc000d": {"wrapper": "input_grid = [[0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 3, 3, 0, 0, 0, 6], [0, 0, 0, 0, 0, 0, 6, 6], [0, 0, 0, 5, 5, 6, 6, 0], [0, 0, 0, 5, 5, 0, 6, 0], [0, 0, 0, 0, 0, 0, 0, 0]]", "main": "g = input_grid\ng.size = set_grid_size(size_of(input_grid))\ng.color = set_grid_color(color_of(input_grid) - 3 + 2)\n\nobj0 = select(input, object, color == 3)\n\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 2)\nresult = g1\ng.contents = set_grid_contents(result)\noutput_grid = g", "expected": [[0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 2, 2, 0, 0, 0, 6], [0, 0, 0, 0, 0, 0, 6, 6], [0, 0, 0, 5, 5, 6, 6, 0], [0, 0, 0, 5, 5, 0, 6, 0], [0, 0, 0, 0, 0, 0, 0, 0]]}, "objc · objc000e": {"wrapper": "input_grid = [[0, 0, 2, 0, 0, 3, 3, 0, 0, 0], [0, 2, 2, 0, 0, 3, 0, 0, 0, 0], [0, 0, 0, 0, 3, 3, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]", "main": "g = input_grid\ng.size = set_grid_size(size_of(input_grid))\ng.color = set_grid_color(color_of(input_grid) - color_of(obj0) + 1)\n\nobj0 = select(input, object, area == 5)\n\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 1)\nresult = g1\ng.contents = set_grid_contents(result)\noutput_grid = g", "expected": [[0, 0, 2, 0, 0, 1, 1, 0, 0, 0], [0, 2, 2, 0, 0, 1, 0, 0, 0, 0], [0, 0, 0, 0, 1, 1, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}, "objc · objc000f": {"wrapper": "input_grid = [[0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 6, 6, 0], [0, 0, 0, 0, 0, 6, 6, 6], [0, 7, 7, 7, 0, 6, 6, 6], [0, 8, 0, 0, 0, 6, 0, 0], [0, 8, 8, 8, 0, 0, 0, 0], [0, 8, 8, 0, 0, 0, 0, 0]]", "main": "g = input_grid\ng.size = set_grid_size(size_of(input_grid))\ng.color = set_grid_color(color_of(input_grid) - color_of(obj0) + 5)\n\nobj0 = select(input, object, area == 6)\n\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 5)\nresult = g1\ng.contents = set_grid_contents(result)\noutput_grid = g", "expected": [[0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 6, 6, 0], [0, 0, 0, 0, 0, 6, 6, 6], [0, 7, 7, 7, 0, 6, 6, 6], [0, 5, 0, 0, 0, 6, 0, 0], [0, 5, 5, 5, 0, 0, 0, 0], [0, 5, 5, 0, 0, 0, 0, 0]]}, "objc · objc000g": {"wrapper": "input_grid = [[0, 6, 6, 0, 0], [0, 6, 6, 0, 0], [0, 0, 6, 6, 0], [0, 6, 6, 0, 0], [0, 0, 0, 0, 0], [0, 0, 5, 0, 0], [0, 0, 5, 5, 0], [0, 0, 5, 5, 0], [0, 0, 5, 0, 0]]", "main": "g = input_grid\ng.size = set_grid_size(size_of(input_grid))\ng.color = set_grid_color(color_of(input_grid) - color_of(obj0) + 4)\n\nobj0 = select(input, object, area == 6)\n\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 4)\nresult = g1\ng.contents = set_grid_contents(result)\noutput_grid = g", "expected": [[0, 6, 6, 0, 0], [0, 6, 6, 0, 0], [0, 0, 6, 6, 0], [0, 6, 6, 0, 0], [0, 0, 0, 0, 0], [0, 0, 4, 0, 0], [0, 0, 4, 4, 0], [0, 0, 4, 4, 0], [0, 0, 4, 0, 0]]}, "objc · objc000h": {"wrapper": "input_grid = [[0, 0, 0, 1, 0, 0], [0, 0, 0, 1, 0, 0], [0, 0, 9, 0, 9, 9], [0, 0, 9, 9, 9, 0], [0, 0, 0, 9, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]", "main": "g = input_grid\ng.size = set_grid_size(size_of(input_grid))\ng.color = set_grid_color(color_of(input_grid) - color_of(obj0) + 8)\n\nobj0 = select(input, object, area == 7)\n\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 8)\nresult = g1\ng.contents = set_grid_contents(result)\noutput_grid = g", "expected": [[0, 0, 0, 1, 0, 0], [0, 0, 0, 1, 0, 0], [0, 0, 8, 0, 8, 8], [0, 0, 8, 8, 8, 0], [0, 0, 0, 8, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]}};</script>
+</head><body>
+<h1>ARBOR DSL 코드 실행기 <span style="color:#7d8aa0;font-weight:400">· standalone</span></h1>
+<p class="sub">wrapper(<code>input_grid = [[…]]</code>)와 main(프로그램)만 바꿔 실행. program_report 와 독립.</p>
+
+<div class="bar">
+  <select id="ex"></select>
+  <button id="run">▶ Run</button>
+  <span id="badge" class="badge"></span>
+</div>
+
+<div class="wrap">
+  <div class="col"><div class="lab">wrapper — input_grid</div>
+    <textarea id="wrapper" spellcheck="false"></textarea></div>
+  <div class="col"><div class="lab">main — 프로그램(task.solution / pair.program)</div>
+    <textarea id="main" spellcheck="false"></textarea></div>
+</div>
+
+<div class="out">
+  <div class="outbox"><div class="olab">출력 (JS 실행)</div><div id="outgrid"></div></div>
+  <div class="outbox"><div class="olab">expected (있으면)</div><div id="expgrid"></div></div>
+</div>
+<div id="err" class="err"></div>
+<p class="note">지원 함수: size_of · color_of · objects_of · pixels_of · coordinate_of · row_of · col_of ·
+left_top_of · right_bottom_of · select(grid, level, acc op val) · coloring(g, 좌표|리스트, 색) · set_grid_* ·
+for x in …: · 정수나눗셈 //. 미해결 자유변수(<code>?col</code> 등)나 실행형이 아닌 상징 코드는 실행되지 않음.</p>
+
+<script>
+// ── DSL 인터프리터 (node 검증본과 동일 로직) ──────────────────────────────────
+function _arr(x){ return (x && x.contents) ? x.contents : x; }
+function _dims(c){ return {height:c.length, width:c[0].length}; }
+function _colorset(c){ var s={}; for(var r=0;r<c.length;r++)for(var k=0;k<c[r].length;k++)s[c[r][k]]=true; return s; }
+function _normColors(x){ var ks=Array.isArray(x)?x.slice():Object.keys(x).filter(function(k){return x[k];}).map(Number); return ks.map(Number).sort(function(a,b){return a-b;}); }
+function _clone2d(c){ return c.map(function(r){return r.slice();}); }
+function makeATOM(){
+  return {
+    input_grid:null, input:null,
+    set_grid_size:function(s){return s;}, set_grid_color:function(c){return c;}, set_grid_contents:function(z){return z;},
+    size_of:function(g){return _dims(_arr(g));},
+    color_of:function(g){ if(g&&g.cells)return g.color; return _normColors(_colorset(_arr(g))); },
+    height:function(g){return _arr(g).length;}, width:function(g){return _arr(g)[0].length;},
+    contents:function(g){return _clone2d(_arr(g));},
+    objects_of:function(g){ var c=_arr(g),H=c.length,W=c[0].length,seen={},objs=[]; function K(r,x){return r+","+x;}
+      for(var r=0;r<H;r++)for(var x=0;x<W;x++){ if(seen[K(r,x)])continue; var col=c[r][x],st=[[r,x]],cells=[];
+        while(st.length){var p=st.pop(),y=p[0],z=p[1]; if(y<0||y>=H||z<0||z>=W||seen[K(y,z)]||c[y][z]!==col)continue;
+          seen[K(y,z)]=1; cells.push([y,z]); st.push([y+1,z],[y-1,z],[y,z+1],[y,z-1]);}
+        cells.sort(function(a,b){return a[0]-b[0]||a[1]-b[1];}); objs.push({cells:cells,color:col}); }
+      return objs; },
+    pixels_of:function(o){ if(o&&o.cells)return o.cells.map(function(rc){return {coord:rc};});
+      var c=_arr(o),w=c[0].length,out=[]; for(var i=0;i<c.length*w;i++)out.push({coord:[Math.floor(i/w),i%w]}); return out; },
+    coordinate_of:function(o){ if(o&&o.cells)return o.cells; if(o&&o.coord)return o.coord; return o; },
+    row_of:function(x){return (x&&x.coord?x.coord:x)[0];}, col_of:function(x){return (x&&x.coord?x.coord:x)[1];},
+    left_top_of:function(o){var cs=o.cells||o,mr=1e9,mc=1e9; cs.forEach(function(c){if(c[0]<mr)mr=c[0];if(c[1]<mc)mc=c[1];}); return {coord:[mr,mc]};},
+    right_bottom_of:function(o){var cs=o.cells||o,Mr=-1e9,Mc=-1e9; cs.forEach(function(c){if(c[0]>Mr)Mr=c[0];if(c[1]>Mc)Mc=c[1];}); return {coord:[Mr,Mc]};},
+    coloring:function(g,pos,color){ var o=_clone2d(_arr(g));
+      var list=(pos&&pos.coord)?[pos.coord]:(Array.isArray(pos)&&Array.isArray(pos[0]))?pos:[pos];
+      list.forEach(function(rc){var y=Math.floor(rc[0]),x=Math.floor(rc[1]); if(y>=0&&y<o.length&&x>=0&&x<o[0].length)o[y][x]=color;});
+      return o; },
+    divmod:function(a,b){return [Math.floor(a/b),a%b];}
+  };
+}
+function evalSelect(ATOM,grid,acc,op,val){ var objs=ATOM.objects_of(grid);
+  function feat(o){ if(acc==="color")return o.color; if(acc==="area")return o.cells.length;
+    if(acc==="height"){var lt=ATOM.left_top_of(o),rb=ATOM.right_bottom_of(o);return rb.coord[0]-lt.coord[0]+1;}
+    if(acc==="width"){var lt=ATOM.left_top_of(o),rb=ATOM.right_bottom_of(o);return rb.coord[1]-lt.coord[1]+1;} return null; }
+  var m=objs.filter(function(o){var f=feat(o); return op==="=="?f===val:op==="!="?f!==val:false;});
+  return m.length===1?m[0]:m; }
+function runBody(code,input){
+  var ATOM=makeATOM(); var INPUT={size:_dims(input),color:_colorset(input),contents:_clone2d(input)};
+  ATOM.input_grid=INPUT; ATOM.input=INPUT; var g=INPUT,output=null;
+  function ev(e){ e=e.replace(/\/\//g,"/");
+    return (new Function("ATOM","g","input_grid","input","divmod","with(ATOM){return ("+e+");}"))(ATOM,g,INPUT,INPUT,ATOM.divmod); }
+  var lines=code.split("\n");
+  for(var i=0;i<lines.length;i++){ var ln=lines[i].trim(); if(!ln||ln[0]==="#")continue;
+    var mDot=ln.match(/^g\.(size|color|contents)\s*=\s*(.+)$/);
+    if(mDot){ if(g===INPUT)g={size:INPUT.size,color:INPUT.color,contents:_clone2d(INPUT.contents)};
+      if(mDot[1]==="size"){ var mSz=mDot[2].match(/^set_grid_size\(\((\d+),\s*(\d+)\)\)$/);
+        if(mSz){g.size={height:+mSz[1],width:+mSz[2]};continue;} g.size=ev(mDot[2].replace(/^set_grid_size\(/,"").replace(/\)$/,"")); continue; }
+      if(mDot[1]==="color")continue; g.contents=ev(mDot[2].replace(/^set_grid_contents\(/,"").replace(/\)$/,"")); continue; }
+    var mSel=ln.match(/^(\w+)\s*=\s*select\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*(==|!=)\s*([^)]+)\)\s*$/);
+    if(mSel){ var gr=(mSel[2]==="input"||mSel[2]==="input_grid")?INPUT:ev(mSel[2]);
+      ATOM[mSel[1]]=evalSelect(ATOM,gr,mSel[4],mSel[5],ev(mSel[6])); continue; }
+    var mFor=ln.match(/^for\s+(\w+)\s+in\s+(.+):$/);
+    if(mFor){ var it=ev(mFor[2]); var body=lines[i+1].trim(); i++; var mb=body.match(/^(\w+)\s*=\s*(.+)$/);
+      for(var k=0;k<it.length;k++){ ATOM[mFor[1]]=it[k]; var v=ev(mb[2]); if(mb[1]==="g")g=v; else ATOM[mb[1]]=v; } continue; }
+    var mCoord=ln.match(/^(\w+)\s*=\s*coloring\((\w+),\s*\((-?\d+),\s*(-?\d+)\),\s*(.+)\)$/);
+    if(mCoord){ var src=(mCoord[2]==="g")?g:ATOM[mCoord[2]]; var res=ATOM.coloring(src,[+mCoord[3],+mCoord[4]],ev(mCoord[5]));
+      if(mCoord[1]==="g")g=res; else if(mCoord[1]==="output_grid")output=res; else ATOM[mCoord[1]]=res; continue; }
+    var m=ln.match(/^(\w+)\s*=\s*(.+)$/); if(!m)throw new Error("해석 불가: "+ln);
+    var val=ev(m[2]); if(m[1]==="g")g=val; else if(m[1]==="output_grid")output=val; else ATOM[m[1]]=val;
+  }
+  return _arr(output!==null?output:g);
+}
+// ── 렌더 ──
+var PAL=["#101010","#1E93FF","#F93C31","#4FCC30","#FFDC00","#999999","#E53AA3","#FF851B","#87D8F1","#921231"];
+function gridSVG(g){ if(!g||!g.length)return '<span class="err">–</span>'; var cell=20,gap=1,f=cell-gap,H=g.length,W=g[0].length,rects="";
+  for(var r=0;r<H;r++)for(var c=0;c<W;c++){var v=((g[r][c]%10)+10)%10; rects+='<rect x="'+(c*cell)+'" y="'+(r*cell)+'" width="'+f+'" height="'+f+'" fill="'+PAL[v]+'"/>';}
+  return '<svg width="'+(W*cell)+'" height="'+(H*cell)+'" shape-rendering="crispEdges">'+rects+'</svg>'; }
+function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+// ── 예제 (실행 가능한 것만; 자리표시 데이터) ──
+var EXAMPLES={};  // {name:{wrapper, main, expected}}  — window.RUNNER_EXAMPLES 로 주입 가능
+if(window.RUNNER_EXAMPLES) EXAMPLES=window.RUNNER_EXAMPLES;
+EXAMPLES["(빈 편집기)"]={wrapper:"input_grid = [[0,0,0],[0,3,0],[0,0,0]]",
+  main:"g = input_grid\nobj0 = select(input, object, color == 3)\ng0 = g.contents\ng1 = coloring(g0, coordinate_of(obj0), 2)\noutput_grid = g1"};
+(function(){
+  var sel=document.getElementById("ex"); Object.keys(EXAMPLES).forEach(function(k){var o=document.createElement("option");o.text=k;o.value=k;sel.appendChild(o);});
+  var W=document.getElementById("wrapper"),M=document.getElementById("main"),E=document.getElementById("err"),B=document.getElementById("badge");
+  function parseWrapper(){ var t=W.value.trim(); var m=t.match(/input_grid\s*=\s*(\[[\s\S]*\])/); if(!m)throw new Error("wrapper: input_grid = [[…]] 필요"); return JSON.parse(m[1]); }
+  function run(){ E.textContent=""; B.textContent=""; B.className="badge";
+    try{ var input=parseWrapper(); var out=runBody(M.value,input);
+      document.getElementById("outgrid").innerHTML=gridSVG(out);
+      var name=sel.value, exp=EXAMPLES[name]&&EXAMPLES[name].expected;
+      document.getElementById("expgrid").innerHTML=exp?gridSVG(exp):'<span class="note">–</span>';
+      if(exp){var ok=eqGrid(out,exp); B.textContent=ok?"✓ expected 일치":"✗ 불일치"; B.className="badge "+(ok?"ok":"no");}
+      else{B.textContent="실행됨";B.className="badge ok";}
+    }catch(err){ document.getElementById("outgrid").innerHTML='<span class="err">실행 불가</span>';
+      E.textContent=String(err.message||err); B.textContent="✗ 실행오류"; B.className="badge no"; } }
+  function load(){ var e=EXAMPLES[sel.value]; W.value=e.wrapper; M.value=e.main; run(); }
+  sel.onchange=load; document.getElementById("run").onclick=run;
+  var t; M.oninput=W.oninput=function(){clearTimeout(t);t=setTimeout(run,300);};
+  load();
+})();
+</script></body></html>
