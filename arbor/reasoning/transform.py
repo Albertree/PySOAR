@@ -492,6 +492,22 @@ def transform_candidates(train, test_input):
     return out[:3]
 
 
+def transform_candidates_invariant(train, test_input):
+    """**불변-근거** transform 후보 격자들(≤3, 순서유지·중복제거). D4+중심보존(관찰된 compare 불변)만
+    쓰는 전략 = solve_by_linear(통째) + solve_by_linear_percolor(색별) + object_transform_candidates(객체선택).
+    심볼 좌표식(solve_by_transform)은 **제외**한다(move 에서도 후보를 내므로 우선순위 대상 아님).
+    각 전략이 결정적이라 반환도 결정적(set 순서 무관). move 태스크에선 전부 [] → 빈 리스트."""
+    out = []
+    for fn in (solve_by_linear, solve_by_linear_percolor):
+        g = fn(train, test_input)
+        if g is not None and g not in out:
+            out.append(g)
+    for g in object_transform_candidates(train, test_input):
+        if g not in out:
+            out.append(g)
+    return out[:3]
+
+
 def transform_solution_ast(train, test_input):
     """좌표식 해를 grid-body coloring AST + 테스트 answer 로. 없으면 None. 개념 이름 없음."""
     sol = transform_solution(train)
