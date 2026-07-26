@@ -475,3 +475,32 @@ def solve_any(train, test_input):
     """심볼 좌표식 + 선형 D4(통째) + 선형 D4(색별) + 객체선택변환 순차 시도(첫 non-None)."""
     return (solve_by_transform(train, test_input) or solve_by_linear(train, test_input)
             or solve_by_linear_percolor(train, test_input) or solve_by_object_transform(train, test_input))
+
+
+def transform_solution_ast(train, test_input):
+    """좌표식 해를 grid-body coloring AST + 테스트 answer 로. 없으면 None. 개념 이름 없음."""
+    sol = transform_solution(train)
+    if sol is None:
+        return None
+    answer = solve_any(train, test_input)
+    if answer is None:
+        return None
+    H, W = len(test_input), len(test_input[0])
+    # test 에서 변환되는 객체 = train 과 같은 kind/규칙으로 재도출(간단히: solve_any 가 이미 답을 알므로
+    # 답 격자의 비배경을 객체색 coloring 으로 물질화; 정지객체 구분은 kind 로).
+    def sel_target(coords):
+        return {"coordinate_of": {"select": {"grid": "input", "level": "PIXEL",
+                                             "pred": {"in": {"values": [list(c) for c in coords]}}}}}
+    # 답 격자 셀을 색별로 묶어 coloring (전체 객체 재칠; op 수 = 객체 크기)
+    from collections import defaultdict
+    bycol = defaultdict(list)
+    for r in range(H):
+        for c in range(W):
+            if answer[r][c]:
+                bycol[answer[r][c]].append((r, c))
+    inner = [{"call": "coloring", "args": {"target": sel_target(cs), "color": {"const": col}}}
+             for col, cs in sorted(bycol.items())]
+    body = [{"call": "set_grid_size", "args": {"size": {"const": {"height": H, "width": W}}}},
+            {"call": "set_grid_color", "args": {"color": {"const": sorted({0, *bycol})}}},
+            {"call": "set_grid_contents", "args": {"contents": {"program": {"body": inner}}}}]
+    return {"input": {"grid": "G0"}, "body": body}, answer
