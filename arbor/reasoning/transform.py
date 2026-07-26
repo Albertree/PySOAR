@@ -480,24 +480,26 @@ def _move_axis_shifts(vals, bb, is_row):
     T0 = [bb[i][a0] + vals[i] for i in range(n)]
     T1 = [bb[i][a1] + vals[i] for i in range(n)]
     Hs = [bb[i][hw] for i in range(n)]
+    # (fn, anchor 태그) — 태그 lo=top/left(r0/c0), hi=bottom/right(r1/c1), mid=center, const.
+    # 조합 순서에서 같은 태그(corner-consistent: lo-lo·hi-hi)를 먼저 써서 3-attempt 안에 들게 한다.
     fns = []
     if all(t == 0 for t in T0):
-        fns.append(lambda b: -b[a0])                         # top/left → 0
+        fns.append((lambda b: -b[a0], "lo"))                 # top/left → 0
     if all(T1[i] == Hs[i] - 1 for i in range(n)):
-        fns.append(lambda b: b[hw] - 1 - b[a1])              # bottom/right → 끝
+        fns.append((lambda b: b[hw] - 1 - b[a1], "hi"))      # bottom/right → 끝
     if all(t == 0 for t in T1):
-        fns.append(lambda b: -b[a1])
+        fns.append((lambda b: -b[a1], "hi"))
     if all(T0[i] == Hs[i] - 1 for i in range(n)):
-        fns.append(lambda b: b[hw] - 1 - b[a0])
+        fns.append((lambda b: b[hw] - 1 - b[a0], "lo"))
     if len(set(T0)) == 1:
-        fns.append(lambda b, t=T0[0]: t - b[a0])             # top/left → 절대 COMM
+        fns.append((lambda b, t=T0[0]: t - b[a0], "lo"))     # top/left → 절대 COMM
     if len(set(T1)) == 1:
-        fns.append(lambda b, t=T1[0]: t - b[a1])             # bottom/right → 절대 COMM
+        fns.append((lambda b, t=T1[0]: t - b[a1], "hi"))     # bottom/right → 절대 COMM
     if all((Hs[i] - 1 - bb[i][a0] - bb[i][a1]) % 2 == 0
            and (Hs[i] - 1 - bb[i][a0] - bb[i][a1]) // 2 == vals[i] for i in range(n)):
-        fns.append(lambda b: (b[hw] - 1 - b[a0] - b[a1]) // 2)   # center 정렬
+        fns.append((lambda b: (b[hw] - 1 - b[a0] - b[a1]) // 2, "mid"))   # center 정렬
     if len(set(vals)) == 1:
-        fns.append(lambda b, v=vals[0]: v)                   # 상수 위치차(폴백)
+        fns.append((lambda b, v=vals[0]: v, "const"))        # 상수 위치차(폴백)
     return fns
 
 
@@ -540,20 +542,22 @@ def _solve_by_move_impl(train, test_input, want_all):
             continue
         s = cand[0]; sr = [r for r, _ in s]; sc = [c for _, c in s]
         b = (min(sr), max(sr), min(sc), max(sc), H, W)
-        for fr in frs:
-            for fc in fcs:
-                dr, dc = fr(b), fc(b)
-                moved = {(r + dr, c + dc): v for (r, c), v in s.items()}    # 색 보존
-                if not all(0 <= r < H and 0 <= c < W for r, c in moved):
-                    continue
-                g = [[0] * W for _ in range(H)]
-                for comp in ti:
-                    for (r, c), v in (moved if comp is s else comp).items():
-                        g[r][c] = v
-                if g not in out:
-                    out.append(g)
-                    if not want_all:
-                        return [g]
+        # 같은 anchor 태그(corner-consistent: lo-lo·hi-hi 등) 조합을 먼저 → 정답 corner 가 3-attempt 안에.
+        combos = [(fr, fc) for fr, tr in frs for fc, tc in fcs if tr == tc] \
+            + [(fr, fc) for fr, tr in frs for fc, tc in fcs if tr != tc]
+        for fr, fc in combos:
+            dr, dc = fr(b), fc(b)
+            moved = {(r + dr, c + dc): v for (r, c), v in s.items()}        # 색 보존
+            if not all(0 <= r < H and 0 <= c < W for r, c in moved):
+                continue
+            g = [[0] * W for _ in range(H)]
+            for comp in ti:
+                for (r, c), v in (moved if comp is s else comp).items():
+                    g[r][c] = v
+            if g not in out:
+                out.append(g)
+                if not want_all:
+                    return [g]
         if out:
             break
     return out if want_all else (out[0] if out else None)
