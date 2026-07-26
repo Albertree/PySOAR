@@ -520,18 +520,46 @@ def _task_solution(programs, exs, test_input=None):
     if any(len(x) != n for x in inners):
         return None
     inputs = [e["input"] for e in exs]
-    new_inner = []
+    # 1차: 각 스텝의 movers(pair 별 대상 셀)·colors 수집 — DIFF 색을 객체 색으로 해소하는 데 쓴다.
+    step_movers, step_colors = [], []
     for j in range(n):
-        movers, colors = [], []
+        mv, cols = [], []
         for inner in inners:
             s = inner[j]
             sel = s["args"]["target"].get("coordinate_of", {}).get("select")
             vals = (sel or {}).get("pred", {}).get("eq", {}).get("value")
-            movers.append(vals if isinstance(vals, list) else [])
-            colors.append(s["args"]["color"])
+            mv.append(vals if isinstance(vals, list) else [])
+            cols.append(s["args"]["color"])
+        step_movers.append(mv); step_colors.append(cols)
+
+    def _obj_in_color(k):
+        """obj{k}(step k 객체)의 pair 별 입력 색(각 pair 첫 셀). movers 비면 None."""
+        out = []
+        for p in range(len(inputs)):
+            cells = step_movers[k][p]
+            if not cells:
+                return None
+            r, c = cells[0]
+            out.append(inputs[p][r][c])
+        return out
+
+    new_inner = []
+    for j in range(n):
+        colors = step_colors[j]
         same_col = all(json.dumps(c, sort_keys=True) == json.dumps(colors[0], sort_keys=True) for c in colors)
-        col_leaf = colors[0] if same_col else {"var": f"?col{j}"}
-        pred = _selecting_property(movers, inputs, test_input) or PA.eq("coordinate", {"var": f"?p{j}"})
+        if same_col:
+            col_leaf = colors[0]                            # COMM 상수
+        else:
+            # DIFF 색 → pair 마다 어느 obj{k} 의 입력 색과 일치하면 그 **보존색** color_of(obj{k}) 로 해소
+            # (move: 옮겨진 객체 색 = 소스 obj 색 — 자유변수 ?col 폐기). 아니면 정직하게 ?col 유지.
+            want = [c.get("const") for c in colors]
+            resolved = None
+            if all(v is not None for v in want):
+                for k in range(n):
+                    if _obj_in_color(k) == want:
+                        resolved = k; break
+            col_leaf = {"expr": f"color_of(obj{resolved})"} if resolved is not None else {"var": f"?col{j}"}
+        pred = _selecting_property(step_movers[j], inputs, test_input) or PA.eq("coordinate", {"var": f"?p{j}"})
         t = PA.coordinate_of(PA.select("input", "object", pred))
         new_inner.append(PA.step("coloring", target=t, color=col_leaf))
     p0 = {s["call"]: s["args"] for s in valid[0]["body"]}
@@ -1798,10 +1826,12 @@ def _skel_solution_defs(final_skel, exs=None):
         sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
         cur = f"g{n + 1}"
         pn += 1; tp = f"?p{pn}"                              # target = 구조 hoist(§3)
-        if isinstance(col_leaf, dict) and "var" in col_leaf:  # DIFF 색 → ?var(자유변수)
-            cslot = nextvar(); order_var.append(cslot)
-            defs.append((cslot, None, "pair 마다 다른 색(DIFF · 자유변수)"))
-            cstr = cslot
+        if isinstance(col_leaf, dict) and "expr" in col_leaf:  # 함수식(color_of(objN)) → ?p 구조 hoist(§3)
+            pn += 1; cstr = f"?p{pn}"; order_p.append(cstr)
+            defs.append((cstr, col_leaf["expr"], "coloring 색(객체 보존색)"))
+        elif isinstance(col_leaf, dict) and "var" in col_leaf:  # DIFF 자유변수 → ?var
+            cstr = nextvar(); order_var.append(cstr)
+            defs.append((cstr, None, "pair 마다 다른 색(DIFF · 자유변수)"))
         else:                                                # COMM const 색 → 리터럴 인라인
             cstr = _disp_leaf(col_leaf)
         skel.append(f"{cur} = coloring({prev}, {tp}, {cstr})")
