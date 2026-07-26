@@ -1333,7 +1333,8 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
     # rotate/flip(좌표식)·move/objc(골격) **모두 같은 갤러리 3-view**(①code ②AST ③골격+정의 N장)로 통일
     # (사용자 2026-07-27). obj0·select 등 함수조합은 ?p 로 윗줄 승격돼 별도 그림이 된다.
     skel_view = ("" if final_skel is None
-                 else _skel_solution_block(final_skel, [ex for _a, ex, _p in ast_ex_pairs]))
+                 else _skel_solution_block(final_skel, [ex for _a, ex, _p in ast_ex_pairs],
+                                          test_input))
     if stepC_override:
         steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
                      '<div class="stepCcontent"><div class="innerbox">' + stepC_override + '</div></div></div>')
@@ -1708,18 +1709,20 @@ def _transform_display_ast(train):
             "output": {"var": "grid"}}
 
 
-def _solution_three_view(code_lines, astree_html, gallery_html):
-    """①code ②AST ③시각화(갤러리) 3-view (_pair_block 과 같은 .pair/.views/.view). ①=체계적 실행형
-    소스, ②=ast_tree(다른 스텝과 같은 중첩 AST 구조), ③=골격+정의 갤러리 — 같은 해의 세 표현."""
+def _solution_three_view(header_text, code_lines, astree_html, gallery_html):
+    """①code ②AST ③시각화(갤러리) 3-view (_pair_block 과 같은 .pair/.views/.view). ①=header wrapper
+    (DSL 시그니처 + input_grid literal, 다른 스텝과 동일) + 체계적 실행형 소스, ②=ast_tree(다른 스텝과
+    같은 중첩 AST 구조), ③=골격+정의 갤러리 — 같은 해의 세 표현."""
     if not code_lines:
         return (f'<div class="pair"><div class="views"><div class="view viz v3">{gallery_html}</div>'
                 f'</div></div>') if gallery_html else ""
     src_text = "\n".join(code_lines)
+    hdr = f'<pre class="hdr">{html.escape(header_text)}</pre>' if header_text else ""
     return (
         f'<div class="pair"><div class="lab">TASK.solution (code · AST · 시각화)</div>'
         f'<div class="views">'
-        f'<div class="view v1"><div class="vt">① code (실행형 · 통일 body)</div>'
-        f'<pre class="src">{html.escape(src_text)}</pre></div>'
+        f'<div class="view v1"><div class="vt">① text (통일 body · 실행형)</div>'
+        f'{hdr}<pre class="src">{html.escape(src_text)}</pre></div>'
         f'<div class="view v2"><div class="vt">② AST 트리</div>{astree_html}</div>'
         f'<div class="view viz v3"><div class="vt">③ 시각화</div><div class="gridviz">{gallery_html}</div></div>'
         f'</div></div>')
@@ -1847,9 +1850,9 @@ def _skel_solution_defs(final_skel, exs=None):
     return skel, defs, order
 
 
-def _skel_solution_block(final_skel, exs=None):
+def _skel_solution_block(final_skel, exs=None, test_input=None):
     """move/objc 등 골격 해를 rotate/flip 과 **동일한** ①code ②AST ③갤러리 3-view 로. 없으면 ''.
-    exs = pair 예시(size COMM/DIFF 판정용)."""
+    exs = pair 예시(size COMM/DIFF 판정용), test_input = header wrapper 의 input_grid literal."""
     got = _skel_solution_defs(final_skel, exs)
     if not got:
         return ""
@@ -1857,9 +1860,12 @@ def _skel_solution_block(final_skel, exs=None):
     gallery = _solution_gallery_html(skel_lines, defs,
                                      "③ 시각화 — 골격 + 정의 (viz-rules)",
                                      "프레임=?var(비교 일반화) · 구조=?p · COMM 색=리터럴")
+    sol_ast = _skel_solution_ast(final_skel, exs)
+    g0 = test_input if test_input is not None else (exs[0]["input"] if exs else None)
+    header = _render_header_safe(sol_ast, g0) if g0 is not None else ""
     code_lines = _skel_solution_code(final_skel, exs)       # ① = 체계적 실행형 소스
-    astree = ast_tree(_skel_solution_ast(final_skel, exs))  # ② = 다른 스텝과 같은 ast_tree 구조
-    return _solution_three_view(code_lines, astree, gallery)
+    astree = ast_tree(sol_ast)                              # ② = 다른 스텝과 같은 ast_tree 구조
+    return _solution_three_view(header, code_lines, astree, gallery)
 
 
 def _transform_solution_block(task, winning_answer=None):
@@ -1918,13 +1924,16 @@ def _transform_solution_block(task, winning_answer=None):
     # 소스(_transform_solution_code_lines/_transform_solution_gallery, 둘 다 _transform_solution_defs)에서
     # 파생돼 반드시 일치한다. + 아래에 실행검증(visual)·pair 별 좌표식(formula) 을 부가 스트립으로.
     code_lines = _transform_solution_code(train)        # ① = 체계적 실행형 소스(좌표식·pixel defs)
-    astree = ast_tree(_transform_display_ast(train)) if code_lines else ""  # ② = 다른 스텝과 같은 구조
+    sol_ast = _transform_display_ast(train) if code_lines else None
+    astree = ast_tree(sol_ast) if sol_ast else ""       # ② = 다른 스텝과 같은 구조
+    tin = task["test"][0]["input"] if task.get("test") else (train[0][0] if train else None)
+    header = _render_header_safe(sol_ast, tin) if (sol_ast and tin is not None) else ""
     gallery_html = _transform_solution_gallery(train)   # viz-rules §6: 골격+정의 SVG 갤러리
     if not code_lines and not gallery_html and not visual_html and not formula_html:
         return ""
     # ①code ②AST ③갤러리 3-view (공용 렌더) + 아래 실행검증(visual)·pair 별 좌표식(formula) 부가 스트립.
     # three_view 는 _pair_block 과 같은 .pair/.views/.view 라 Step C 초록 innerbox 에 네이티브 렌더.
-    three_view = _solution_three_view(code_lines, astree, gallery_html)
+    three_view = _solution_three_view(header, code_lines, astree, gallery_html)
     return f'{three_view}{visual_html}{formula_html}'
 
 
