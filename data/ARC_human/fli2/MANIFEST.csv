@@ -1,0 +1,13 @@
+idx,file_2ex,file_3ex,object_class,flip_dir,parity
+1,fli2000a.json,fli2000b.json,mono,lr,odd
+2,fli2000c.json,fli2000d.json,mono,ud,even
+3,fli2000e.json,fli2000f.json,partial,lr,odd
+4,fli2000g.json,fli2000h.json,partial,ud,even
+5,fli2000i.json,fli2000j.json,full,lr,even
+6,fli2000k.json,fli2000l.json,full,ud,even
+7,fli2000m.json,fli2000n.json,sel_color,lr,even
+8,fli2000o.json,fli2000p.json,sel_color,ud,even
+9,fli2000q.json,fli2000r.json,sel_size,lr,odd
+10,fli2000s.json,fli2000t.json,sel_size,ud,odd
+11,fli2000u.json,fli2000v.json,sel_shape,lr,odd
+12,fli2000w.json,fli2000x.json,sel_shape,ud,odd

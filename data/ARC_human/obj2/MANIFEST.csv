@@ -1,0 +1,5 @@
+idx,file_2ex,file_3ex,object_branch,selection,change_count
+1,obj2000a.json,obj2000b.json,single,,
+2,obj2000c.json,obj2000d.json,multi,color,single
+3,obj2000e.json,obj2000f.json,multi,size,single
+4,obj2000g.json,obj2000h.json,multi,shape,single
