@@ -1564,6 +1564,8 @@ def _transform_solution_astree(lines):
     lhs 노드 + rhs 파싱 서브트리(_expr_astree_html)로."""
     items = []
     for ln in lines:
+        if not ln.strip():                                  # 빈 줄(프로그램 소스 구획) 건너뜀
+            continue
         m = re.match(r"^([\w?.]+)\s*=(?!=)\s*(.+)$", ln)
         if m:
             sub = _expr_astree_html(SE.parse_expr(m.group(2)))
@@ -1601,13 +1603,76 @@ def _solution_gallery_html(skel_lines, defs, title, skel_note):
 
 def _solution_code_lines(skel_lines, defs, order):
     """정의(의존순 order) + 골격 → 완전한 코드 리스트. expr None(자유변수)은 코드에서 생략(골격에만 등장).
-    ①code·②AST 공용."""
+    (갤러리 게이트 판정 등 내부용 — ① code 는 체계적 실행형 _skel/_transform_solution_code 를 쓴다.)"""
     dm = {nm: es for nm, es, _ in defs}
     return [f"{nm} = {dm[nm]}" for nm in order if dm.get(nm) is not None] + list(skel_lines)
 
 
+# ── ① code = 체계적 실행형 프로그램(A/A.5/A.6/B 와 같은 g/g0..gN/result/output_grid 스캐폴딩) ──────
+# 사용자 2026-07-27: 평평한 def 나열이 아니라, 다른 스텝처럼 변수선언·스레딩·result 마무리를 갖춘 소스.
+# 일반화(size_of·팔레트 delta·좌표식)는 인라인. ② AST 는 이 소스를 파싱해 렌더(따라서 자동 일관).
+def _skel_solution_code(final_skel, exs=None):
+    """골격-해(move/objc) → 실행형 프로그램 소스 lines. size/palette 일반화 인라인, obj0=select·
+    coloring 스레딩. None(비-grid)."""
+    body = (final_skel or {}).get("body") or []
+    if not PA._is_grid_body(body):
+        return None
+    parts = {s["call"]: s["args"] for s in body}
+    inner = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
+    if not isinstance(inner, list):
+        inner = []
+    exl = exs or []
+    insizes = {(len(e["input"]), len(e["input"][0])) for e in exl if e.get("input")}
+    outpals = {tuple(sorted({c for row in e["output"] for c in row})) for e in exl if e.get("output")}
+    size_tok = ("size_of(input_grid)" if len(insizes) > 1
+                else _disp_grid_leaf(parts["set_grid_size"]["size"], "size"))
+    ncolor = len([x for x in inner if isinstance(x, dict) and "args" in x])
+    if len(outpals) > 1:
+        pal_tok = _palette_change_expr(exl, ncolor) or "?pal"
+    else:
+        pal_tok = _disp_grid_leaf(parts["set_grid_color"]["color"], "color")
+    objdefs, steps, prev = [], [], "g0"
+    for n, s in enumerate([x for x in inner if isinstance(x, dict) and "args" in x]):
+        tgt = s["args"]["target"]
+        sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
+        col = _disp_leaf(s["args"]["color"])
+        if sel:
+            objdefs.append(f"obj{n} = select({sel.get('grid')}, {sel.get('level')}, "
+                           f"{_pred_str(sel.get('pred', {}))})")
+        else:
+            objdefs.append(f"obj{n} = {json.dumps(tgt)}")
+        steps.append(f"g{n + 1} = coloring({prev}, coordinate_of(obj{n}), {col})")
+        prev = f"g{n + 1}"
+    lines = ["g = input_grid", f"g.size = set_grid_size({size_tok})",
+             f"g.color = set_grid_color({pal_tok})", ""]
+    lines += objdefs + ["", "g0 = g.contents"] + steps
+    lines += [f"result = {prev if steps else 'g0'}",
+              "g.contents = set_grid_contents(result)", "output_grid = g"]
+    return lines
+
+
+def _transform_solution_code(train):
+    """변환-해(rotate/flip) → 실행형 프로그램 소스 lines. 좌표식·pixel(x/r/c/r0..) defs·coloring 스레딩.
+    None(비-변환)."""
+    defs = _transform_solution_defs(train)
+    if not defs:
+        return None
+    dm = {nm: es for nm, es, _ in defs}
+    lines = ["g = input_grid", "g.size = set_grid_size(size_of(input_grid))",
+             "g.color = set_grid_color(color_of(input_grid))", "",
+             f"obj0 = {dm['obj0']}",
+             "x = pixels_of(obj0)", "r = row_of(x)", "c = col_of(x)",
+             "r0 = row_of(left_top_of(obj0))", "c0 = col_of(left_top_of(obj0))",
+             "r1 = row_of(right_bottom_of(obj0))", "c1 = col_of(right_bottom_of(obj0))", "",
+             "g0 = g.contents",
+             f"g1 = coloring(g0, {dm['?p3']}, {dm['?p4']})",
+             "result = g1", "g.contents = set_grid_contents(result)", "output_grid = g"]
+    return lines
+
+
 def _solution_three_view(code_lines, gallery_html):
-    """①code ②AST ③시각화(갤러리) 3-view (_pair_block 과 같은 .pair/.views/.view). 셋은 같은 소스."""
+    """①code ②AST ③시각화(갤러리) 3-view (_pair_block 과 같은 .pair/.views/.view). ①②는 체계적 실행형
+    소스(g/g0..gN/result/output_grid)를, ③은 골격+정의 갤러리를 — 같은 해의 세 표현."""
     if not code_lines:
         return (f'<div class="pair"><div class="views"><div class="view viz v3">{gallery_html}</div>'
                 f'</div></div>') if gallery_html else ""
@@ -1615,7 +1680,7 @@ def _solution_three_view(code_lines, gallery_html):
     return (
         f'<div class="pair"><div class="lab">TASK.solution (code · AST · 시각화)</div>'
         f'<div class="views">'
-        f'<div class="view v1"><div class="vt">① code (골격 + 정의 · 값=?p)</div>'
+        f'<div class="view v1"><div class="vt">① code (실행형 · 통일 body)</div>'
         f'<pre class="src">{html.escape(src_text)}</pre></div>'
         f'<div class="view v2"><div class="vt">② AST 트리</div>{_transform_solution_astree(code_lines)}</div>'
         f'<div class="view viz v3"><div class="vt">③ 시각화</div><div class="gridviz">{gallery_html}</div></div>'
@@ -1750,11 +1815,11 @@ def _skel_solution_block(final_skel, exs=None):
     got = _skel_solution_defs(final_skel, exs)
     if not got:
         return ""
-    skel_lines, defs, order = got
+    skel_lines, defs, _order = got
     gallery = _solution_gallery_html(skel_lines, defs,
                                      "③ 시각화 — 골격 + 정의 (viz-rules)",
                                      "프레임=?var(비교 일반화) · 구조=?p · COMM 색=리터럴")
-    code_lines = _solution_code_lines(skel_lines, defs, order)
+    code_lines = _skel_solution_code(final_skel, exs)       # ① = 체계적 실행형 소스
     return _solution_three_view(code_lines, gallery)
 
 
@@ -1813,7 +1878,7 @@ def _transform_solution_block(task, winning_answer=None):
     # Step C = 같은 좌표식 해의 3-표현(사용자 2026-07-26): ①code ②AST ③시각화(갤러리). 셋은 단일
     # 소스(_transform_solution_code_lines/_transform_solution_gallery, 둘 다 _transform_solution_defs)에서
     # 파생돼 반드시 일치한다. + 아래에 실행검증(visual)·pair 별 좌표식(formula) 을 부가 스트립으로.
-    code_lines = _transform_solution_code_lines(train)
+    code_lines = _transform_solution_code(train)        # ① = 체계적 실행형 소스(좌표식·pixel defs)
     gallery_html = _transform_solution_gallery(train)   # viz-rules §6: 골격+정의 SVG 갤러리
     if not code_lines and not gallery_html and not visual_html and not formula_html:
         return ""
