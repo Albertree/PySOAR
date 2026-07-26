@@ -488,9 +488,17 @@ def transform_solution_ast(train, test_input):
     H, W = len(test_input), len(test_input[0])
     # test 에서 변환되는 객체 = train 과 같은 kind/규칙으로 재도출(간단히: solve_any 가 이미 답을 알므로
     # 답 격자의 비배경을 객체색 coloring 으로 물질화; 정지객체 구분은 kind 로).
+    # target AST 는 손으로 짓지 않고 program_ast 의 공개 빌더(coordinate_of/select/coord_in)로 조립한다 —
+    # coord_in 의 values 는 **raw 좌표 리스트**([[r,c],...], leaf-wrap 아님) 라야 _compile_pred 의
+    # `for v in e["values"]` 순회·_resolve_select_coords/_sel_src 가 그대로 해석 가능(accessor="coordinate"
+    # ·소문자 level="pixel"). 이는 이미 컨슈머와 맞물려 쓰이는 유일한 실행가능 shape — operators/compress.py
+    # `_select_target`(and tests/test_coord_in.py 등)과 동일 관례. (program_ast._select_target 는 antiunify
+    # 스켈레톤 전용이라 values 를 const(...) leaf 로 감싸 여기 실행 경로엔 안 맞는다 — 확인 후 미사용.)
+    from arbor.reasoning import program_ast as PA
+
     def sel_target(coords):
-        return {"coordinate_of": {"select": {"grid": "input", "level": "PIXEL",
-                                             "pred": {"in": {"values": [list(c) for c in coords]}}}}}
+        return PA.coordinate_of(PA.select("input", "pixel",
+                                 PA.coord_in("coordinate", [[r, c] for (r, c) in sorted(coords)])))
     # 답 격자 셀을 색별로 묶어 coloring (전체 객체 재칠; op 수 = 객체 크기)
     from collections import defaultdict
     bycol = defaultdict(list)
