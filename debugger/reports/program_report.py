@@ -15,11 +15,9 @@
 program(세로 stack) → 그 둘의 ③ overlay(반투명 겹침) → TASK.solution 순의 가로 레이아웃으로 보여준다.
 program 이 없는 태스크(i: 격자 크기 변화 등 미해결)는 플레이스홀더만 표시.
 
-Python 빌드 쪽은 표시만 한다 — eval/exec 없음(program_ast.to_source/display_source 텍스트 그대로,
-RUNNER_DATA 는 build 시점에 미리 계산한 값을 JSON 으로 굽는다). 다만 페이지 하단에는 순수 프런트엔드
-코드 실행기가 있다 — body 를 JS atom 미러(ATOM, new Function 기반 안전 평가)로 브라우저에서 직접
-실행하고, 그 결과를 build 시점에 구운 program_ast.execute 결과와 대조해 parity ✓/✗ 배지로 보여준다
-(JS↔Python 드리프트 감시 — §7 honesty 가드).
+Python 빌드 쪽은 표시만 한다 — eval/exec 없음(program_ast.to_source/display_source 텍스트 그대로).
+program_report 는 **프로그램 시각화만** 보여준다 — 코드 실행기(옛 하단 러너)는 별도 standalone
+`code_runner.html`(full DSL 인터프리터, wrapper/main 교체 실행)로 분리했다(사용자 2026-07-27).
 
 ── ①②③ 공통소스 원칙(2026-07-16 정리 — 이 파일을 고칠 때 반드시 지킬 것) ──────────────────
 ① text(display_source) · ② AST 트리(ast_tree) · ③ 시각화(_viz)는 서로 다른 산출물이 아니라
@@ -728,35 +726,6 @@ def display_source(ast, slot_exprs=None):
     if PA._is_grid_body(body):
         return _display_grid(body, slot_exprs)
     return _display_pixel(body, slot_exprs)
-
-
-def _runner_payload(tid, asts, pairs, task, groupings=None):
-    """각 example program → 러너용 {tid, pair, body, input, expected}.
-    expected = 실제 program_ast.execute(ast, input) (JS 미러 대조 기준 = 정직성 가드).
-    pairs[k] = asts[k] 가 실제로 속한 train index(중간 pair 누락 시 리스트 위치 ≠ train index 이므로
-    반드시 carry 된 실 index 로 짝짓는다 — T5 index-carry 가드).
-    groupings(선택) = compress 결과 객체 program(있으면) — pixel program 과 동일하게 실행형 wrapper 로
-    러너에 실어 parity 검증까지 받게 한다(kind='compress' 로 라벨 구분, pair.program 과 같은 대우)."""
-    items = []
-    for ast, p in zip(asts, pairs):
-        ex = task["train"][p]
-        items.append({
-            "tid": tid, "pair": p,
-            "body": display_source(ast),
-            "input": ex["input"],
-            "expected": PA.execute(ast, ex["input"]),
-        })
-    for g, p in zip(groupings or [], pairs):
-        if not g:
-            continue                                   # 없으면 정직하게 생략(compress 안 돈 태스크)
-        ex = task["train"][p]
-        items.append({
-            "tid": tid, "pair": p, "kind": "compress",
-            "body": display_source(g),
-            "input": ex["input"],
-            "expected": PA.execute(g, ex["input"]),
-        })
-    return items
 
 
 # ── Step 1: 수집 — 솔버 1 회 실행해 example PAIR.program(AST) 전부 + TASK.solution 을 WM 실측값으로 ──
@@ -2214,164 +2183,8 @@ body.hidev1 .view.v1,body.hidev2 .view.v2,body.hidev3 .view.v3{display:none}
 .cconnlab{font-size:10px;text-align:center;line-height:1.35}
 """
 
-CSS += """
-#runner{background:#1a1d24;border:1px solid #262b34;border-radius:10px;padding:16px 18px;margin:18px 0}
-.runwrap{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-#rsel{background:#0f1218;color:#dfe3ea;border:1px solid #2a3038;border-radius:6px;padding:4px 8px}
-#rrun{background:#243b52;color:#bcd8f5;border:1px solid #3a5a7a;border-radius:6px;padding:4px 12px;cursor:pointer;width:max-content}
-#rcode{background:#0d1014;color:#dfe3ea;border:1px solid #232a35;border-radius:6px;padding:8px 10px;
- font:11.5px/1.5 ui-monospace,monospace;min-height:120px;white-space:pre;overflow:auto}
-.rout{display:flex;gap:18px;margin-top:6px}.rlab{font-size:10px;color:#8b93a3;margin-bottom:4px}
-.rbadge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px}
-.rok{background:#12281c;color:#a9e6c1;border:1px solid #2f5a41}
-.rno{background:#241417;color:#e0a3a4;border:1px solid #5a2f34}
-.rerr{color:#e0a3a4;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap}
-/* §11 grid crispness: 러너의 expected/출력 그리드도 _thumb 와 같은 SVG <rect> 렌더(JS gridHTML) */
-.rgridsvg{display:inline-block;vertical-align:middle;background:#2a2e38;border:1px solid #3a4150;
- image-rendering:pixelated;image-rendering:crisp-edges}
-.rout{align-items:flex-start}.rlab{font-weight:700}
-"""
-
-_RUNNER_HTML = r"""
-<section id="runner"><h2>코드 실행기</h2>
-<div class="runwrap">
-  <select id="rsel"></select>
-  <button id="rrun">▶ Run</button>
-  <span id="rbadge" class="rbadge"></span>
-  <textarea id="rcode" spellcheck="false"></textarea>
-  <div class="rout"><div><div class="rlab">출력(JS 실행)</div><div id="rgrid"></div></div>
-    <div><div class="rlab">expected(Python execute)</div><div id="regrid"></div></div></div>
-  <div id="rerr" class="rerr"></div>
-</div></section>
-<script>
-// ── frozen atom JS 미러 (program_ast/transformation DSL 의 직역; parity 로 드리프트 감시) ──
-// Grid 객체 헬퍼: size/color 는 contents 로부터 파생 — valid 검사(§ run())의 근거.
-function _arr(x){ return (x && x.contents) ? x.contents : x; }          // Grid 객체→2D array
-function _dims(c){ return {height:c.length, width:c[0].length}; }
-function _colorset(c){ var s={}; for(var r=0;r<c.length;r++)for(var k=0;k<c[r].length;k++)s[c[r][k]]=true; return s; }
-function _cloneObj(o){ return {size:o.size, color:o.color, contents:_arr(o).map(function(r){return r.slice();})}; }
-function _sameDims(a,b){ return a && b && a.height===b.height && a.width===b.width; }
-function _normColors(x){ // 배열[0,2] | present-set{0:true} → 정렬된 존재색 리스트
-  var ks = Array.isArray(x) ? x.slice() : Object.keys(x).filter(function(k){return x[k];}).map(Number);
-  return ks.map(Number).sort(function(a,b){return a-b;});
-}
-// 선언 색집합 == 완성 contents 의 '존재 색' 집합(엄격 일치, superset 팔레트는 의도적으로 불일치=모순).
-// 솔버는 _color_leaf 가 출력의 존재색으로 const 를 굽기에 항상 일치 — 이 검사는 러너 편집 시 모순을 잡는다.
-function _sameColors(a,b){ return JSON.stringify(_normColors(a))===JSON.stringify(_normColors(b)); }
-var ATOM = {
-  input_grid: null,
-  make_grid: function(size){var o=[];for(var r=0;r<size.height;r++){var row=[];for(var c=0;c<size.width;c++)row.push(0);o.push(row);}return o;},
-  set_grid_size: function(s){ return s; },        // 객체 모델: 속성값 반환(size==dims(contents) 여부는 run() 이 검사)
-  set_grid_color: function(c){ return c; },
-  set_grid_contents: function(z){ return z; },
-  size: function(g){ return _dims(_arr(g)); },     // 2D array | Grid 객체 모두 처리
-  color: function(g){ return _colorset(_arr(g)); },
-  height: function(g){ return _arr(g).length; },
-  width: function(g){ return _arr(g)[0].length; },
-  contents: function(g){ return _arr(g).map(function(r){return r.slice();}); },
-  objects_of: function(g){throw new Error("objects_of: 러너 미지원(pixel/ grid 만)");},
-  pixels_of: function(g){ var c=_arr(g),w=c[0].length,out=[]; for(var i=0;i<c.length*w;i++) out.push({coord:[Math.floor(i/w),i%w]}); return out; },
-  coloring: function(g,pos,color){ var o=_arr(g).map(function(r){return r.slice();}); o[pos[0]][pos[1]]=color; return o; },
-  divmod: function(a,b){return [Math.floor(a/b),a%b];}
-};
-// body 실행: display_source 문법 — grid 객체형('g.prop = fn(…)') + pixel형('g = fn(g,…)') + for-loop 1종 해석. 미지원 구문 → 예외.
-function runBody(code, input){
-  var INPUT = {size:_dims(input), color:_colorset(input), contents:input.map(function(r){return r.slice();})};
-  ATOM.input_grid = INPUT;
-  var g = INPUT, output = null;
-  function evalExpr(e){
-    // 안전 평가: ATOM/g/input_grid/숫자/배열/객체 리터럴만. new Function 은 로컬 스코프에 바인딩.
-    return (new Function("ATOM","g","input_grid","divmod",
-      "with(ATOM){return ("+e+");}"))(ATOM, g, INPUT, ATOM.divmod);
-  }
-  // 순차 대입 body(g0 = g.contents; gN = coloring(gN-1, pos, color); …; result = gN) 는 아래 generic
-  // '이름 = 식' 처리(∘ 합성 폐기 이후 특수 분기 불필요 — name→ATOM[name], g→g, output_grid→output 만
-  // 구분하면 됨)와 g.prop = 식(mDot) 만으로 충분히 재현된다. 단, coord 타깃은 display_source 가
-  // Python 튜플 표기 `(r, c)` 를 그대로 찍기 때문에 evalExpr(new Function 의 콤마연산자)로 넘기면
-  // "(2, 8)" 이 배열이 아니라 콤마연산자로 평가돼(마지막 값 8) coloring 이 깨진다 — mCoord 로 그
-  // 좌표 리터럴만 별도 파싱해 [r,c] 배열로 만들어 넘긴다(mDot/mFor 와 같은 급의 특수 분기).
-  var lines = code.split("\n");
-  for(var i=0;i<lines.length;i++){
-    var ln = lines[i].trim();
-    if(!ln || ln[0]==="#") continue;
-    var mDot = ln.match(/^g\.(size|color|contents)\s*=\s*(.+)$/);   // 객체 속성 대입
-    if(mDot){
-      if(g===INPUT) g=_cloneObj(INPUT);
-      // size 리터럴 (H, W): display 가 Python 튜플 표기를 찍으므로 evalExpr(new Function)로 넘기면
-      // 콤마연산자로 붕괴(마지막 값 W)해 size 가 숫자가 됨 → mCoord 와 같은 급의 특수 파싱으로 방지.
-      var mSz = (mDot[1]==="size") && mDot[2].match(/^set_grid_size\(\((\d+),\s*(\d+)\)\)$/);
-      if(mSz){ g.size = {height:parseInt(mSz[1],10), width:parseInt(mSz[2],10)}; continue; }
-      g[mDot[1]] = evalExpr(mDot[2]);
-      continue;
-    }
-    var mFor = ln.match(/^for\s+(\w+)\s+in\s+(.+):$/);              // pixel cellset 루프
-    if(mFor){ var it=evalExpr(mFor[2]); var b=lines[i+1].trim(); var mb=b.match(/^g\s*=\s*(.+)$/); i++;
-      for(var k=0;k<it.length;k++){ ATOM[mFor[1]]=it[k];
-        g=(new Function("ATOM","g","input_grid","divmod","with(ATOM){return ("+mb[1]+");}"))(ATOM,g,INPUT,ATOM.divmod); }
-      continue; }
-    var mCoord = ln.match(/^(\w+)\s*=\s*coloring\((\w+),\s*\((-?\d+),\s*(-?\d+)\),\s*(.+)\)$/);  // 좌표 리터럴 (r,c)
-    if(mCoord){
-      var _src = (mCoord[2]==="g") ? g : ATOM[mCoord[2]];
-      var _pos = [parseInt(mCoord[3],10), parseInt(mCoord[4],10)];
-      var _col = evalExpr(mCoord[5]);
-      var _res = ATOM.coloring(_src, _pos, _col);
-      if(mCoord[1]==="g") g=_res; else if(mCoord[1]==="output_grid") output=_res; else ATOM[mCoord[1]]=_res;
-      continue;
-    }
-    var m = ln.match(/^(\w+)\s*=\s*(.+)$/);
-    if(!m) throw new Error("해석 불가: "+ln);
-    var val = evalExpr(m[2]);
-    if(m[1]==="g") g=val; else if(m[1]==="output_grid") output=val; else ATOM[m[1]]=val;
-  }
-  return output!==null ? output : g;
-}
-// §11 grid crispness(Python _thumb 와 같은 근본원인/같은 픽스 — 모듈 상단 주석 참고): CSS-grid
-// 기반 렌더(<i> 셀 + grid-template-columns)는 비정수 DPR/줌에서 컬럼별 반올림이 누적돼 오른쪽
-// 열 경계선이 사라지는 경우가 있다. SVG <rect> 를 한 장의 벡터로(shape-rendering=crispEdges)
-// 그리면 전체가 하나의 좌표계로 스케일되어 반올림이 누적되지 않는다 — #rgrid/#regrid 공용.
-function gridHTML(g){ if(!g||!g.length) return '<span class="rerr">–</span>';
-  var cell=20, gap=1, fill=cell-gap;
-  var H=g.length, W=g[0].length, w=W*cell, h=H*cell, rects="";
-  for(var r=0;r<H;r++){ for(var c=0;c<W;c++){
-    var v=((g[r][c]%10)+10)%10;
-    rects += '<rect x="'+(c*cell)+'" y="'+(r*cell)+'" width="'+fill+'" height="'+fill+'" fill="'+PAL_JS[v]+'"/>';
-  } }
-  return '<svg class="rgridsvg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" '
-    +'shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">'+rects+'</svg>';
-}
-var PAL_JS=["#101010","#1E93FF","#F93C31","#4FCC30","#FFDC00","#999999","#E53AA3","#FF851B","#87D8F1","#921231"];
-function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
-(function(){
-  var sel=document.getElementById("rsel");
-  RUNNER_DATA.forEach(function(d,i){var o=document.createElement("option");
-    o.value=i; o.text=d.tid+" · pair "+(d.pair+1)+(d.kind?" ["+d.kind+"]":""); sel.appendChild(o);});
-  function load(){var d=RUNNER_DATA[sel.value]; document.getElementById("rcode").value=d.body;
-    document.getElementById("regrid").innerHTML=gridHTML(d.expected); run();}   // load 후 즉시 실행
-  function run(){var d=RUNNER_DATA[sel.value]; var err=document.getElementById("rerr");
-    var badge=document.getElementById("rbadge"); err.textContent="";
-    try{ var out=runBody(document.getElementById("rcode").value, d.input);
-      var arr=_arr(out);
-      document.getElementById("rgrid").innerHTML=gridHTML(arr);
-      document.getElementById("regrid").innerHTML=gridHTML(d.expected);
-      // (a) Grid 객체면 일관성(valid) 먼저
-      var invalid="";
-      if(out && out.contents){
-        if(out.size && !_sameDims(out.size,_dims(arr))) invalid="size";
-        else if(out.color && !_sameColors(out.color,_colorset(arr))) invalid="color";
-      }
-      if(invalid){ badge.textContent="✗ 모순("+invalid+")"; badge.className="rbadge rno";
-        err.textContent=invalid+" 선언이 완성 contents 와 불일치 — invalid grid"; return; }
-      // (b) 정답(contents==expected)
-      var ok=eqGrid(arr,d.expected); badge.textContent=ok?"✓ parity":"✗ 불일치";
-      badge.className="rbadge "+(ok?"rok":"rno");
-    }catch(e){ document.getElementById("rgrid").innerHTML='<span class="rerr">실행 불가</span>';  // stale 제거
-      err.textContent=String(e.message||e); badge.textContent="✗ 실행오류"; badge.className="rbadge rno"; }}
-  var _t; document.getElementById("rcode").oninput=function(){clearTimeout(_t);_t=setTimeout(run,250);}; // 편집즉시(debounce)
-  sel.onchange=load; document.getElementById("rrun").onclick=run;
-  if(RUNNER_DATA.length){ load(); }
-})();
-</script>
-"""
+# 코드 실행기(하단 러너)는 별도 standalone code_runner.html 로 분리(사용자 2026-07-27) — 여기선 제거.
+# program_report 는 프로그램 시각화만 보여준다.
 
 
 def _tab_label(tid):
@@ -2392,13 +2205,11 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
         tids = [t for t, _ in list_tasks(dataset)]
     tids = [t for t in tids if t in paths]                 # 존재하는 것만
     tasks = {t: load_task(paths[t]) for t in tids}
-    runner_data = []
     secs_list = []
     solved = {}
     for t in tids:
         asts, pairs, solution, attempts, slot_exprs, slot_vals, groupings = _collect(t, tasks[t])
         solved[t] = bool(attempts) and any(a["correct"] for a in attempts)   # 정답 attempt 존재 = 풀림(task_section:606 과 동일)
-        runner_data.extend(_runner_payload(t, asts, pairs, tasks[t], groupings))
         secs_list.append(task_section(t, tasks[t], precomputed=(
             asts, pairs, solution, attempts, slot_exprs, slot_vals, groupings)))
     secs = "".join(secs_list)
@@ -2439,10 +2250,9 @@ def build(tids=None, dataset="easy", out_name="program_report.html",
            f'<button data-v="3" class="on" onclick="tv(this)">③ viz</button>'
            f'</span></h1>'
            f'<p class="hs">solve 실행 → WM 의 PAIR.program 을 통일 body(실행형)·단일 box-flow 로 렌더.'
-           f' 하단 코드 실행기에서 body 를 실행/검증(빌드타임 parity ✓/✗).</p>'
+           f' (코드 실행은 별도 standalone code_runner.html)</p>'
            f'<div class="tabs">{tabs}</div>{secs}'
-           f'<script>var RUNNER_DATA={json.dumps(runner_data)};</script>'
-           f'{_RUNNER_HTML}{js}')
+           f'{js}')
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), out_name)
     with open(out, "w", encoding="utf-8") as f:
         f.write(doc)
