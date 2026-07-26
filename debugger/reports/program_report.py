@@ -550,11 +550,38 @@ def _task_solution(programs, exs, test_input=None):
         src_pred = _selecting_property(step_movers[0], inputs, test_input) \
             or PA.eq("coordinate", {"var": "?p0"})
         obj0 = PA.coordinate_of(PA.select("input", "object", src_pred))
+        # pair 별 소스 bbox(r0,r1,c0,c1)·grid(H,W) — corner/edge 정렬식 도출용
+        bb = []
+        for p in range(len(inputs)):
+            s0 = step_movers[0][p]
+            bb.append((min(x[0] for x in s0), max(x[0] for x in s0),
+                       min(x[1] for x in s0), max(x[1] for x in s0),
+                       len(inputs[p]), len(inputs[p][0])))
+
+        def _axis_expr(vals, cands):
+            """pair 별 실제 위치차 vals 와 pair 마다 일치하는 후보식(이름) — const 우선, 없으면 corner/edge."""
+            if len(set(vals)) == 1:
+                return str(vals[0])                              # 상수
+            for name, fn in cands:
+                if all(fn(i) == vals[i] for i in range(len(vals))):
+                    return name
+            return None
+
+        # 후보: 객체 corner(r0/r1,c0/c1)를 grid 특수점(0, H-1/W-1)에 맞추는 위치차(비교로 검증)
+        rc = [("0 - r0", lambda i: -bb[i][0]), ("height_of(input_grid) - 1 - r1", lambda i: bb[i][4] - 1 - bb[i][1]),
+              ("0 - r1", lambda i: -bb[i][1]), ("height_of(input_grid) - 1 - r0", lambda i: bb[i][4] - 1 - bb[i][0])]
+        cc = [("0 - c0", lambda i: -bb[i][2]), ("width_of(input_grid) - 1 - c1", lambda i: bb[i][5] - 1 - bb[i][3]),
+              ("0 - c1", lambda i: -bb[i][3]), ("width_of(input_grid) - 1 - c0", lambda i: bb[i][5] - 1 - bb[i][2])]
         dst_leaf = None
-        if consistent and len(set(disps)) == 1:                  # 상수 위치차 vector
+        if consistent and len(set(disps)) == 1:                  # ① 상수 위치차 vector
             dr, dc = disps[0]
             dst_leaf = {"expr": f"coordinate_of(obj0) + ({dr}, {dc})"}
-        elif len({tuple(map(tuple, d)) for d in step_movers[1]}) == 1:  # 절대 목적지(COMM 좌표)
+        elif consistent:                                         # ② corner/edge 정렬(축별 위치차식)
+            de = _axis_expr([d[0] for d in disps], rc)
+            ce = _axis_expr([d[1] for d in disps], cc)
+            if de is not None and ce is not None:
+                dst_leaf = {"expr": f"coordinate_of(obj0) + ({de}, {ce})"}
+        if dst_leaf is None and len({tuple(map(tuple, d)) for d in step_movers[1]}) == 1:  # ③ 절대 목적지(COMM)
             dst_leaf = {"expr": f"{step_movers[1][0]}"}
         if dst_leaf is not None:
             body = [PA.set_grid_size({s["call"]: s["args"] for s in valid[0]["body"]}
@@ -1678,9 +1705,16 @@ def _skel_solution_code(final_skel, exs=None):
             objdefs.append(f"obj{n} = {json.dumps(tgt)}")
         steps.append(f"g{n + 1} = coloring({prev}, coordinate_of(obj{n}), {col})")
         prev = f"g{n + 1}"
+    # corner/edge 이동식이 참조하는 bbox 접근자(r0/c0/r1/c1) 정의 추가(사용 시만).
+    bbox_defs = []
+    joined = " ".join(steps)
+    for var, expr in (("r0", "row_of(left_top_of(obj0))"), ("c0", "col_of(left_top_of(obj0))"),
+                      ("r1", "row_of(right_bottom_of(obj0))"), ("c1", "col_of(right_bottom_of(obj0))")):
+        if re.search(rf"\b{var}\b", joined):
+            bbox_defs.append(f"{var} = {expr}")
     lines = ["g = input_grid", f"g.size = set_grid_size({size_tok})",
              f"g.color = set_grid_color({pal_tok})", ""]
-    lines += objdefs + ["", "g0 = g.contents"] + steps
+    lines += objdefs + bbox_defs + ["", "g0 = g.contents"] + steps
     lines += [f"result = {prev if steps else 'g0'}",
               "g.contents = set_grid_contents(result)", "output_grid = g"]
     return lines
@@ -1884,7 +1918,14 @@ def _skel_solution_defs(final_skel, exs=None):
             defs.append((tp, json.dumps(tgt), "목적 좌표"))
         order_p.append(tp)
         prev = cur
-    order = order_obj + order_p + order_var                  # 의존순: 객체 → target → ?var(프레임·DIFF색)
+    # corner/edge 이동식이 참조하는 bbox 접근자 정의(사용 시만) — obj 다음, ?p 앞.
+    order_bbox = []
+    joined = " ".join(es for _n, es, _t in defs if es)
+    for var, expr in (("r0", "row_of(left_top_of(obj0))"), ("c0", "col_of(left_top_of(obj0))"),
+                      ("r1", "row_of(right_bottom_of(obj0))"), ("c1", "col_of(right_bottom_of(obj0))")):
+        if re.search(rf"\b{var}\b", joined):
+            defs.append((var, expr, "")); order_bbox.append(var)
+    order = order_obj + order_bbox + order_p + order_var     # 의존순: 객체 → bbox → target → ?var
     return skel, defs, order
 
 
