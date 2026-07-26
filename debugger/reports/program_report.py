@@ -558,31 +558,39 @@ def _task_solution(programs, exs, test_input=None):
                        min(x[1] for x in s0), max(x[1] for x in s0),
                        len(inputs[p]), len(inputs[p][0])))
 
-        def _axis_expr(vals, cands):
-            """pair 별 실제 위치차 vals 와 pair 마다 일치하는 후보식(이름) — const 우선, 없으면 corner/edge."""
+        def _axis_shift(vals, is_row):
+            """축별 위치차 vals(pair) → 위치차식. 두 anchor(top-left r0/c0·bottom-right r1/c1)를
+            grid 특수점(0·H-1/W-1)과 **임의 COMM 절대점** 모두에 대해 비교 검색(사용자 2026-07-27 — top-left
+            만 보지 말고 모든 property 검사). anchor 도출이 없으면 상수 위치차(폴백). 없으면 None."""
+            hw = 4 if is_row else 5
+            a0, a1 = (0, 1) if is_row else (2, 3)             # r0/r1 · c0/c1 index
+            n0, n1 = ("r0", "r1") if is_row else ("c0", "c1")
+            gw = "height_of(input_grid)" if is_row else "width_of(input_grid)"
+            T0 = [bb[i][a0] + vals[i] for i in range(len(vals))]    # 목적지 top/left anchor
+            T1 = [bb[i][a1] + vals[i] for i in range(len(vals))]    # 목적지 bottom/right anchor
+            H = [bb[i][hw] for i in range(len(vals))]
+            if all(t == 0 for t in T0):
+                return f"0 - {n0}"                            # top/left → 0
+            if all(T1[i] == H[i] - 1 for i in range(len(vals))):
+                return f"{gw} - 1 - {n1}"                     # bottom/right → 끝(H-1/W-1)
+            if all(t == 0 for t in T1):
+                return f"0 - {n1}"
+            if all(T0[i] == H[i] - 1 for i in range(len(vals))):
+                return f"{gw} - 1 - {n0}"
+            if len(set(T0)) == 1:
+                return f"{T0[0]} - {n0}"                      # top/left → 절대 COMM 점
+            if len(set(T1)) == 1:
+                return f"{T1[0]} - {n1}"                      # bottom/right → 절대 COMM 점
             if len(set(vals)) == 1:
-                return str(vals[0])                              # 상수
-            for name, fn in cands:
-                if all(fn(i) == vals[i] for i in range(len(vals))):
-                    return name
+                return str(vals[0])                           # 상수 위치차(폴백)
             return None
 
-        # 후보: 객체 corner(r0/r1,c0/c1)를 grid 특수점(0, H-1/W-1)에 맞추는 위치차(비교로 검증)
-        rc = [("0 - r0", lambda i: -bb[i][0]), ("height_of(input_grid) - 1 - r1", lambda i: bb[i][4] - 1 - bb[i][1]),
-              ("0 - r1", lambda i: -bb[i][1]), ("height_of(input_grid) - 1 - r0", lambda i: bb[i][4] - 1 - bb[i][0])]
-        cc = [("0 - c0", lambda i: -bb[i][2]), ("width_of(input_grid) - 1 - c1", lambda i: bb[i][5] - 1 - bb[i][3]),
-              ("0 - c1", lambda i: -bb[i][3]), ("width_of(input_grid) - 1 - c0", lambda i: bb[i][5] - 1 - bb[i][2])]
         dst_leaf = None
-        if consistent and len(set(disps)) == 1:                  # ① 상수 위치차 vector
-            dr, dc = disps[0]
-            dst_leaf = {"expr": f"coordinate_of(obj0) + ({dr}, {dc})"}
-        elif consistent:                                         # ② corner/edge 정렬(축별 위치차식)
-            de = _axis_expr([d[0] for d in disps], rc)
-            ce = _axis_expr([d[1] for d in disps], cc)
+        if consistent:                                        # 축별 anchor·상수 검색으로 목적지식 도출
+            de = _axis_shift([d[0] for d in disps], True)
+            ce = _axis_shift([d[1] for d in disps], False)
             if de is not None and ce is not None:
                 dst_leaf = {"expr": f"coordinate_of(obj0) + ({de}, {ce})"}
-        if dst_leaf is None and len({tuple(map(tuple, d)) for d in step_movers[1]}) == 1:  # ③ 절대 목적지(COMM)
-            dst_leaf = {"expr": f"{step_movers[1][0]}"}
         if dst_leaf is not None:
             body = [PA.set_grid_size({s["call"]: s["args"] for s in valid[0]["body"]}
                                      ["set_grid_size"]["size"]),
