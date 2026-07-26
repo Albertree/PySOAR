@@ -127,7 +127,7 @@ def _object_moves(g0, g1):
     달라져 자기매칭 안 됨(그래서 '배경=0' 가정 없이 성분 전부 대응해도 안전).
     **static 우선**: 같은 위치·색·모양 성분을 먼저 예약(제자리 유지)한 뒤 남은 것에서만 이동을 찾는다.
     안 그러면 배경색 조각(색0 1칸 등)이 사라진 자리↔제자리 조각과 greedy 매칭돼 phantom 이동으로 오탐
-    (예: move000aq 에서 한 pair 만 이동 2개로 세어져 op 수 불일치→anti-unify 실패)."""
+    (예: move00aq 에서 한 pair 만 이동 2개로 세어져 op 수 불일치→anti-unify 실패)."""
     o0, o1 = _components(g0), _components(g1)
     used, matched0 = set(), set()
     for i, (cells0, col0) in enumerate(o0):                   # 1st: static(같은 위치) 예약 → mover 오탐 방지
