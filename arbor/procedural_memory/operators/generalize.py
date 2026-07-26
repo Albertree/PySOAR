@@ -104,6 +104,13 @@ def _op_generalize(ag):
         if not ag.wm.contains(sid, "compressed", "yes") and (compressible(progs) or grid_mismatch or flat_mismatch):
             ag.wm.add(sid, "needs-compress", "yes")
             return
+        # compress 도 적용 안 되는 op-불일치 = 정직히 실패하기 전에 transform(좌표식 해 도출)을 신호한다.
+        # transform operator 가 해 없을 때만 스스로 generalized:failed 로 되돌린다(무한루프 방지: transformed
+        # 가드 — 이미 transform 이 돈 뒤엔 재emit 하지 않고 곧장 failed). move 경로는 needs-compress 분기가
+        # 먼저 처리·성공하므로 여기 도달하지 않는다(60/60 무영향).
+        if not ag.wm.contains(sid, "transformed", "yes"):
+            ag.wm.add(sid, "needs-transform", "yes")
+            return
         ag.wm.add(sid, "generalized", "failed")
         return
     sk_with = dict(sk); sk_with["slots"] = slots

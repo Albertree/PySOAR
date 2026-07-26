@@ -10,6 +10,7 @@ from arbor.procedural_memory.operators.coloring import _op_coloring
 from arbor.procedural_memory.operators.verify import _op_verify
 from arbor.procedural_memory.operators.generalize import _op_generalize
 from arbor.procedural_memory.operators.compress import _op_compress
+from arbor.procedural_memory.operators.transform import _op_transform
 from arbor.procedural_memory.operators.resolve import _op_resolve
 from arbor.procedural_memory.operators.apply_solution import _op_apply_solution
 
@@ -19,4 +20,5 @@ from arbor.procedural_memory.operators.apply_solution import _op_apply_solution
 OPERATOR_BODIES = {"observe": _op_observe, "compare": _op_compare, "select": _op_select,
                    "hypothesize": _op_hypothesize, "coloring": _op_coloring, "verify": _op_verify,
                    "synthesize": _op_synthesize, "generalize": _op_generalize,
-                   "compress": _op_compress, "resolve": _op_resolve, "apply_solution": _op_apply_solution}
+                   "compress": _op_compress, "transform": _op_transform,
+                   "resolve": _op_resolve, "apply_solution": _op_apply_solution}

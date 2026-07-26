@@ -1,0 +1,32 @@
+{
+  "operator": "transform",
+  "doc": "generalize 가 op수 불일치로 막히고 compress 도 안 될 때(needs-transform) 발화 → train 좌표식 해를 탐색해 TASK.solution+answer 를 물질화하거나 해 없으면 generalized:failed. 이름=좌표식 해 도출(변환 종류 아님).",
+  "propose": [
+    {
+      "name": "propose*transform",
+      "order": 31,
+      "conditions": [
+        {"id": "<s>", "attr": "needs-transform", "value": "yes", "negated": false},
+        {"id": "<s>", "attr": "transformed", "value": "<t>", "negated": true},
+        {"id": "<s>", "attr": "answer-ready", "value": "<ar>", "negated": true}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "pref": "+", "referent": null},
+        {"id": "<o>", "attr": "name", "value": "transform", "pref": "+", "referent": null}
+      ]
+    }
+  ],
+  "apply": [
+    {
+      "name": "apply*transform",
+      "order": 32,
+      "conditions": [
+        {"id": "<s>", "attr": "operator", "value": "<o>", "negated": false},
+        {"id": "<o>", "attr": "name", "value": "transform", "negated": false}
+      ],
+      "actions": [
+        {"id": "<s>", "attr": "transform-step", "value": "yes", "pref": "+", "referent": null}
+      ]
+    }
+  ]
+}
