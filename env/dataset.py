@@ -15,14 +15,20 @@ import os
 _ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
 # (2026-07-17 사용자 데이터 정리) ARC_easy_a → ARC_easy 로 rename(구 ARC_easy 삭제); made·multi 삭제;
-# ARC_human 은 사용자 제작 문제(flip/move/rotate 하위폴더)로 교체.
+# ARC_human 은 사용자 제작 문제. 4 primary concept 셋 = move/flip/rota/objc,
+# 각각 twin(동일 concept·다른 seed) = mov2/fli2/rot2/obj2 (CONCEPTS.md 참조).
 DATASETS = {
     "easy":   os.path.join(_ROOT, "ARC_easy"),                 # a-h 8
-    "human":  os.path.join(_ROOT, "ARC_human"),                # (하위폴더 flip/move/rotate)
-    "move":   os.path.join(_ROOT, "ARC_human", "move"),        # 사용자 제작 move 문제
-    "flip":   os.path.join(_ROOT, "ARC_human", "flip"),
-    "rotate": os.path.join(_ROOT, "ARC_human", "rotate"),
-    "objc":   os.path.join(_ROOT, "ARC_human", "object_coloring"),  # 사용자 제작 object 재채색 18문제
+    "human":  os.path.join(_ROOT, "ARC_human"),                # (하위폴더 move/flip/rota/objc + 트윈)
+    "move":   os.path.join(_ROOT, "ARC_human", "move"),        # 이동 60
+    "mov2":   os.path.join(_ROOT, "ARC_human", "mov2"),        # move 트윈(객체 다양성) 60
+    "flip":   os.path.join(_ROOT, "ARC_human", "flip"),        # 대칭 24
+    "fli2":   os.path.join(_ROOT, "ARC_human", "fli2"),        # flip 트윈 24
+    "rota":   os.path.join(_ROOT, "ARC_human", "rota"),        # 회전 36
+    "rotate": os.path.join(_ROOT, "ARC_human", "rota"),        # 'rota' 별칭 — build_rotate/report 호환
+    "rot2":   os.path.join(_ROOT, "ARC_human", "rot2"),        # rota 트윈 36
+    "objc":   os.path.join(_ROOT, "ARC_human", "objc"),        # object_coloring 재채색 8
+    "obj2":   os.path.join(_ROOT, "ARC_human", "obj2"),        # objc 트윈 8
     "agi":    os.path.join(_ROOT, "ARC_AGI", "training"),           # full ARC-AGI-1 train
     "train":  os.path.join(_ROOT, "ARC_AGI", "training"),           # ARC-AGI-1 train set
     "eval":   os.path.join(_ROOT, "ARC_AGI", "evaluation"),         # ARC-AGI-1 eval set

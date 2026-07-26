@@ -35,11 +35,11 @@ DATASETS = [
     ("agitrain", "ARC_AGI/training",           "arc-agi · train",   None),
     ("agieval",  "ARC_AGI/evaluation",         "arc-agi · eval",    None),
     ("easy",     "ARC_easy",                   "arc-easy",          "easy"),
-    ("object",   "ARC_human/object_coloring",  "arc-human · object", "objc"),
+    ("object",   "ARC_human/objc",             "arc-human · object", "objc"),
     ("move",     "ARC_human/move",             "arc-human · move",  "move"),
     ("mov2",     "ARC_human/mov2",             "arc-human · mov2",  "mov2"),
     ("flip",     "ARC_human/flip",             "arc-human · flip",  "flip"),
-    ("rotate",   "ARC_human/rotate",           "arc-human · rotate", "rota"),
+    ("rotate",   "ARC_human/rota",             "arc-human · rotate", "rota"),
 ]
 
 

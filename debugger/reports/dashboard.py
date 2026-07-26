@@ -167,7 +167,7 @@ def build_objc_dashboard():
     """object_coloring 전 태스크 → objc_dashboard.html (dashboard 와 동일 구성)."""
     tasks = [(tid, load_task(p)) for tid, p in list_tasks("objc")]
     print(f"objc dashboard: {len(tasks)} 태스크 — max_cycles=500")
-    return make_dashboard(tasks, dataset="ARC_human/object_coloring",
+    return make_dashboard(tasks, dataset="arc_human/objc",
                           out_name="objc_dashboard.html",
                           report_href="objc_program_report.html")
 
@@ -176,7 +176,7 @@ def build_rotate_dashboard():
     """arc_human/rotate 전 태스크 → rotate_dashboard.html (dashboard 와 동일 구성)."""
     tasks = [(tid, load_task(p)) for tid, p in list_tasks("rotate")]
     print(f"rotate dashboard: {len(tasks)} 태스크 — max_cycles=500")
-    return make_dashboard(tasks, dataset="arc_human/rotate",
+    return make_dashboard(tasks, dataset="arc_human/rota",
                           out_name="rotate_dashboard.html",
                           report_href="rotate_program_report.html")
 
