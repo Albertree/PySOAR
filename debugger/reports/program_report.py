@@ -520,17 +520,51 @@ def _task_solution(programs, exs, test_input=None):
     if any(len(x) != n for x in inners):
         return None
     inputs = [e["input"] for e in exs]
-    # 1차: 각 스텝의 movers(pair 별 대상 셀)·colors 수집 — DIFF 색을 객체 색으로 해소하는 데 쓴다.
-    step_movers, step_colors = [], []
+    # 1차: 각 스텝의 movers(pair 별 대상 셀)·colors·grid(input/output) 수집.
+    step_movers, step_colors, step_grids = [], [], []
     for j in range(n):
-        mv, cols = [], []
+        mv, cols, grids = [], [], set()
         for inner in inners:
             s = inner[j]
-            sel = s["args"]["target"].get("coordinate_of", {}).get("select")
-            vals = (sel or {}).get("pred", {}).get("eq", {}).get("value")
+            sel = s["args"]["target"].get("coordinate_of", {}).get("select") or {}
+            vals = sel.get("pred", {}).get("eq", {}).get("value")
             mv.append(vals if isinstance(vals, list) else [])
             cols.append(s["args"]["color"])
+            grids.add(sel.get("grid"))
         step_movers.append(mv); step_colors.append(cols)
+        step_grids.append(grids.pop() if len(grids) == 1 else None)
+
+    # ── move 패턴(2스텝: input clear + output paint) — 목적지를 output 객체로 두지 않고 소스 obj0 의
+    #    **위치차(비교 매핑)** 로 표현(사용자 2026-07-27). output_grid 를 task.solution 에 명시하지 않는다.
+    if n == 2 and step_grids[0] == "input" and step_grids[1] == "output" \
+            and all(c.get("const") == 0 for c in step_colors[0]) \
+            and all(step_movers[0][p] and len(step_movers[0][p]) == len(step_movers[1][p])
+                    for p in range(len(inputs))):
+        disps, consistent = [], True
+        for p in range(len(inputs)):
+            s0, d0 = step_movers[0][p], step_movers[1][p]
+            dv = (d0[0][0] - s0[0][0], d0[0][1] - s0[0][1])
+            if not all((d0[i][0] - s0[i][0], d0[i][1] - s0[i][1]) == dv for i in range(len(s0))):
+                consistent = False; break
+            disps.append(dv)
+        src_pred = _selecting_property(step_movers[0], inputs, test_input) \
+            or PA.eq("coordinate", {"var": "?p0"})
+        obj0 = PA.coordinate_of(PA.select("input", "object", src_pred))
+        dst_leaf = None
+        if consistent and len(set(disps)) == 1:                  # 상수 위치차 vector
+            dr, dc = disps[0]
+            dst_leaf = {"expr": f"coordinate_of(obj0) + ({dr}, {dc})"}
+        elif len({tuple(map(tuple, d)) for d in step_movers[1]}) == 1:  # 절대 목적지(COMM 좌표)
+            dst_leaf = {"expr": f"{step_movers[1][0]}"}
+        if dst_leaf is not None:
+            body = [PA.set_grid_size({s["call"]: s["args"] for s in valid[0]["body"]}
+                                     ["set_grid_size"]["size"]),
+                    PA.set_grid_color({s["call"]: s["args"] for s in valid[0]["body"]}
+                                      ["set_grid_color"]["color"]),
+                    PA.set_grid_contents(PA.contents_program([
+                        PA.step("coloring", target=obj0, color={"const": 0}),
+                        PA.step("coloring", target=dst_leaf, color={"expr": "color_of(obj0)"})]))]
+            return PA.program(body)
 
     def _obj_in_color(k):
         """obj{k}(step k 객체)의 pair 별 입력 색(각 pair 첫 셀). movers 비면 None."""
@@ -1632,8 +1666,11 @@ def _skel_solution_code(final_skel, exs=None):
     objdefs, steps, prev = [], [], "g0"
     for n, s in enumerate([x for x in inner if isinstance(x, dict) and "args" in x]):
         tgt = s["args"]["target"]
-        sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
         col = _disp_leaf(s["args"]["color"])
+        if isinstance(tgt, dict) and "expr" in tgt:         # 식 타깃(이동 목적지) — obj 생성 없이 식 그대로
+            steps.append(f"g{n + 1} = coloring({prev}, {tgt['expr']}, {col})")
+            prev = f"g{n + 1}"; continue
+        sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
         if sel:
             objdefs.append(f"obj{n} = select({sel.get('grid')}, {sel.get('level')}, "
                            f"{_pred_str(sel.get('pred', {}))})")
@@ -1835,7 +1872,9 @@ def _skel_solution_defs(final_skel, exs=None):
         else:                                                # COMM const 색 → 리터럴 인라인
             cstr = _disp_leaf(col_leaf)
         skel.append(f"{cur} = coloring({prev}, {tp}, {cstr})")
-        if sel:
+        if isinstance(tgt, dict) and "expr" in tgt:          # 식 타깃(이동 목적지) → ?p 정의 = 그 식
+            defs.append((tp, tgt["expr"], "목적 좌표(소스 obj + 위치차)"))
+        elif sel:
             objnm = f"obj{n}"
             defs.append((tp, f"coordinate_of({objnm})", "목적 좌표(객체)"))
             defs.append((objnm, f"select({sel.get('grid')}, {sel.get('level')}, "
