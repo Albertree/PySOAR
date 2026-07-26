@@ -51,12 +51,37 @@
   **③ 시각화**(§6 골격+정의 SVG 갤러리, "잘 되고 있음").
 - 셋은 **단일 소스**(`_transform_solution_defs` → `_transform_solution_code_lines`/`_transform_solution_gallery`)
   에서 파생돼 **반드시 일치**한다. ③ 아래에 실행검증(test→정답 격자, ✓/✗)·pair 별 좌표식을 부가 스트립으로.
-- 변환-해가 **없는** 태스크(move/resize)의 Step C 는 기존 anti-unify 골격(`_pair_block`)을 그대로 쓴다 —
-  좌표식 3-표현으로 **덮지 않는다**(회귀 금지).
+- **모든 태스크(objc·move·rota·flip) Step C 통일**(2026-07-27): 변환-해(rota/flip)는 좌표식 갤러리,
+  골격-해(move/objc)는 `_skel_solution_defs` 가 `final_skel` 을 **같은 갤러리 형식**으로 분해해 넣는다.
+  둘 다 공용 코어(`_solution_gallery_html`·`_solution_code_lines`·`_solution_three_view`)로 렌더 → 완전 통일.
+
+## 6.6 파이프라인 스텝 통일 (2026-07-27)
+- **Step A.5 pixelize = 모든 문제**. pair.program 은 어느 데이터셋이나 `raw-coord`(`{ref:coord,index:[r,c]}`)라
+  각 픽셀을 `coordinate_of(select(input, pixel, coordinate == [r,c]))` 로 감싸면 **항상** 가능(`_pixelize`).
+- **Step A.6 objectize = 조건부**. diff 기반 pair.program 은 색 안 변한 픽셀이 있어 객체로 묶을 근거가 없을
+  수 있음 → grouping 있을 때만. 없으면 **X·실패글자 없이 빈 구역(`.stepA6empty`)만 남기고 패스**(구조 일관).
+- **Step B = 가장 프로세스된 program 겹침**(objectize 됐으면 Focus2 재표현, 아니면 pixelize) pair0·pair1
+  반투명 겹침, COMM/DIFF 색. 성공/실패 배지 없음.
+- **Step C = 성공한 TASK.solution 만**(§6.5), 전 리포트 통일.
+
+## 6.7 `?var`·`?p`·리터럴 구분 — 골격-해(move/objc, anti-unify) (2026-07-27)
+- move/objc 는 objectize→anti-unification(**비교**) 케이스. 슬롯 성격을 반영:
+  - **`?var`** = 비교로 변수화된 **DIFF/일반화 슬롯**(값 잎). **`?p`** = 함수조합 **구조 hoist**(§3, 별도 그림).
+    **리터럴** = COMM 값(인라인). 셋은 다른 네임스페이스·역할.
+- **COMM → 리터럴, DIFF → ?var 를 size·palette·color 에 일관 적용**(pair 대조로 판정):
+  - **size**: 입력 grid 크기 pair 마다 다르면 `?var = size_of(input_grid)`, 같으면 리터럴 `(h,w)`.
+  - **palette**(set_grid_color): `_palette_change_expr` 로 **공통 변화 추적** →
+    `?var = color_of(input_grid) − [제거] + [추가]`. 제거 COMM 이면 리터럴 `[3]`(objc000d), pair 마다
+    다르면(=재채색 객체 원색) 단일 재채색·단일색일 때 `color_of(obj0)`(objc000e~j). 둘 다 빈 공통 →
+    `color_of(input_grid)`(불변, move). COMM 팔레트는 리터럴 `[0,4]`(objc000a). 공통구조 없으면 자유변수(정직).
+  - **coloring 색**: COMM const → 리터럴 인라인(`coloring ── ?p ── 4`), DIFF var → `?var`(자유변수 note 카드).
+  - **구조 target**(`coordinate_of(objN)`)·`select(...)` → `?p`(§3).
+- rota/flip 은 슬롯이 전부 `size_of`/`color_of`/좌표식 **함수조합**(구조)이라 원래대로 `?p`(변경 없음).
 
 ## 7. 구현 위치
 - 렌더러: `debugger/reports/solution_expr.py` — 튜플 infix(§4), 함수조합→?p(§3), 전역 번호(§5)를 반영한
   per-expression 트리 렌더 + `_grid_render`(§1) 재사용. move 등 기존 pair.program 렌더를 깨지 않게 분리.
-- 리포트: `program_report.py::_transform_solution_block` 이 변환-해 태스크의 3-표현(①code ②AST ③갤러리 +
-  실행검증)을 렌더하고, `_solution_row(stepC_override=...)` 로 **Step C 카드 안**에 주입한다(§6.5). 단일 소스
-  = `_transform_solution_defs`(갤러리·코드·AST 공용). 변환-해 없으면 override 없이 기존 Step C.
+- 리포트: `program_report.py` — 변환-해는 `_transform_solution_defs`, 골격-해는 `_skel_solution_defs`
+  (+`_palette_change_expr`)가 (골격, 정의, 순서)를 만들고, 공용 `_solution_gallery_html`/`_solution_code_lines`/
+  `_solution_three_view` 로 ①code ②AST ③갤러리 3-표현을 렌더. `_solution_row(stepC_override / skel_view)` 가
+  **Step C 카드 안**에 주입(§6.5-6.7). 파이프라인 스텝은 `_solution_row` A.5/A.6/B(§6.6).

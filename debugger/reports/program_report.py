@@ -299,10 +299,13 @@ def _concrete_size_color(ex):
 
 
 def _pixelize(ast, ex=None):
-    """grid-body grouping(묶인 select) → **픽셀객체화** AST: 각 nested coloring 의
-    coord_in([c1..cN]) 를 **N 개의 단일좌표(eq) select coloring** 으로 푼다 — 각 픽셀이
-    좌표1개로 특정됨(묶음 해제, 코드는 길어짐; compress 아님). ex 주면 size/color 를 그 pair 의
-    구체 값으로. grid body 아니면 그대로."""
+    """grid-body coloring program → **픽셀객체화** AST: 각 coloring 의 목적 좌표를 **좌표1개(eq) pixel
+    select coloring** 으로 재표현한다 — 각 픽셀이 좌표1개로 특정됨(pixel 객체를 좌표로 대응). 두 입력
+    형태를 모두 처리(사용자 2026-07-27 — 모든 문제에서 A.5 가능해야 함):
+      · **raw-coord** `{ref:coord, index:[r,c]}` (pair.program 기본형·모든 데이터셋) → 좌표1개 pixel select.
+      · **coord_in 묶음** `coordinate_of(select(…in [c1..cN]))` (grouping 형) → N 개 단일좌표로 풀기.
+    좌표는 grid-무관이라 input 으로 통일(사용자 2026-07-24). ex 주면 size/color 를 그 pair 구체값으로.
+    grid body 아니면 그대로."""
     if not ast or not PA._is_grid_body(ast.get("body") or []):
         return ast
     parts = {s["call"]: s["args"] for s in ast["body"]}
@@ -313,6 +316,13 @@ def _pixelize(ast, ex=None):
     new_inner = []
     for s in inner:
         tgt = s["args"]["target"]; col = s["args"]["color"]
+        # raw-coord: {ref:coord, index:{const:[r,c]}} — 이미 픽셀 단위(날것) → 좌표1개 pixel select 로 감쌈.
+        if isinstance(tgt, dict) and tgt.get("ref") == "coord":
+            idx = tgt.get("index"); cc = idx.get("const") if isinstance(idx, dict) else idx
+            if isinstance(cc, list) and len(cc) == 2 and not isinstance(cc[0], list):
+                t = PA.coordinate_of(PA.select("input", "pixel", PA.eq("coordinate", cc)))
+                new_inner.append(PA.step("coloring", target=t, color=col))
+                continue
         sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
         vals = (sel or {}).get("pred", {}).get("in", {}).get("values") if sel else None
         if sel and isinstance(vals, list):                      # 좌표묶음 → 좌표1개씩 eq-select
@@ -603,6 +613,21 @@ def _display_pixelized(ast):
     return lines                                            # 리스트(_pair_block sol_lines 계약)
 
 
+def _pred_str(pred):
+    """select pred(eq/neq/in, and 조합) → 파싱 가능한 조건식 문자열(accessor op value). _display_solution
+    과 _skel_solution_defs 공용."""
+    op = {"eq": "==", "neq": "!=", "in": "in"}
+
+    def _cond(p):
+        kk = next((x for x in ("eq", "neq", "in") if x in p), None)
+        if not kk:
+            return json.dumps(p)
+        e = p[kk]; v = e.get("value", e.get("values"))
+        vt = v["var"] if isinstance(v, dict) and "var" in v else json.dumps(v)
+        return f'{e.get("accessor")} {op[kk]} {vt}'
+    return " and ".join(_cond(c) for c in pred["and"]) if "and" in pred else _cond(pred)
+
+
 def _display_solution(ast):
     """최종 TASK.solution program → obj0-바인딩 소스(파싱 가능 심볼만; 자유텍스트·주석 없음):
     objN = select(input, object, coordinate == [...]) 로 대응 입력객체를 묶고,
@@ -624,17 +649,7 @@ def _display_solution(ast):
         col = _disp_leaf(s["args"]["color"])
         cur = f"g{n + 1}"
         if sel:
-            pred = sel.get("pred", {})
-
-            def _cond(p):
-                op = {"eq": "==", "neq": "!=", "in": "in"}
-                kk = next((x for x in ("eq", "neq", "in") if x in p), None)
-                if not kk:
-                    return json.dumps(p)
-                e = p[kk]; v = e.get("value", e.get("values"))
-                vt = v["var"] if isinstance(v, dict) and "var" in v else json.dumps(v)
-                return f'{e.get("accessor")} {op[kk]} {vt}'
-            pt = " and ".join(_cond(c) for c in pred["and"]) if "and" in pred else _cond(pred)
+            pt = _pred_str(sel.get("pred", {}))
             objdefs.append(f'obj{n} = select({sel.get("grid")}, {sel.get("level")}, {pt})')
         else:
             objdefs.append(f'obj{n} = {json.dumps(tgt)}')
@@ -1250,48 +1265,53 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         for a, ex, p in ast_ex_pairs)
     steps = [f'<div class="stepcard stepA"><div class="stepttl">Step A · PAIR.program</div>{pair_boxes}</div>']
 
-    # Step A.5 · 픽셀객체화: grouping(묶인 select)을 **각 픽셀=좌표1개 select coloring** 으로 풀어(_pixelize)
-    # pair.program 과 동일한 _pair_block(①변수화 code ②AST ③viz)로 렌더(사용자 2026-07-24 — compress 아님,
-    # 묶음 해제·각 픽셀 개별 특정). grouping 은 anti-unify 용으로 그대로 유지(green). 없으면 카드 생략.
-    if groupings and any(groupings):
-        px_boxes = ""
-        for (a, ex, p), g in zip(ast_ex_pairs, groupings):
-            if not g:
-                continue
-            px = _pixelize(g, ex)
-            px_boxes += f'<div class="innerbox">{_pair_block(f"픽셀객체화 PAIR {p + 1}", px, ex, sol_lines=_display_pixelized(px))}</div>'
-        if px_boxes:
-            steps.append('<div class="stepcard stepA5"><div class="stepttl">'
-                         'Step A.5 · 픽셀객체화 (각 픽셀 = 좌표1개 select)</div>' + px_boxes + '</div>')
+    # Step A.5 · 픽셀객체화: **pair.program 자체**(raw-coord)를 각 픽셀=좌표1개 pixel select 로 재표현
+    # (_pixelize). 좌표만으로 pixel 객체를 대응하므로 **모든 문제에서 항상 가능**(사용자 2026-07-27) —
+    # grouping 유무와 무관. pair.program 과 같은 _pair_block(①code ②AST ③viz)로 렌더.
+    grp = list(groupings or [None] * len(ast_ex_pairs))
+    px_progs = []
+    px_boxes = ""
+    for (a, ex, p) in ast_ex_pairs:
+        px = _pixelize(a, ex)
+        px_progs.append(px)
+        px_boxes += f'<div class="innerbox">{_pair_block(f"픽셀객체화 PAIR {p + 1}", px, ex, sol_lines=_display_pixelized(px))}</div>'
+    steps.append('<div class="stepcard stepA5"><div class="stepttl">'
+                 'Step A.5 · 픽셀객체화 (각 픽셀 = 좌표1개 select)</div>' + px_boxes + '</div>')
 
-    # Step A.6 · object 객체화: 픽셀객체화의 픽셀들을 **한 ARCKG object 로 묶어** 그 object 의 coordinate
-    # property 로 지목 — select(grid, object, …): output 에 object 면 output(결과, in-both 도 output 우선),
-    # output 엔 없고 input 에만 있으면 input(이동 소스 자리). grouping 은 anti-unify 용 유지(green). 없으면 생략.
-    if groupings and any(groupings):
+    # Step A.6 · object 객체화: 픽셀들을 **한 ARCKG object 로 묶어** object.coordinate property 로 지목.
+    # diff 기반 pair.program 은 색 안변한 픽셀이 있어 객체로 묶을 근거가 없을 수 있음 → grouping 있을 때만
+    # 진행(사용자 2026-07-27). 안 되면 **X·실패글자 없이 빈 구역만 남기고 패스**(구조는 일관 유지).
+    has_obj = any(grp)
+    if has_obj:
         obj_boxes = ""
-        for (a, ex, p), g in zip(ast_ex_pairs, groupings):
+        for (a, ex, p), g in zip(ast_ex_pairs, grp):
             if not g:
                 continue
             ob = _objectize(g, ex)
             obj_boxes += f'<div class="innerbox">{_pair_block(f"object객체화 PAIR {p + 1}", ob, ex, sol_lines=_display_pixelized(ob))}</div>'
-        if obj_boxes:
-            steps.append('<div class="stepcard stepA6"><div class="stepttl">'
-                         'Step A.6 · object 객체화 (좌표들 → object.coordinate)</div>' + obj_boxes + '</div>')
+        steps.append('<div class="stepcard stepA6"><div class="stepttl">'
+                     'Step A.6 · object 객체화 (좌표들 → object.coordinate)</div>' + obj_boxes + '</div>')
+    else:
+        steps.append('<div class="stepcard stepA6"><div class="stepttl">'
+                     'Step A.6 · object 객체화</div><div class="stepA6empty"></div></div>')
 
-    # Focus2(output→obj0 재표현)는 별도 스텝이 아니라 anti-unification 의 첫 작업 — 각 pair 를 재표현해 둔다.
+    # Focus2(output→obj0 재표현)는 anti-unification 의 첫 작업 — grouping 있는 pair 만 재표현(final_skel 용).
     reexpressed, rex_exs = [], []
-    for (a, ex, p), g in zip(ast_ex_pairs, groupings or []):
+    for (a, ex, p), g in zip(ast_ex_pairs, grp):
         if g:
             reexpressed.append(_reexpress_obj0(_objectize(g, ex), ex))
             rex_exs.append(ex)
+    # Step B 겹침 소스 = pair 별 **가장 프로세스된** program: objectize 됐으면 그것(Focus2 재표현), 아니면
+    # pixelize(사용자 2026-07-27). 성공/실패 표시 없이 두 개(pair0·pair1)를 겹쳐 보인다.
+    proc = []
+    for i, (a, ex, p) in enumerate(ast_ex_pairs):
+        proc.append(_reexpress_obj0(_objectize(grp[i], ex), ex) if grp[i] else px_progs[i])
     final_skel = None
     if len(ast_ex_pairs) >= 2:
-        a0, ex0, _p0 = ast_ex_pairs[0]
-        a1, ex1, _p1 = ast_ex_pairs[1]
-        # Step B = COMPARE: Focus2 재표현(output→obj0)된 pair0/pair1 반투명 겹침, ③ viz 만, **전 노드**
+        # Step B = COMPARE: 가장 프로세스된 pair0/pair1 반투명 겹침, ③ viz 만, **전 노드**
         # 동일=녹색·다름=빨강·하위에DIFF있는분기점=주황.
-        o0 = reexpressed[0] if reexpressed else a0
-        o1 = reexpressed[1] if len(reexpressed) > 1 else a1
+        o0 = proc[0]
+        o1 = proc[1]
         src0 = _display_pixelized(o0) if PA._is_grid_body(o0.get("body") or []) else display_source(o0)
         src1 = _display_pixelized(o1) if PA._is_grid_body(o1.get("body") or []) else display_source(o1)
         grid0 = SE.solution_grid_compare(src0, src1)      # solid: 전 노드 comm/diff/orange
@@ -1310,16 +1330,16 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
     # Step C = obj0(output 제거) + 구체 좌표를 비교-도출 property 로 지목한 최종 TASK.solution — ①②③ 3-representation.
     # 변환-해가 있으면(rotate/flip 등) 그 좌표식 3-표현(code·AST·시각화 갤러리)을 Step C 안에 직접 넣는다
     # (사용자 2026-07-26: 하단 별도영역이 아니라 초록 Step C 에). 없으면(move 등) 기존 anti-unify 골격.
+    # rotate/flip(좌표식)·move/objc(골격) **모두 같은 갤러리 3-view**(①code ②AST ③골격+정의 N장)로 통일
+    # (사용자 2026-07-27). obj0·select 등 함수조합은 ?p 로 윗줄 승격돼 별도 그림이 된다.
+    skel_view = ("" if final_skel is None
+                 else _skel_solution_block(final_skel, [ex for _a, ex, _p in ast_ex_pairs]))
     if stepC_override:
         steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
                      '<div class="stepCcontent"><div class="innerbox">' + stepC_override + '</div></div></div>')
-    elif final_skel is not None and PA._is_grid_body(final_skel.get("body") or []):
-        sol_ex = {"input": test_input} if test_input is not None else ast_ex_pairs[0][1]
-        sol_box = ('<div class="innerbox">'
-                   + _pair_block("TASK.solution", final_skel, sol_ex,
-                                 sol_lines=_display_solution(final_skel)) + '</div>')
+    elif skel_view:
         steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
-                     '<div class="stepCcontent">' + sol_box + '</div></div>')
+                     '<div class="stepCcontent"><div class="innerbox">' + skel_view + '</div></div></div>')
     else:
         steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
                       '<p class="note">Focus1+2 골격 없음(pair<2 또는 grouping 없음)'
@@ -1536,8 +1556,7 @@ def _transform_solution_code_lines(train):
     defs = _transform_solution_defs(train)
     if not defs:
         return None
-    dm = {nm: es for nm, es, _ in defs}
-    return [f"{nm} = {dm[nm]}" for nm in _TSOL_CODE_ORDER if nm in dm] + list(_TSOL_SKEL)
+    return _solution_code_lines(_TSOL_SKEL, defs, _TSOL_CODE_ORDER)
 
 
 def _transform_solution_astree(lines):
@@ -1554,20 +1573,181 @@ def _transform_solution_astree(lines):
     return f'<ul class="astree">{"".join(items)}</ul>'
 
 
+# ── viz-rules 갤러리·3-view 공용 코어(rotate/flip 좌표식 = move/objc 골격 = 같은 렌더) ──────────
+def _pc_start(skel_lines):
+    """골격 라인들이 쓰는 ?p 최대 번호 → 정의 내부 승격 ?p 시작점(§5 전역 유일 번호)."""
+    nums = [int(m) for ln in skel_lines for m in re.findall(r"\?p(\d+)", ln)]
+    return max(nums) if nums else 0
+
+
+def _solution_gallery_html(skel_lines, defs, title, skel_note):
+    """골격(값=?p) 1장 + 정의 N장 SVG 갤러리(viz-rules §6). 전역 ?p 번호는 골격 다음부터(§5).
+    각 정의는 _viz_expr_svg 라 함수조합 arg 는 ?p 로 윗줄 승격(§3)·튜플 infix(§4)가 자동 적용된다."""
+    skel = SE.solution_grid(skel_lines)
+    pc = [_pc_start(skel_lines)]
+    cards = []
+    for nm, es, note in defs:
+        if es is None:                                       # DIFF 자유변수 등 → note-only 카드(그림 없음)
+            cards.append(f'<div class="tsg-card"><div class="tsg-lab"><b>{html.escape(nm)}</b>'
+                         f'{(" · " + note) if note else ""}</div></div>')
+        else:
+            cards.append(f'<div class="tsg-card"><div class="tsg-lab"><b>{html.escape(nm)}</b> = '
+                         f'{html.escape(es)}{(" · " + note) if note else ""}</div>'
+                         f'<div class="tsg-svg">{_viz_expr_svg(nm, es, pc)}</div></div>')
+    return (f'<div class="tsg"><div class="tsg-h">{title}</div>'
+            f'<div class="tsg-card"><div class="tsg-lab"><b>골격</b> — {skel_note}</div>'
+            f'<div class="tsg-svg">{skel}</div></div>{"".join(cards)}</div>')
+
+
+def _solution_code_lines(skel_lines, defs, order):
+    """정의(의존순 order) + 골격 → 완전한 코드 리스트. expr None(자유변수)은 코드에서 생략(골격에만 등장).
+    ①code·②AST 공용."""
+    dm = {nm: es for nm, es, _ in defs}
+    return [f"{nm} = {dm[nm]}" for nm in order if dm.get(nm) is not None] + list(skel_lines)
+
+
+def _solution_three_view(code_lines, gallery_html):
+    """①code ②AST ③시각화(갤러리) 3-view (_pair_block 과 같은 .pair/.views/.view). 셋은 같은 소스."""
+    if not code_lines:
+        return (f'<div class="pair"><div class="views"><div class="view viz v3">{gallery_html}</div>'
+                f'</div></div>') if gallery_html else ""
+    src_text = "\n".join(code_lines)
+    return (
+        f'<div class="pair"><div class="lab">TASK.solution (code · AST · 시각화)</div>'
+        f'<div class="views">'
+        f'<div class="view v1"><div class="vt">① code (골격 + 정의 · 값=?p)</div>'
+        f'<pre class="src">{html.escape(src_text)}</pre></div>'
+        f'<div class="view v2"><div class="vt">② AST 트리</div>{_transform_solution_astree(code_lines)}</div>'
+        f'<div class="view viz v3"><div class="vt">③ 시각화</div><div class="gridviz">{gallery_html}</div></div>'
+        f'</div></div>')
+
+
 def _transform_solution_gallery(train):
     """변환-해를 viz-rules §6 갤러리(골격 1장 + 정의 N장)로. 없으면 ''. Step C ③ 시각화."""
     defs = _transform_solution_defs(train)
     if not defs:
         return ""
-    # 골격(값=?p) 은 solution_grid 로, 정의들은 _viz_expr_svg 로. 전역 pc 는 골격의 ?p1~?p4 다음(=4)부터.
-    skel = SE.solution_grid(_TSOL_SKEL)
-    pc = [4]
-    cards = [f'<div class="tsg-card"><div class="tsg-lab"><b>{html.escape(nm)}</b> = '
-             f'{html.escape(es)}{(" · " + note) if note else ""}</div>'
-             f'<div class="tsg-svg">{_viz_expr_svg(nm, es, pc)}</div></div>' for nm, es, note in defs]
-    return (f'<div class="tsg"><div class="tsg-h">③ 시각화 — 좌표식 (골격 + 정의, viz-rules)</div>'
-            f'<div class="tsg-card"><div class="tsg-lab"><b>골격</b> — coloring(g0, ?p3, ?p4) · 값은 전부 ?p</div>'
-            f'<div class="tsg-svg">{skel}</div></div>{"".join(cards)}</div>')
+    return _solution_gallery_html(_TSOL_SKEL, defs,
+                                  "③ 시각화 — 좌표식 (골격 + 정의, viz-rules)",
+                                  "coloring(g0, ?p3, ?p4) · 값은 전부 ?p")
+
+
+def _palette_change_expr(exs, ncolor, obj0_name="obj0"):
+    """pair 대조(compare) → set_grid_color 팔레트 표현식(문자열) or None(공통구조 없음 → 자유변수).
+    palette = color_of(input_grid) − [제거] + [추가]. (사용자 2026-07-27 — 공통 재채색 변화 추적)
+      · **추가(재채색 목표)는 COMM** 이어야(모든 pair 같은 색으로). 아니면 None.
+      · **제거**: COMM 이면 리터럴([3]); pair 마다 다르면 = 선택 객체의 원색 → 단일 coloring·각 pair 1색일
+        때 `color_of(obj0)`(예 objc000j: col 로 골라 원색 3/6/5 → 모두 2). 그 외 복잡 → None.
+      · 제거·추가 둘 다 빈 공통 → color_of(input_grid)(팔레트 불변, 예 move 색보존)."""
+    rems, adds = [], []
+    for e in exs or []:
+        if not (e.get("input") and e.get("output")):
+            return None
+        ip = {c for row in e["input"] for c in row}
+        op = {c for row in e["output"] for c in row}
+        rems.append(frozenset(ip - op)); adds.append(frozenset(op - ip))
+    if not adds or len(set(adds)) != 1:                      # 추가(목표)색이 pair 마다 다름 → 공통 목표 불명
+        return None
+    add = sorted(next(iter(set(adds))))
+    expr = "color_of(input_grid)"
+    if len(set(rems)) == 1:                                  # 제거 COMM → 리터럴(빈 것=제거 없음)
+        rem = sorted(next(iter(set(rems))))
+        if rem:
+            expr += f" - {rem}"
+    elif ncolor == 1 and all(len(r) == 1 for r in rems):     # 제거 DIFF·단일 = 재채색 객체 원색
+        expr += f" - [color_of({obj0_name})]"
+    else:
+        return None                                          # 복잡(다중 제거 등) → 자유변수
+    if add:
+        expr += f" + {add}"
+    return expr
+
+
+def _skel_solution_defs(final_skel, exs=None):
+    """anti-unify TASK.solution AST(final_skel) → (skel_lines, defs, order) — viz-rules 갤러리용.
+    move/objc 는 objectize→anti-unification(**비교**) 케이스라 슬롯 성격을 반영한다(사용자 2026-07-27):
+      · **프레임(size/palette) = 일반화 슬롯 → `?var`**(비교로 변수화). size 가 pair 마다 다르면
+        `?var = size_of(input_grid)`, 같으면 그 공통값.
+      · **coloring 색: COMM const → 리터럴 인라인**(굳이 슬롯/트리로 확장 안 함, 예 `coloring ── ?p ── 4`),
+        **DIFF var → `?var`**(자유변수, note-only 카드).
+      · **구조 hoist(coordinate_of(objN)/select(...)) → `?p`**(§3 함수조합 → 윗줄 별도 그림).
+    ?var·?p 는 별도 번호 네임스페이스. defs 항목 expr 이 None 이면 note-only. grid body 아니면 None."""
+    body = (final_skel or {}).get("body") or []
+    if not PA._is_grid_body(body):
+        return None
+    parts = {s["call"]: s["args"] for s in body}
+    inner = parts["set_grid_contents"]["contents"].get("program", {}).get("body", [])
+    if not isinstance(inner, list):
+        inner = []
+    vn = [0]
+
+    def nextvar():
+        vn[0] += 1
+        return f"?var{vn[0]}"
+
+    # 프레임 COMM/DIFF 판정(pair 대조): 값이 pair 마다 **같으면 COMM → 리터럴 인라인**(굳이 변수화 안 함),
+    # **다르면 DIFF → ?var**(비교로 일반화). size 는 입력 grid 크기, palette 는 출력 색집합으로 대조.
+    exl = exs or []
+    insizes = {(len(e["input"]), len(e["input"][0])) for e in exl if e.get("input")}
+    outpals = {tuple(sorted({c for row in e["output"] for c in row})) for e in exl if e.get("output")}
+    defs, order_obj, order_p, order_var = [], [], [], []
+    if len(insizes) > 1:                                     # size DIFF → 일반화(출력=입력 크기)
+        vs = nextvar(); size_tok = vs; order_var.append(vs)
+        defs.append((vs, "size_of(input_grid)", "grid 크기(pair 마다 다름 → 일반화)"))
+    else:                                                    # size COMM → 리터럴
+        size_tok = _disp_grid_leaf(parts["set_grid_size"]["size"], "size")
+    if len(outpals) > 1:                                     # palette DIFF → 공통 변화 있으면 식, 없으면 자유변수
+        vp = nextvar(); pal_tok = vp; order_var.append(vp)
+        ncolor = len([x for x in inner if isinstance(x, dict) and "args" in x])
+        pexpr = _palette_change_expr(exl, ncolor)            # color_of(input_grid) −제거 +추가 or None
+        if pexpr:
+            note = ("grid 색 팔레트(불변 = 입력색)" if pexpr == "color_of(input_grid)"
+                    else "grid 색 팔레트(공통 변화: 입력색 −제거 +추가)")
+            defs.append((vp, pexpr, note))
+        else:                                                # 공통 구조 없음 → 자유변수(정직)
+            defs.append((vp, None, "grid 색 팔레트(pair 마다 다름 · DIFF)"))
+    else:                                                    # palette COMM → 리터럴
+        pal_tok = _disp_grid_leaf(parts["set_grid_color"]["color"], "color")
+    skel = [f"g.size = set_grid_size({size_tok})", f"g.color = set_grid_color({pal_tok})"]
+    pn, prev = 0, "g0"
+    for n, s in enumerate([x for x in inner if isinstance(x, dict) and "args" in x]):
+        tgt = s["args"]["target"]; col_leaf = s["args"]["color"]
+        sel = tgt.get("coordinate_of", {}).get("select") if "coordinate_of" in tgt else None
+        cur = f"g{n + 1}"
+        pn += 1; tp = f"?p{pn}"                              # target = 구조 hoist(§3)
+        if isinstance(col_leaf, dict) and "var" in col_leaf:  # DIFF 색 → ?var(자유변수)
+            cslot = nextvar(); order_var.append(cslot)
+            defs.append((cslot, None, "pair 마다 다른 색(DIFF · 자유변수)"))
+            cstr = cslot
+        else:                                                # COMM const 색 → 리터럴 인라인
+            cstr = _disp_leaf(col_leaf)
+        skel.append(f"{cur} = coloring({prev}, {tp}, {cstr})")
+        if sel:
+            objnm = f"obj{n}"
+            defs.append((tp, f"coordinate_of({objnm})", "목적 좌표(객체)"))
+            defs.append((objnm, f"select({sel.get('grid')}, {sel.get('level')}, "
+                                 f"{_pred_str(sel.get('pred', {}))})", "객체 선택(비교-도출 property)"))
+            order_obj.append(objnm)
+        else:
+            defs.append((tp, json.dumps(tgt), "목적 좌표"))
+        order_p.append(tp)
+        prev = cur
+    order = order_obj + order_p + order_var                  # 의존순: 객체 → target → ?var(프레임·DIFF색)
+    return skel, defs, order
+
+
+def _skel_solution_block(final_skel, exs=None):
+    """move/objc 등 골격 해를 rotate/flip 과 **동일한** ①code ②AST ③갤러리 3-view 로. 없으면 ''.
+    exs = pair 예시(size COMM/DIFF 판정용)."""
+    got = _skel_solution_defs(final_skel, exs)
+    if not got:
+        return ""
+    skel_lines, defs, order = got
+    gallery = _solution_gallery_html(skel_lines, defs,
+                                     "③ 시각화 — 골격 + 정의 (viz-rules)",
+                                     "프레임=?var(비교 일반화) · 구조=?p · COMM 색=리터럴")
+    code_lines = _solution_code_lines(skel_lines, defs, order)
+    return _solution_three_view(code_lines, gallery)
 
 
 def _transform_solution_block(task, winning_answer=None):
@@ -1629,21 +1809,9 @@ def _transform_solution_block(task, winning_answer=None):
     gallery_html = _transform_solution_gallery(train)   # viz-rules §6: 골격+정의 SVG 갤러리
     if not code_lines and not gallery_html and not visual_html and not formula_html:
         return ""
-    three_view = ""
-    if code_lines:
-        src_text = "\n".join(code_lines)
-        three_view = (
-            f'<div class="pair"><div class="lab">TASK.solution — 좌표식 (code · AST · 시각화)</div>'
-            f'<div class="views">'
-            f'<div class="view v1"><div class="vt">① code (골격 + 정의 · 값=?p)</div>'
-            f'<pre class="src">{html.escape(src_text)}</pre></div>'
-            f'<div class="view v2"><div class="vt">② AST 트리</div>{_transform_solution_astree(code_lines)}</div>'
-            f'<div class="view viz v3"><div class="vt">③ 시각화</div><div class="gridviz">{gallery_html}</div></div>'
-            f'</div></div>')
-    elif gallery_html:                                  # 코드 없이 갤러리만(방어)
-        three_view = f'<div class="pair"><div class="views"><div class="view viz v3">{gallery_html}</div></div></div>'
-    # .tsol 다크 래퍼 없이 조각만 반환 — Step C 초록 innerbox(또는 미합성 섹션)에 바로 얹힌다.
-    # three_view 는 _pair_block 과 같은 .pair/.views/.view 라 Step C 에서 네이티브로 렌더된다.
+    # ①code ②AST ③갤러리 3-view (공용 렌더) + 아래 실행검증(visual)·pair 별 좌표식(formula) 부가 스트립.
+    # three_view 는 _pair_block 과 같은 .pair/.views/.view 라 Step C 초록 innerbox 에 네이티브 렌더.
+    three_view = _solution_three_view(code_lines, gallery_html)
     return f'{three_view}{visual_html}{formula_html}'
 
 
@@ -1856,6 +2024,9 @@ body.hidev1 .view.v1,body.hidev2 .view.v2,body.hidev3 .view.v3{display:none}
 .stepA5 .stepttl{color:#e0c98f}
 .stepA6{background:#2a1420;border:1px solid #6b2a4a}
 .stepA6 .stepttl{color:#e08fb4}
+/* objectize 불가(diff 로 객체 묶을 근거 없음) → X·글자 없이 빈 구역만 유지(구조 일관성). */
+.stepA6empty{flex:1 1 auto;min-width:180px;min-height:120px;border:1px dashed #6b2a4a55;
+  border-radius:8px;opacity:.5}
 .stepB{background:#241a36;border:1px solid #4c3a78}
 .stepB .stepttl{color:#c8a8f0}
 .stepBcontent{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;align-items:center}
