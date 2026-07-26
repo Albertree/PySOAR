@@ -44,7 +44,19 @@
 - **rotate·flip(및 각 태스크)은 독립적으로** 각자의 골격+정의 전체를 갖는다.
 - 좌표식(선형부·오프셋)은 anti-unify 로 도출된 **공통 구조**이며, 오프셋은 객체 bbox 원자식(중심 보존).
 
+## 6.5 Step C 는 같은 해의 3-표현을 담는다 (2026-07-26 확정)
+- 변환-해 태스크의 TASK.solution 은 **하단 별도영역이 아니라 초록 `Step C · TASK.solution` 카드 안**에
+  들어간다. Step C 는 반드시 **3개 표현**을 나란히 갖는다:
+  **① code**(골격 3줄 + 정의 의존순 리스트, 값=`?p`) · **② AST 트리**(각 정의 `lhs = rhs` 파싱) ·
+  **③ 시각화**(§6 골격+정의 SVG 갤러리, "잘 되고 있음").
+- 셋은 **단일 소스**(`_transform_solution_defs` → `_transform_solution_code_lines`/`_transform_solution_gallery`)
+  에서 파생돼 **반드시 일치**한다. ③ 아래에 실행검증(test→정답 격자, ✓/✗)·pair 별 좌표식을 부가 스트립으로.
+- 변환-해가 **없는** 태스크(move/resize)의 Step C 는 기존 anti-unify 골격(`_pair_block`)을 그대로 쓴다 —
+  좌표식 3-표현으로 **덮지 않는다**(회귀 금지).
+
 ## 7. 구현 위치
 - 렌더러: `debugger/reports/solution_expr.py` — 튜플 infix(§4), 함수조합→?p(§3), 전역 번호(§5)를 반영한
   per-expression 트리 렌더 + `_grid_render`(§1) 재사용. move 등 기존 pair.program 렌더를 깨지 않게 분리.
-- 리포트: `program_report.py::_transform_solution_block` 이 변환-해 태스크에 이 골격+정의 갤러리(§6)를 렌더.
+- 리포트: `program_report.py::_transform_solution_block` 이 변환-해 태스크의 3-표현(①code ②AST ③갤러리 +
+  실행검증)을 렌더하고, `_solution_row(stepC_override=...)` 로 **Step C 카드 안**에 주입한다(§6.5). 단일 소스
+  = `_transform_solution_defs`(갤러리·코드·AST 공용). 변환-해 없으면 override 없이 기존 Step C.

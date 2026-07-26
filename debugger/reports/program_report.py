@@ -1244,7 +1244,7 @@ def _pair_block(label, ast, ex, slot_exprs=None, sol_lines=None):
 #    easy_antiunify_viz.flow(ghost=True)/.ovl·.ghost 와 같은 기법 재사용(반투명 겹침) — _EV_CSS 에
 #    이미 있는 .ovl/.ghost 를 그대로 쓴다(중복 정의 안 함).
 def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, groupings=None,
-                  test_input=None):
+                  test_input=None, stepC_override=None):
     pair_boxes = "".join(
         f'<div class="innerbox">{_pair_block(f"PAIR {p + 1}", a, ex)}</div>'
         for a, ex, p in ast_ex_pairs)
@@ -1308,7 +1308,12 @@ def _solution_row(ast_ex_pairs, solution, slot_exprs=None, sol_lines=None, group
         final_skel = _task_solution(reexpressed, rex_exs, test_input)
 
     # Step C = obj0(output 제거) + 구체 좌표를 비교-도출 property 로 지목한 최종 TASK.solution — ①②③ 3-representation.
-    if final_skel is not None and PA._is_grid_body(final_skel.get("body") or []):
+    # 변환-해가 있으면(rotate/flip 등) 그 좌표식 3-표현(code·AST·시각화 갤러리)을 Step C 안에 직접 넣는다
+    # (사용자 2026-07-26: 하단 별도영역이 아니라 초록 Step C 에). 없으면(move 등) 기존 anti-unify 골격.
+    if stepC_override:
+        steps.append('<div class="stepcard stepC"><div class="stepttl">Step C · TASK.solution</div>'
+                     '<div class="stepCcontent"><div class="innerbox">' + stepC_override + '</div></div></div>')
+    elif final_skel is not None and PA._is_grid_body(final_skel.get("body") or []):
         sol_ex = {"input": test_input} if test_input is not None else ast_ex_pairs[0][1]
         sol_box = ('<div class="innerbox">'
                    + _pair_block("TASK.solution", final_skel, sol_ex,
@@ -1493,22 +1498,25 @@ def _viz_select(train):
     return None
 
 
-def _transform_solution_gallery(train):
-    """변환-해를 viz-rules §6 갤러리(골격 1장 + 정의 N장)로. transform_solution 에서 D4·선택식 도출.
-    없으면 ''. 개념 이름 없음 — 좌표식 + 실존 함수(size_of·select·row_of·left_top_of…) + 픽셀 x."""
+# 골격(값=?p) 3줄 — 갤러리·코드·AST 공용. coloring 은 목적지 좌표식(?p3)·색(?p4) 로 픽셀 정의역에 적용.
+_TSOL_SKEL = ["g.size = set_grid_size(?p1)", "g.color = set_grid_color(?p2)",
+              "g1 = coloring(g0, ?p3, ?p4)"]
+
+
+def _transform_solution_defs(train):
+    """변환-해의 viz-rules 정의 (name, expr, note) 목록. transform_solution 에서 D4·선택식 도출.
+    없으면 None. 개념 이름 없음 — 좌표식 + 실존 함수(size_of·select·row_of·left_top_of…) + 픽셀 x.
+    갤러리(③)·코드(①)·AST(②) 세 표현이 **같은 이 정의**를 소비한다(단일 소스)."""
     from arbor.reasoning.transform import transform_solution
     sol = transform_solution(train) if train else None
     if not sol:
-        return ""
+        return None
     a, b, d, f = sol["per_pair"][0]["params"][:4]
     tgt = _viz_target(a, b, d, f)
     sel = _viz_select(train)
     selexpr = f"select(objects_of(input_grid), {sel})" if sel else "objects_of(input_grid)"
-    # 골격(값=?p) 은 solution_grid 로, 정의들은 _viz_expr_svg 로. 전역 pc 는 골격의 ?p1~?p4 다음(=4)부터.
-    skel = SE.solution_grid(["g.size = set_grid_size(?p1)", "g.color = set_grid_color(?p2)",
-                             "g1 = coloring(g0, ?p3, ?p4)"])
-    pc = [4]
-    defs = [("?p3", tgt, "목적지 좌표식(튜플 infix · 오프셋=bbox 중심보존)"),
+    # 갤러리 순서(=전역 ?p 번호 순서): ?p3 정의가 먼저라야 그 내부 조합이 ?p5.. 로 이어진다.
+    return [("?p3", tgt, "목적지 좌표식(튜플 infix · 오프셋=bbox 중심보존)"),
             ("obj0", selexpr, "객체 선택(불변 property)"),
             ("?p1", "size_of(input_grid)", "grid 크기"),
             ("?p2", "color_of(input_grid)", "grid 색"),
@@ -1517,11 +1525,48 @@ def _transform_solution_gallery(train):
             ("r", "row_of(x)", ""), ("c", "col_of(x)", ""),
             ("r0", "row_of(left_top_of(obj0))", ""), ("c0", "col_of(left_top_of(obj0))", ""),
             ("r1", "row_of(right_bottom_of(obj0))", ""), ("c1", "col_of(right_bottom_of(obj0))", "")]
+
+
+# 코드/AST 표시용 의존 순서(위→아래로 정의 후 사용). 갤러리 defs 는 ?p 번호용 순서라 별도.
+_TSOL_CODE_ORDER = ["obj0", "x", "r", "c", "r0", "c0", "r1", "c1", "?p1", "?p2", "?p3", "?p4"]
+
+
+def _transform_solution_code_lines(train):
+    """변환-해를 완전한 코드 리스트(정의 의존순 + 골격 3줄)로. 없으면 None. ①text·②AST 공용."""
+    defs = _transform_solution_defs(train)
+    if not defs:
+        return None
+    dm = {nm: es for nm, es, _ in defs}
+    return [f"{nm} = {dm[nm]}" for nm in _TSOL_CODE_ORDER if nm in dm] + list(_TSOL_SKEL)
+
+
+def _transform_solution_astree(lines):
+    """코드 리스트 → ② AST 트리(.k/.astree 스타일, _pair_block ②와 동일). 각 줄 'lhs = rhs' 를
+    lhs 노드 + rhs 파싱 서브트리(_expr_astree_html)로."""
+    items = []
+    for ln in lines:
+        m = re.match(r"^([\w?.]+)\s*=(?!=)\s*(.+)$", ln)
+        if m:
+            sub = _expr_astree_html(SE.parse_expr(m.group(2)))
+            items.append(f'<li><span class="k">{html.escape(m.group(1))} =</span>{sub}</li>')
+        else:
+            items.append(f'<li>{_expr_astree_html(SE.parse_expr(ln))}</li>')
+    return f'<ul class="astree">{"".join(items)}</ul>'
+
+
+def _transform_solution_gallery(train):
+    """변환-해를 viz-rules §6 갤러리(골격 1장 + 정의 N장)로. 없으면 ''. Step C ③ 시각화."""
+    defs = _transform_solution_defs(train)
+    if not defs:
+        return ""
+    # 골격(값=?p) 은 solution_grid 로, 정의들은 _viz_expr_svg 로. 전역 pc 는 골격의 ?p1~?p4 다음(=4)부터.
+    skel = SE.solution_grid(_TSOL_SKEL)
+    pc = [4]
     cards = [f'<div class="tsg-card"><div class="tsg-lab"><b>{html.escape(nm)}</b> = '
              f'{html.escape(es)}{(" · " + note) if note else ""}</div>'
              f'<div class="tsg-svg">{_viz_expr_svg(nm, es, pc)}</div></div>' for nm, es, note in defs]
-    return (f'<div class="tsg"><div class="tsg-h">TASK.solution — 좌표식 (골격 + 정의, viz-rules)</div>'
-            f'<div class="tsg-card"><div class="tsg-lab"><b>① 골격</b> — coloring(g0, ?p3, ?p4) · 값은 전부 ?p</div>'
+    return (f'<div class="tsg"><div class="tsg-h">③ 시각화 — 좌표식 (골격 + 정의, viz-rules)</div>'
+            f'<div class="tsg-card"><div class="tsg-lab"><b>골격</b> — coloring(g0, ?p3, ?p4) · 값은 전부 ?p</div>'
             f'<div class="tsg-svg">{skel}</div></div>{"".join(cards)}</div>')
 
 
@@ -1577,10 +1622,29 @@ def _transform_solution_block(task, winning_answer=None):
             f'<div class="tsol-vrow">{_thumb_unit("test input", _thumb(test_input))}'
             f'<span class="tarrow">→</span>{_thumb_unit("정답(실행 결과)", _thumb(executed))}</div></div>')
 
+    # Step C = 같은 좌표식 해의 3-표현(사용자 2026-07-26): ①code ②AST ③시각화(갤러리). 셋은 단일
+    # 소스(_transform_solution_code_lines/_transform_solution_gallery, 둘 다 _transform_solution_defs)에서
+    # 파생돼 반드시 일치한다. + 아래에 실행검증(visual)·pair 별 좌표식(formula) 을 부가 스트립으로.
+    code_lines = _transform_solution_code_lines(train)
     gallery_html = _transform_solution_gallery(train)   # viz-rules §6: 골격+정의 SVG 갤러리
-    if not formula_html and not visual_html and not gallery_html:
+    if not code_lines and not gallery_html and not visual_html and not formula_html:
         return ""
-    return f'<div class="tsol">{gallery_html}{visual_html}{formula_html}</div>'
+    three_view = ""
+    if code_lines:
+        src_text = "\n".join(code_lines)
+        three_view = (
+            f'<div class="pair"><div class="lab">TASK.solution — 좌표식 (code · AST · 시각화)</div>'
+            f'<div class="views">'
+            f'<div class="view v1"><div class="vt">① code (골격 + 정의 · 값=?p)</div>'
+            f'<pre class="src">{html.escape(src_text)}</pre></div>'
+            f'<div class="view v2"><div class="vt">② AST 트리</div>{_transform_solution_astree(code_lines)}</div>'
+            f'<div class="view viz v3"><div class="vt">③ 시각화</div><div class="gridviz">{gallery_html}</div></div>'
+            f'</div></div>')
+    elif gallery_html:                                  # 코드 없이 갤러리만(방어)
+        three_view = f'<div class="pair"><div class="views"><div class="view viz v3">{gallery_html}</div></div></div>'
+    # .tsol 다크 래퍼 없이 조각만 반환 — Step C 초록 innerbox(또는 미합성 섹션)에 바로 얹힌다.
+    # three_view 는 _pair_block 과 같은 .pair/.views/.view 라 Step C 에서 네이티브로 렌더된다.
+    return f'{three_view}{visual_html}{formula_html}'
 
 
 def _transform_winning_answer(attempts):
@@ -1624,15 +1688,19 @@ def task_section(tid, task, precomputed=None):
         sol_lines = SE.render_solution_source(solution, slot_exprs, comm, shapes)
     # TASK.solution wrapper 의 input_grid = test pair input(사용자 2026-07-20).
     test_input = task["test"][0]["input"] if task.get("test") else ast_ex_pairs[0][1]["input"]
-    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings, test_input)
     # 변환 해 물질화 — WM ^solution 유무와 무관하게 렌더(§task-6-brief: 그 solution 은 Cat-2 에서
-    # test 에 틀린 표준골격일 수 있다). _transform_solution_block 자체가 formula/visual 둘 다 없으면
-    # '' 를 반환하므로 여기선 게이트 없이 늘 호출한다(=transform_solution(train) 비어있지 않음 OR
-    # 이긴 attempt 가 transform 경로면 자동으로 뜬다).
-    tsol = _transform_solution_block(task, _transform_winning_answer(attempts))
+    # test 에 틀린 표준골격일 수 있다). 변환-해(rotate/flip)면 이 3-표현(code·AST·시각화)을 Step C
+    # 안으로 직접 주입(사용자 2026-07-26 — 하단 별도영역 폐지). 변환-해가 없으면(move/resize) Step C 는
+    # 기존 anti-unify 골격을 쓰고, block(있다면 정답 격자 visual 뿐)은 예전처럼 하단에 둔다(회귀 방지).
+    train = [(p["input"], p["output"]) for p in task.get("train", [])]
+    has_transform = _transform_solution_code_lines(train) is not None
+    block = _transform_solution_block(task, _transform_winning_answer(attempts))
+    solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings, test_input,
+                           stepC_override=block if has_transform else None)
+    tail = "" if has_transform else block
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
-            f'<div class="thumbs">{thumbs}</div>{solrow}{tsol}</section>')
+            f'<div class="thumbs">{thumbs}</div>{solrow}{tail}</section>')
 
 
 CSS = """
