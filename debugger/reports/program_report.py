@@ -1371,6 +1371,43 @@ def _top_thumbs(task):
     return f'<div class="tunits">{example_group}<div class="tdivider"></div>{test_group}</div>'
 
 
+def _transform_solution_block(task):
+    """TASK.solution 이 이 스키마로 안 나온 변환 태스크: transform_solution 을 **좌표식 coloring** 으로
+    물질화해 노출(Stage 2, spec 2026-07-26). 개념 이름(center/rotate/…) 없음 — 좌표식 + 픽셀 coloring.
+    각 pair 에서 목적지=F(입력픽셀) 색칠 + 비운 셀 배경칠(= A.5 pixelize 를 이미 편 형태). 없으면 ''."""
+    from arbor.reasoning.transform import transform_solution
+    train = [(p["input"], p["output"]) for p in task.get("train", [])]
+    if not train:
+        return ""
+    sol = transform_solution(train)
+    if not sol:
+        return ""
+
+    def apply_p(params, cells):
+        a, b, d, f, e, g = params
+        return {(a * r + b * c + e, d * r + f * c + g): v for (r, c), v in cells.items()}
+
+    inv = ", ".join(sorted(sol["invariant"])) or "(없음)"
+    rows = []
+    for i, pp in enumerate(sol["per_pair"]):
+        a, b, d, f, e, g = pp["params"]
+        oi = pp["obj_in"]; dest = apply_p(pp["params"], oi); vac = set(oi) - set(dest)
+        col = pp["color"] if pp["color"] is not None else next(iter(oi.values()))
+        formula = f"(r,c) → ({a}·r+{b}·c+{e}, {d}·r+{f}·c+{g})"
+        ops = [f"coloring(({r},{c}), {col})" for (r, c) in sorted(dest)]
+        ops += [f"coloring(({r},{c}), 0)" for (r, c) in sorted(vac)]
+        rows.append(
+            f'<div class="tsol-pair"><b>pair{i}</b>&nbsp; <code>{html.escape(formula)}</code>'
+            f'<span class="tsol-cnt"> → 정의역 {len(oi)}픽셀에 F 적용: 색{col} {len(dest)}칠 + 배경 {len(vac)}칠</span>'
+            f'<div class="tsol-ops">{"<br>".join(html.escape(o) for o in ops)}</div></div>')
+    kind = "통째 객체" if sol["kind"] == "whole" else "선택 객체(불변 property 로 지목)"
+    return (f'<div class="tsol"><div class="tsol-h">변환 해 — 좌표식 coloring &nbsp;·&nbsp; {kind} '
+            f'&nbsp;·&nbsp; 개념 이름 없음(좌표 산술만) &nbsp;·&nbsp; compare 관찰 불변 COMM: '
+            f'{html.escape(inv)}</div><div class="tsol-note">규칙 F 를 객체 정의역(모든 픽셀)에 적용 → '
+            f'op 수 = 객체 크기(일부 F(p)=p 는 국소 항등이라 화면 변화 없음). diff 가 아니라 규칙×정의역.'
+            f'</div>{"".join(rows)}</div>')
+
+
 def task_section(tid, task, precomputed=None):
     thumbs = _top_thumbs(task)
 
@@ -1389,8 +1426,9 @@ def task_section(tid, task, precomputed=None):
                 "(정직하게 미해결로 남김).")
         tp = (task.get("test") or [{}])[0]                    # 이 분기(미합성)엔 tp 미정의였음(버그) — 국소 정의
         extra = _attempts_block(attempts, tp) if attempts else ""
+        tsol = _transform_solution_block(task)                # 변환 해(좌표식 coloring) 물질화 노출
         return (f'<section class="task" id="{tid}"><h2>{tid}<span class="na">미합성/크기변화</span></h2>'
-                f'<div class="thumbs">{thumbs}</div><p class="note">{html.escape(why + done)}</p>{extra}</section>')
+                f'<div class="thumbs">{thumbs}</div><p class="note">{html.escape(why + done)}</p>{extra}{tsol}</section>')
 
     ast_ex_pairs = [(a, task["train"][p], p) for a, p in zip(asts, pairs)]
     sol_lines = None
@@ -1402,9 +1440,10 @@ def task_section(tid, task, precomputed=None):
     # TASK.solution wrapper 의 input_grid = test pair input(사용자 2026-07-20).
     test_input = task["test"][0]["input"] if task.get("test") else ast_ex_pairs[0][1]["input"]
     solrow = _solution_row(ast_ex_pairs, solution, slot_exprs, sol_lines, groupings, test_input)
+    tsol = _transform_solution_block(task) if solution is None else ""   # 변환 해 물질화(solution 미합성 시)
 
     return (f'<section class="task" id="{tid}"><h2>{tid}</h2>'
-            f'<div class="thumbs">{thumbs}</div>{solrow}</section>')
+            f'<div class="thumbs">{thumbs}</div>{solrow}{tsol}</section>')
 
 
 CSS = """
@@ -1427,6 +1466,14 @@ CSS = """
    뒤에 와서 우선 → 현재 선택 탭(.on 파란 배경)에서도 풀이상태 테두리가 유지된다. */
 .tabs a.solved{border-color:#3fb950}
 .tabs a.unsolved{border-color:#f85149}
+/* 변환 해(좌표식 coloring) 물질화 블록 — solution 미합성 변환 태스크에서 노출 */
+.tsol{margin:14px 0;padding:12px 14px;background:#0d1420;border:1px solid #24405a;border-radius:9px}
+.tsol-h{color:#5aa6d8;font:12px ui-monospace,monospace;margin-bottom:4px}
+.tsol-note{color:#7d8aa0;font:11px ui-monospace,monospace;margin-bottom:10px}
+.tsol-pair{margin:8px 0;padding:8px 10px;background:#0f1218;border:1px solid #232c39;border-radius:7px}
+.tsol-pair code{color:#e0c060}
+.tsol-cnt{color:#9aa7bd;font-size:11px}
+.tsol-ops{margin-top:6px;font:11px ui-monospace,monospace;color:#8fb98f;column-width:170px;column-gap:16px}
 .views{display:flex;gap:10px;align-items:flex-start;flex-wrap:nowrap;margin:6px 0 14px}
 .view{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;flex:0 0 auto}
 /* ②③ 동일 높이: JS mvh() 가 ②(.v2) 박스 높이를 ③(.viz.v3) viz 박스에 맞추고, ② AST 가 더 길면
@@ -1767,7 +1814,7 @@ function eqGrid(a,b){return JSON.stringify(a)===JSON.stringify(b);}
 
 
 def _tab_label(tid):
-    """탭 라벨: 접두 소문자+0 제거한 꼬리(easy000a→A · move000aa→AA). 없으면 전체 대문자."""
+    """탭 라벨: 접두 소문자+0 제거한 꼬리(easy000a→A · move00aa→AA). 없으면 전체 대문자."""
     i = 0
     while i < len(tid) and tid[i].isalpha() and tid[i].islower():
         i += 1

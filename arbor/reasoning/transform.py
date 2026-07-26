@@ -400,6 +400,77 @@ def solve_by_object_transform(train, test_input):
     return cs[0] if cs else None
 
 
+# ── 좌표식 해 물질화 (Stage 2, spec 2026-07-26): 변환 해를 **좌표식 (a·r+b·c+e, d·r+f·c+g)** 로 노출.
+#    개념 이름(center/axis/rotate/flip/move) 없음 — 계수·정수오프셋뿐. 오프셋 유효성은 compare 로 관찰한
+#    불변(mover in/out 의 r0+r1·c0+c1 이 COMM)에서만 나온다(가정 아님). 리포트가 이걸 coloring 으로 물질화.
+def _bbox_arith(cells):
+    """객체 bbox 좌표 산술값(이름 붙은 개념 아님): 코너 + 코너합."""
+    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+    r0, c0, r1, c1 = min(rs), min(cs), max(rs), max(cs)
+    return {"r0": r0, "c0": c0, "r1": r1, "c1": c1, "r0+r1": r0 + r1, "c0+c1": c0 + c1}
+
+
+def _compare_invariant(pairs):
+    """mover in/out 을 compare 해 COMM 인 bbox 산술값 집합을 **관찰**(가정 금지). 반환 = COMM key 집합."""
+    comm = None
+    for a, b in pairs:
+        ab, bb = _bbox_arith(a.keys()), _bbox_arith(b.keys())
+        this = {k for k in ab if ab[k] == bb[k]}
+        comm = this if comm is None else (comm & this)
+    return comm or set()
+
+
+def _formula_params(M, cells):
+    """D4 선형부 M + 객체 → 좌표식 (a,b,d,f,e,g). e,g = 중심보존 정수오프셋(이름 없음). 반칸이면 None."""
+    _, a, b, d, f = M
+    tr = [(a * r + b * c, d * r + f * c) for (r, c) in cells]
+    rs = [r for r, _ in cells]; cs = [c for _, c in cells]
+    tR = [r for r, _ in tr]; tC = [c for _, c in tr]
+    nr = (min(rs) + max(rs)) - (min(tR) + max(tR)); nc = (min(cs) + max(cs)) - (min(tC) + max(tC))
+    if nr % 2 or nc % 2:
+        return None
+    return (a, b, d, f, nr // 2, nc // 2)
+
+
+def transform_solution(train):
+    """변환 해를 **좌표식 아티팩트**로 반환(리포트 물질화용). 없으면 None.
+    반환 = {kind, per_pair:[{obj_in, params, color}], invariant(COMM집합)} — obj_in 이 변환되는 객체(들)."""
+    # ① 통째(단일객체): 전 비0 을 한 객체로, 중심보존이 전 pair 재현하는 D4
+    ctx = [(_nonzero(gi), _nonzero(go)) for gi, go in train]
+    if all(ci and co and len(ci) == len(co) for ci, co in ctx):
+        for M in _D4:
+            if M[0] == "id":
+                continue
+            if all(_place_inplace(ci, M) == co for ci, co in ctx):
+                inv = _compare_invariant([(ci, co) for ci, co in ctx])
+                pp = [{"obj_in": ci, "params": _formula_params(M, ci), "color": None} for ci, co in ctx]
+                if all(p["params"] for p in pp):
+                    return {"kind": "whole", "per_pair": pp, "invariant": inv}
+    # ② 객체선택(다객체): mover 대응 → 공통 D4 → 좌표식
+    per = []
+    for gi, go in train:
+        cin = _components(_nonzero(gi)); cout = _components(_nonzero(go))
+        mp = _correspond_by_prop(cin, cout)
+        if mp is None:
+            return None
+        movers = [(a, b) for a, b in mp if _oshape(a) != _oshape(b)]
+        if len(movers) != 1:
+            return None
+        per.append(movers[0])
+    common = None
+    for a, b in per:
+        d4 = {M[0] for M in _D4 if _place_inplace(a, M) == b}
+        common = d4 if common is None else (common & d4)
+    if not common:
+        return None
+    name = sorted(common)[0]; M = next(x for x in _D4 if x[0] == name)
+    inv = _compare_invariant(per)
+    pp = [{"obj_in": a, "params": _formula_params(M, a), "color": _ocolor(a)} for a, b in per]
+    if not all(p["params"] for p in pp):
+        return None
+    return {"kind": "object", "per_pair": pp, "invariant": inv}
+
+
 def solve_any(train, test_input):
     """심볼 좌표식 + 선형 D4(통째) + 선형 D4(색별) + 객체선택변환 순차 시도(첫 non-None)."""
     return (solve_by_transform(train, test_input) or solve_by_linear(train, test_input)
