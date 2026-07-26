@@ -1371,6 +1371,160 @@ def _top_thumbs(task):
     return f'<div class="tunits">{example_group}<div class="tdivider"></div>{test_group}</div>'
 
 
+# ── TASK.solution 좌표식 SVG 갤러리 (viz-rules 2026-07-26 · docs/…/tasksolution-viz-rules.md) ──────
+#    §1 데이터플로우(값 아래·함수 위·선 가로/세로) · §2 placeholder=?p·나머지 실존 심볼(픽셀=x) ·
+#    §3 함수조합 arg→?p 윗줄 · §4 튜플 infix · §5 전역 ?p 번호 · §6 골격 1장 + 정의 N장. move 렌더 미변경.
+_VIZ_TUP = SE.node_label_children(SE.parse_expr("(a, b)"))[0]
+_VIZ_GB = set(SE._GRID_BIN) | {_VIZ_TUP}
+_VIZ_VARS = ("obj0", "input_grid", "x")
+
+
+def _viz_expr_svg(name, expr_str, pc):
+    """수식 하나 → 데이터플로우 SVG. 값(name) 아래·함수 위·arg 같은 줄(가로선). 함수조합 arg 는 ?p 로
+    윗줄 승격, 튜플은 infix. pc=[int] 공유(전역 ?p 번호). solution_expr._grid_render 스타일 재사용."""
+    ch = SE.node_label_children; estr = SE.expr_str
+    dx = SE.parse_expr(expr_str); nodes = []; edges = []; nid = [0]
+
+    def N(l, r, c, k):
+        nid[0] += 1; i = f"g{nid[0]}"; nodes.append([i, l, r, c, k]); return i
+
+    def st(n):
+        return n.get("k") == "tuple" and all(not ch(it)[1] for it in n.get("items", []))
+
+    def leaf(n, r, c):
+        s = str(ch(n)[0])
+        return 1, N(s, r, c, "var" if (s.startswith("?") or s in _VIZ_VARS) else "lit")
+
+    def arg(n, r, c):                                    # §3: 조합이면 ?p 승격, 잎이면 그대로
+        if st(n):
+            return 1, N(estr(n), r, c, "lit")
+        if ch(n)[1]:
+            pc[0] += 1; return named(f"?p{pc[0]}", n, r, c)
+        return leaf(n, r, c)
+
+    def named(nm, dx, row, col, kind="var"):
+        f, fk = ch(dx); fs = str(f)
+        if fs in _VIZ_GB and len(fk) == 2:               # §4: 이항/튜플 infix
+            w1, r1 = arg(fk[0], row - 1, col); opc = col + w1; opid = N(fs, row - 1, opc, "fn")
+            w2, r2 = arg(fk[1], row - 1, opc + 1); vid = N(nm, row, opc, kind)
+            edges.extend([(r1, opid, "h"), (opid, r2, "h"), (opid, vid, "v")])
+            return opc + 1 + w2 - col, vid
+        vid = N(nm, row, col, kind); fid = N(fs, row - 1, col, "fn" if fk else "lit")
+        edges.append((fid, vid, "v")); c = col + 1; prev = fid
+        for k in fk:
+            w, rid = arg(k, row - 1, c); edges.append((prev, rid, "h")); prev = rid; c += w
+        return max(1, c - col), vid
+
+    def hn(dx):
+        f, fk = ch(dx); fs = str(f)
+        if fs in _VIZ_GB and len(fk) == 2:
+            return 1 + max(ho(fk[0]), ho(fk[1]))
+        return 1 + max([hc(k) for k in fk], default=0)
+
+    def ho(n):
+        return 0 if st(n) else (hn(n) if ch(n)[1] else 0)
+
+    def hc(n):
+        return 0 if st(n) else (hn(n) if ch(n)[1] else 0)
+
+    named(name, dx, hn(dx), 0)
+    return SE._grid_render(nodes, edges, cw=150, rh=62, bw=132, bh=30)
+
+
+def _viz_bbox_off(k1, k2):
+    """(k1·(r0+r1) + k2·(c0+c1))//2 → bbox 원자식 문자열(중심보존 오프셋). 짝수계수는 반으로 접어 //2 제거
+    (반사·rot180 은 정수식; rot90/270 만 //2 잔존)."""
+    if k1 % 2 == 0 and k2 % 2 == 0:
+        k1, k2, div = k1 // 2, k2 // 2, False
+    else:
+        div = True
+
+    def t(k, s):
+        return "" if k == 0 else ("+" + s if k == 1 else ("-" + s if k == -1 else f"+{k}*{s}"))
+    p = (t(k1, "(r0+r1)") + t(k2, "(c0+c1)")).lstrip("+")
+    if not p:
+        return "0"
+    return f"({p}) // 2" if div else p
+
+
+def _viz_axis(ar, bc, off):
+    """ar·r + bc·c + off → 문자열. 양수항을 앞에 두어 선두 unary minus(파서 미지원)를 피한다."""
+    terms = []
+    for k, v in [(ar, "r"), (bc, "c")]:
+        if k == 1:
+            terms.append(("+", v))
+        elif k == -1:
+            terms.append(("-", v))
+        elif k != 0:
+            terms.append(("+", f"{k}*{v}") if k > 0 else ("-", f"{-k}*{v}"))
+    if off and off != "0":
+        terms.append(("-", off[1:]) if off.startswith("-") else ("+", off))
+    if not terms:
+        return "0"
+    ordered = [t for t in terms if t[0] == "+"] + [t for t in terms if t[0] == "-"]
+    s = ordered[0][1] if ordered[0][0] == "+" else "-" + ordered[0][1]
+    for sign, v in ordered[1:]:
+        s += f" {sign} {v}"
+    return s
+
+
+def _viz_target(a, b, d, f):
+    """D4 선형부 (a,b,d,f) → 목적지 좌표식 튜플 '(F_row, F_col)'. 오프셋=중심보존 bbox 원자식."""
+    return f"({_viz_axis(a, b, _viz_bbox_off(1 - a, -b))}, {_viz_axis(d, f, _viz_bbox_off(-d, 1 - f))})"
+
+
+def _viz_select(train):
+    """mover 를 지목하는 불변 property 선택식. area/color 불변이면 그것, whole/불명이면 objects_of."""
+    from arbor.reasoning.transform import (_components, _nonzero, _ocolor, _oshape, _correspond_by_prop)
+    mv = []
+    for gi, go in train:
+        mp = _correspond_by_prop(_components(_nonzero(gi)), _components(_nonzero(go)))
+        if mp is None:
+            return None
+        m = [(a, b) for a, b in mp if _oshape(a) != _oshape(b)]
+        if len(m) != 1:
+            return None
+        mv.append(m[0][0])
+    cols = {_ocolor(x) for x in mv}; areas = {len(x) for x in mv}
+    if len(areas) == 1:
+        return f"area_of == {next(iter(areas))}"
+    if len(cols) == 1:
+        return f"color_of == {next(iter(cols))}"
+    return None
+
+
+def _transform_solution_gallery(train):
+    """변환-해를 viz-rules §6 갤러리(골격 1장 + 정의 N장)로. transform_solution 에서 D4·선택식 도출.
+    없으면 ''. 개념 이름 없음 — 좌표식 + 실존 함수(size_of·select·row_of·left_top_of…) + 픽셀 x."""
+    from arbor.reasoning.transform import transform_solution
+    sol = transform_solution(train) if train else None
+    if not sol:
+        return ""
+    a, b, d, f = sol["per_pair"][0]["params"][:4]
+    tgt = _viz_target(a, b, d, f)
+    sel = _viz_select(train)
+    selexpr = f"select(objects_of(input_grid), {sel})" if sel else "objects_of(input_grid)"
+    # 골격(값=?p) 은 solution_grid 로, 정의들은 _viz_expr_svg 로. 전역 pc 는 골격의 ?p1~?p4 다음(=4)부터.
+    skel = SE.solution_grid(["g.size = set_grid_size(?p1)", "g.color = set_grid_color(?p2)",
+                             "g1 = coloring(g0, ?p3, ?p4)"])
+    pc = [4]
+    defs = [("?p3", tgt, "목적지 좌표식(튜플 infix · 오프셋=bbox 중심보존)"),
+            ("obj0", selexpr, "객체 선택(불변 property)"),
+            ("?p1", "size_of(input_grid)", "grid 크기"),
+            ("?p2", "color_of(input_grid)", "grid 색"),
+            ("?p4", "color_of(obj0)", "coloring 색"),
+            ("x", "pixels_of(obj0)", "픽셀"),
+            ("r", "row_of(x)", ""), ("c", "col_of(x)", ""),
+            ("r0", "row_of(left_top_of(obj0))", ""), ("c0", "col_of(left_top_of(obj0))", ""),
+            ("r1", "row_of(right_bottom_of(obj0))", ""), ("c1", "col_of(right_bottom_of(obj0))", "")]
+    cards = [f'<div class="tsg-card"><div class="tsg-lab"><b>{html.escape(nm)}</b> = '
+             f'{html.escape(es)}{(" · " + note) if note else ""}</div>'
+             f'<div class="tsg-svg">{_viz_expr_svg(nm, es, pc)}</div></div>' for nm, es, note in defs]
+    return (f'<div class="tsg"><div class="tsg-h">TASK.solution — 좌표식 (골격 + 정의, viz-rules)</div>'
+            f'<div class="tsg-card"><div class="tsg-lab"><b>① 골격</b> — coloring(g0, ?p3, ?p4) · 값은 전부 ?p</div>'
+            f'<div class="tsg-svg">{skel}</div></div>{"".join(cards)}</div>')
+
+
 def _transform_solution_block(task, winning_answer=None):
     """변환이 푼 태스크의 좌표식 해 노출(Stage 2, spec 2026-07-26) + (winning_answer 주어지면) 그
     **정답 격자**로 실행검증된 시각화(Stage 3, §task-6-brief 2026-07-26). WM `^solution` 유무와
@@ -1423,9 +1577,10 @@ def _transform_solution_block(task, winning_answer=None):
             f'<div class="tsol-vrow">{_thumb_unit("test input", _thumb(test_input))}'
             f'<span class="tarrow">→</span>{_thumb_unit("정답(실행 결과)", _thumb(executed))}</div></div>')
 
-    if not formula_html and not visual_html:
+    gallery_html = _transform_solution_gallery(train)   # viz-rules §6: 골격+정의 SVG 갤러리
+    if not formula_html and not visual_html and not gallery_html:
         return ""
-    return f'<div class="tsol">{formula_html}{visual_html}</div>'
+    return f'<div class="tsol">{gallery_html}{visual_html}{formula_html}</div>'
 
 
 def _transform_winning_answer(attempts):
@@ -1508,6 +1663,14 @@ CSS = """
 .tsol-pair code{color:#e0c060}
 .tsol-cnt{color:#9aa7bd;font-size:11px}
 .tsol-ops{margin-top:6px;font:11px ui-monospace,monospace;color:#8fb98f;column-width:170px;column-gap:16px}
+/* TASK.solution 좌표식 SVG 갤러리 (viz-rules) */
+.tsg{margin:12px 0}
+.tsg-h{color:#5aa6d8;font:12px ui-monospace,monospace;margin-bottom:8px}
+.tsg-card{background:#0f1218;border:1px solid #232c39;border-radius:9px;padding:10px 12px;margin-bottom:10px}
+.tsg-lab{font:11.5px ui-monospace,monospace;color:#c9d3e0;margin-bottom:6px}
+.tsg-lab b{color:#e0c060}
+.tsg-svg{overflow-x:auto}
+.tsg-svg svg{display:block;max-width:none}
 .tsol-visual{margin-top:12px;padding-top:10px;border-top:1px solid #1c2c3e}
 .tsol-vh{color:#7fd6a0;font:700 12px ui-monospace,monospace;margin-bottom:8px}
 .tsol-vrow{display:flex;align-items:center;gap:10px}
